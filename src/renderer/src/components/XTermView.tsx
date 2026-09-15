@@ -96,8 +96,8 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
 
     const handlePaste = async (): Promise<void> => {
       const text = await window.neoAPI.readClipboard()
-      if (text) {
-        window.neoAPI.writeTerminal(panelId, text)
+      if (text && termRef.current) {
+        termRef.current.paste(text)
       }
       closeContextMenu()
     }
@@ -181,11 +181,12 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
           return true
         }
 
-        // 2. Paste: Ctrl + Shift + V OR Ctrl + V
-        if (isCtrlOrCmd && (event.key === 'v' || event.key === 'V')) {
+        // 2. Paste with Ctrl + Shift + V (terminal shortcut)
+        if (isCtrlOrCmd && event.shiftKey && (event.key === 'v' || event.key === 'V')) {
+          event.preventDefault()
           window.neoAPI.readClipboard().then((text) => {
-            if (text) {
-              window.neoAPI.writeTerminal(panelId, text)
+            if (text && termRef.current) {
+              termRef.current.paste(text)
             }
           })
           return false
@@ -197,6 +198,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
           return false
         }
 
+        // Standard Ctrl + V is handled natively by the browser's DOM paste event and xterm
         return true
       })
 
@@ -218,8 +220,19 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
         }
       }, 50)
 
-      // Terminal user typing
+      // Terminal user typing & pasting with de-duplication guard
+      let lastPasteData = ''
+      let lastPasteTime = 0
+
       const onDataDisposable = term.onData((data) => {
+        if (data.length > 1) {
+          const now = Date.now()
+          if (data === lastPasteData && now - lastPasteTime < 120) {
+            return
+          }
+          lastPasteData = data
+          lastPasteTime = now
+        }
         window.neoAPI.writeTerminal(panelId, data)
       })
 
