@@ -210,13 +210,16 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       fitAddonRef.current = fitAddon
 
       // Initial fit & spawn
-      setTimeout(() => {
+      const spawnTimer = setTimeout(() => {
         try {
           fitAddon.fit()
           spawnPty(term.cols, term.rows)
         } catch (e) {
           console.error('Initial terminal fit error:', e)
           spawnPty(80, 24)
+        }
+        if (isActive) {
+          term.focus()
         }
       }, 50)
 
@@ -269,6 +272,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       resizeObserver.observe(containerRef.current)
 
       return () => {
+        clearTimeout(spawnTimer)
         resizeObserver.disconnect()
         onDataDisposable.dispose()
         unsubscribeData()
@@ -295,6 +299,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                   termRef.current.cols,
                   termRef.current.rows
                 )
+                termRef.current.focus()
               }
             } catch (e) {
               console.error('Error fitting terminal on resume:', e)
@@ -309,8 +314,9 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
     return (
       <div
         ref={containerRef}
+        onClick={() => termRef.current?.focus()}
         onContextMenu={handleContextMenu}
-        className="w-full h-full overflow-hidden bg-[#090a0d] relative select-text"
+        className="w-full h-full overflow-hidden bg-[#090a0d] relative select-text cursor-text"
         style={{ padding: '2px 4px' }}
       >
         {/* Floating Context Menu */}

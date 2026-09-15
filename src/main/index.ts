@@ -153,6 +153,19 @@ app.whenReady().then(() => {
     mainWindow?.close()
   })
 
+  const gotTheLock = app.requestSingleInstanceLock()
+  if (!gotTheLock) {
+    app.exit(0)
+    return
+  }
+
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+
   createWindow()
 
   app.on('activate', function () {
@@ -161,8 +174,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  telemetryMonitor?.stop()
   ptyManager.killAll()
   if (process.platform !== 'darwin') {
-    app.quit()
+    app.exit(0)
   }
 })

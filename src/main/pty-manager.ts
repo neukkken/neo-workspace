@@ -72,9 +72,9 @@ export class PtyManager {
       if (options.command && options.command.trim().length > 0) {
         setTimeout(() => {
           if (this.terminals.has(options.panelId)) {
-            ptyProcess.write(`${options.command.trim()}\r`)
+            ptyProcess.write(`${options.command.trim()}\n`)
           }
-        }, 200)
+        }, 400)
       }
 
       return true
