@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
 import { join } from 'path'
 import { StoreManager, AppState } from './store'
 import { PtyManager, SpawnOptions } from './pty-manager'
@@ -78,6 +78,22 @@ app.whenReady().then(() => {
       return result.filePaths[0]
     }
     return null
+  })
+
+  // Native Clipboard IPC
+  ipcMain.handle('clipboard:write', (_event, text: string) => {
+    if (typeof text === 'string') {
+      clipboard.writeText(text)
+      if (process.platform === 'linux') {
+        clipboard.writeText(text, 'selection')
+      }
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('clipboard:read', () => {
+    return clipboard.readText()
   })
 
   // PTY IPC

@@ -6,6 +6,8 @@ declare global {
       getStore: () => Promise<AppState>
       saveStore: (state: AppState) => Promise<boolean>
       selectDirectory: (defaultPath?: string) => Promise<string | null>
+      writeClipboard: (text: string) => Promise<boolean>
+      readClipboard: () => Promise<string>
       spawnTerminal: (options: SpawnOptions) => Promise<boolean>
       writeTerminal: (panelId: string, data: string) => void
       resizeTerminal: (panelId: string, cols: number, rows: number) => void

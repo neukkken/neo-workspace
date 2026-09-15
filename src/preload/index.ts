@@ -51,6 +51,12 @@ const neoAPI = {
   selectDirectory: (defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:select-directory', defaultPath),
 
+  writeClipboard: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke('clipboard:write', text),
+
+  readClipboard: (): Promise<string> =>
+    ipcRenderer.invoke('clipboard:read'),
+
   spawnTerminal: (options: SpawnOptions): Promise<boolean> =>
     ipcRenderer.invoke('pty:spawn', options),
 

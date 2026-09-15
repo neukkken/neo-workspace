@@ -21,9 +21,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const termRef = useRef<XTermViewHandle>(null)
   const [copied, setCopied] = useState(false)
 
-  const handleCopyPath = (): void => {
+  const handleCopyPath = async (): Promise<void> => {
     if (panel.cwd) {
-      navigator.clipboard.writeText(panel.cwd)
+      await window.neoAPI.writeClipboard(panel.cwd)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }
