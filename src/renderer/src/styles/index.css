@@ -50,3 +50,12 @@ body {
 .no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* Hide scrollbar for horizontal chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

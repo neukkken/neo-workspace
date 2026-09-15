@@ -1,4 +1,4 @@
-import { AppState, PanelConfig, ProcessMetrics, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace } from './index'
+import { AppSettings, AppState, PanelConfig, ProcessMetrics, SidebarPosition, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace } from './index'
 
 declare global {
   interface Window {
@@ -27,4 +27,4 @@ declare global {
   }
 }
 
-export { AppState, PanelConfig, ProcessMetrics, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace }
+export { AppSettings, AppState, PanelConfig, ProcessMetrics, SidebarPosition, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace }

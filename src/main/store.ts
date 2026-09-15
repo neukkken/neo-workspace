@@ -18,13 +18,23 @@ export interface Workspace {
   panels: PanelConfig[]
 }
 
+export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
+
+export interface AppSettings {
+  sidebarPosition: SidebarPosition
+}
+
 export interface AppState {
   activeWorkspaceId: string
   workspaces: Workspace[]
+  settings?: AppSettings
 }
 
 const defaultState: AppState = {
   activeWorkspaceId: 'efastack',
+  settings: {
+    sidebarPosition: 'left'
+  },
   workspaces: [
     {
       id: 'efastack',

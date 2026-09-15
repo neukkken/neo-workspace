@@ -7,7 +7,7 @@ import { TerminalGrid } from './components/TerminalGrid'
 import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
-import { Workspace, AppState, TelemetryPayload } from './types'
+import { Workspace, AppState, TelemetryPayload, SidebarPosition } from './types'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -54,9 +54,22 @@ export const App: React.FC = () => {
   const activeWorkspace =
     appState.workspaces.find((w) => w.id === appState.activeWorkspaceId) || appState.workspaces[0]
 
+  const sidebarPosition: SidebarPosition = appState.settings?.sidebarPosition || 'left'
+
   const persistState = async (newState: AppState): Promise<void> => {
     setAppState(newState)
     await window.neoAPI.saveStore(newState)
+  }
+
+  const handleUpdateSidebarPosition = (pos: SidebarPosition): void => {
+    const updatedState: AppState = {
+      ...appState,
+      settings: {
+        ...appState.settings,
+        sidebarPosition: pos
+      }
+    }
+    persistState(updatedState)
   }
 
   const handleSelectWorkspace = (id: string): void => {
@@ -176,6 +189,83 @@ export const App: React.FC = () => {
     .filter((w) => runningWorkspaceIds.includes(w.id))
     .reduce((sum, w) => sum + w.panels.length, 0)
 
+  // Main workspace view containing header, idle message and terminal grid
+  const mainWorkspaceContent = (
+    <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0b0d10] overflow-hidden relative">
+      {/* Header for the currently active workspace */}
+      <WorkspaceHeader
+        workspace={activeWorkspace}
+        panelsMetrics={telemetry?.panels || {}}
+        isRunning={isCurrentWorkspaceRunning}
+        onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
+        onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
+        onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
+        onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
+      />
+
+      {/* If the current workspace is stopped, show idle prompt */}
+      {!isCurrentWorkspaceRunning && (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
+          <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
+            <Power size={24} className="text-zinc-500" />
+          </div>
+          <h3 className="font-mono text-sm font-semibold text-zinc-200 uppercase tracking-wide">
+            WORKSPACE DETENIDO // {activeWorkspace.name}
+          </h3>
+          <p className="font-mono text-xs text-zinc-500 max-w-sm mt-1 mb-5">
+            Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando
+            en segundo plano. Haz clic para iniciarlas.
+          </p>
+          <button
+            onClick={() => handleStartWorkspace(activeWorkspace.id)}
+            className="flex items-center space-x-2 px-5 py-2 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/10"
+          >
+            <Play size={14} fill="currentColor" />
+            <span>INICIAR TERMINALES DEL WORKSPACE</span>
+          </button>
+        </div>
+      )}
+
+      {/* Render running workspaces: active one is visible, others stay mounted in background via 'hidden' */}
+      {appState.workspaces
+        .filter((ws) => runningWorkspaceIds.includes(ws.id))
+        .map((ws) => {
+          const isSelected = ws.id === activeWorkspace.id
+          const restartKey = workspaceRestartKeys[ws.id] || 0
+
+          return (
+            <div
+              key={ws.id}
+              className={`flex-1 min-h-0 min-w-0 h-full w-full ${
+                isSelected ? 'flex flex-col' : 'hidden'
+              }`}
+            >
+              <TerminalGrid
+                key={`${ws.id}-${restartKey}`}
+                panels={ws.panels}
+                panelsMetrics={telemetry?.panels || {}}
+                isActive={isSelected}
+              />
+            </div>
+          )
+        })}
+    </main>
+  )
+
+  const launchpadComponent = (
+    <Launchpad
+      workspaces={appState.workspaces}
+      activeWorkspaceId={appState.activeWorkspaceId}
+      runningWorkspaceIds={runningWorkspaceIds}
+      position={sidebarPosition}
+      onSelectWorkspace={handleSelectWorkspace}
+      onNewWorkspace={handleNewWorkspace}
+      onEditWorkspace={handleEditWorkspace}
+      onDeleteWorkspace={handleDeleteWorkspace}
+      onStopWorkspace={handleStopWorkspace}
+    />
+  )
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#090a0d] text-zinc-200">
       {/* Top Frameless TitleBar */}
@@ -185,81 +275,24 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
 
-      {/* Main Workspace Frame */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left Sidebar Launchpad */}
-        <Launchpad
-          workspaces={appState.workspaces}
-          activeWorkspaceId={appState.activeWorkspaceId}
-          runningWorkspaceIds={runningWorkspaceIds}
-          onSelectWorkspace={handleSelectWorkspace}
-          onNewWorkspace={handleNewWorkspace}
-          onEditWorkspace={handleEditWorkspace}
-          onDeleteWorkspace={handleDeleteWorkspace}
-          onStopWorkspace={handleStopWorkspace}
-        />
+      {/* TOP POSITION */}
+      {sidebarPosition === 'top' && launchpadComponent}
 
-        {/* Workspaces Display Area */}
-        <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0b0d10] overflow-hidden relative">
-          {/* Header for the currently active workspace */}
-          <WorkspaceHeader
-            workspace={activeWorkspace}
-            panelsMetrics={telemetry?.panels || {}}
-            isRunning={isCurrentWorkspaceRunning}
-            onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
-            onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
-            onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
-            onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
-          />
+      {/* CENTRAL AREA */}
+      {sidebarPosition === 'top' || sidebarPosition === 'bottom' ? (
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          {mainWorkspaceContent}
+        </div>
+      ) : (
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {sidebarPosition === 'left' && launchpadComponent}
+          {mainWorkspaceContent}
+          {sidebarPosition === 'right' && launchpadComponent}
+        </div>
+      )}
 
-          {/* If the current workspace is stopped, show idle prompt */}
-          {!isCurrentWorkspaceRunning && (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
-              <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
-                <Power size={24} className="text-zinc-500" />
-              </div>
-              <h3 className="font-mono text-sm font-semibold text-zinc-200 uppercase tracking-wide">
-                WORKSPACE DETENIDO // {activeWorkspace.name}
-              </h3>
-              <p className="font-mono text-xs text-zinc-500 max-w-sm mt-1 mb-5">
-                Las {activeWorkspace.panels.length} terminales de este workspace no se están
-                ejecutando en segundo plano. Haz clic para iniciarlas.
-              </p>
-              <button
-                onClick={() => handleStartWorkspace(activeWorkspace.id)}
-                className="flex items-center space-x-2 px-5 py-2 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/10"
-              >
-                <Play size={14} fill="currentColor" />
-                <span>INICIAR TERMINALES DEL WORKSPACE</span>
-              </button>
-            </div>
-          )}
-
-          {/* Render running workspaces: active one is visible, others stay mounted in background via 'hidden' */}
-          {appState.workspaces
-            .filter((ws) => runningWorkspaceIds.includes(ws.id))
-            .map((ws) => {
-              const isSelected = ws.id === activeWorkspace.id
-              const restartKey = workspaceRestartKeys[ws.id] || 0
-
-              return (
-                <div
-                  key={ws.id}
-                  className={`flex-1 min-h-0 min-w-0 h-full w-full ${
-                    isSelected ? 'flex flex-col' : 'hidden'
-                  }`}
-                >
-                  <TerminalGrid
-                    key={`${ws.id}-${restartKey}`}
-                    panels={ws.panels}
-                    panelsMetrics={telemetry?.panels || {}}
-                    isActive={isSelected}
-                  />
-                </div>
-              )
-            })}
-        </main>
-      </div>
+      {/* BOTTOM POSITION */}
+      {sidebarPosition === 'bottom' && launchpadComponent}
 
       {/* Footer Status Bar */}
       <StatusBar
@@ -281,7 +314,9 @@ export const App: React.FC = () => {
 
       <SettingsModal
         isOpen={isSettingsModalOpen}
+        sidebarPosition={sidebarPosition}
         onClose={() => setIsSettingsModalOpen(false)}
+        onPositionChange={handleUpdateSidebarPosition}
         onResetDefaults={handleResetDefaults}
       />
     </div>
