@@ -4,8 +4,10 @@ import { Workspace, ProcessMetrics } from '../types'
 
 interface WorkspaceHeaderProps {
   workspace: Workspace
+  activePanels?: import('../types').PanelConfig[]
   panelsMetrics: Record<string, ProcessMetrics>
   isRunning: boolean
+  hasPendingChanges?: boolean
   onEditWorkspace: () => void
   onRestartAll: () => void
   onStartWorkspace: () => void
@@ -14,22 +16,26 @@ interface WorkspaceHeaderProps {
 
 export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   workspace,
+  activePanels,
   panelsMetrics,
   isRunning,
+  hasPendingChanges = false,
   onEditWorkspace,
   onRestartAll,
   onStartWorkspace,
   onStopWorkspace
 }) => {
-  // Calculate total CPU & RAM for this workspace's panels
+  const currentPanels = activePanels || workspace.panels
+
+  // Calculate total CPU & RAM for this workspace's active panels
   const totalCpu = isRunning
-    ? workspace.panels.reduce((sum, p) => {
+    ? currentPanels.reduce((sum, p) => {
         return sum + (panelsMetrics[p.id]?.cpu || 0)
       }, 0)
     : 0
 
   const totalRam = isRunning
-    ? workspace.panels.reduce((sum, p) => {
+    ? currentPanels.reduce((sum, p) => {
         return sum + (panelsMetrics[p.id]?.memoryMb || 0)
       }, 0)
     : 0
@@ -56,12 +62,27 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
           <span className="hidden sm:inline-flex items-center space-x-1 text-[10px] font-mono text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
             <span>En segundo plano</span>
             <span className="text-emerald-500/50">·</span>
-            <span>{workspace.panels.length} panels</span>
+            <span>{currentPanels.length} panels</span>
           </span>
         ) : (
           <span className="hidden sm:inline-flex items-center space-x-1 text-[10px] font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
             <span>No iniciado</span>
           </span>
+        )}
+
+        {/* Pending Changes Badge */}
+        {hasPendingChanges && (
+          <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[11px] animate-in fade-in duration-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="hidden sm:inline">Cambios pendientes</span>
+            <button
+              onClick={onRestartAll}
+              className="ml-1 px-1.5 py-0.2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 hover:text-white rounded text-[10px] underline font-medium transition-colors cursor-pointer"
+              title="Reiniciar ahora para aplicar los cambios a las terminales"
+            >
+              Aplicar ahora
+            </button>
+          </div>
         )}
       </div>
 
@@ -101,11 +122,21 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
         {isRunning && (
           <button
             onClick={onRestartAll}
-            className="flex items-center space-x-1 text-xs font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 px-2.5 py-1 rounded transition-colors"
-            title="Reiniciar todos los procesos de este workspace"
+            className={`flex items-center space-x-1 text-xs font-mono px-2.5 py-1 rounded transition-colors ${
+              hasPendingChanges
+                ? 'text-amber-300 hover:text-amber-100 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+                : 'text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800'
+            }`}
+            title={
+              hasPendingChanges
+                ? 'Reiniciar para aplicar cambios guardados'
+                : 'Reiniciar todos los procesos de este workspace'
+            }
           >
-            <RotateCcw size={11} />
-            <span className="hidden md:inline">Reiniciar</span>
+            <RotateCcw size={11} className={hasPendingChanges ? 'text-amber-400' : ''} />
+            <span className="hidden md:inline">
+              {hasPendingChanges ? 'Aplicar Cambios' : 'Reiniciar'}
+            </span>
           </button>
         )}
 

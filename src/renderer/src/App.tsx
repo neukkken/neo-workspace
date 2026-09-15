@@ -7,7 +7,7 @@ import { TerminalGrid } from './components/TerminalGrid'
 import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
-import { Workspace, AppState, TelemetryPayload, SidebarPosition } from './types'
+import { Workspace, AppState, TelemetryPayload, SidebarPosition, PanelConfig } from './types'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -15,6 +15,8 @@ export const App: React.FC = () => {
 
   const [runningWorkspaceIds, setRunningWorkspaceIds] = useState<string[]>([])
   const [workspaceRestartKeys, setWorkspaceRestartKeys] = useState<Record<string, number>>({})
+  const [activeSessionPanels, setActiveSessionPanels] = useState<Record<string, PanelConfig[]>>({})
+  const [pendingChangesWorkspaceIds, setPendingChangesWorkspaceIds] = useState<string[]>([])
 
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false)
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null)
@@ -26,7 +28,14 @@ export const App: React.FC = () => {
       setAppState(state)
       // Automatically start the initial active workspace
       if (state.activeWorkspaceId) {
-        setRunningWorkspaceIds([state.activeWorkspaceId])
+        const activeWs =
+          state.workspaces.find((w) => w.id === state.activeWorkspaceId) || state.workspaces[0]
+        if (activeWs) {
+          setActiveSessionPanels({
+            [activeWs.id]: activeWs.panels
+          })
+          setRunningWorkspaceIds([activeWs.id])
+        }
       }
     })
 
@@ -80,26 +89,58 @@ export const App: React.FC = () => {
 
     // Automatically start the workspace if not already running
     if (!runningWorkspaceIds.includes(id)) {
+      const ws = appState.workspaces.find((w) => w.id === id)
+      if (ws) {
+        setActiveSessionPanels((prev) => ({
+          ...prev,
+          [id]: ws.panels
+        }))
+      }
+      setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
       setRunningWorkspaceIds((prev) => [...prev, id])
     }
   }
 
   const handleStartWorkspace = (id: string): void => {
+    const ws = appState.workspaces.find((w) => w.id === id)
+    if (ws) {
+      setActiveSessionPanels((prev) => ({
+        ...prev,
+        [id]: ws.panels
+      }))
+    }
+    setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
     if (!runningWorkspaceIds.includes(id)) {
       setRunningWorkspaceIds((prev) => [...prev, id])
     }
   }
 
   const handleStopWorkspace = async (id: string): Promise<void> => {
-    const ws = appState.workspaces.find((w) => w.id === id)
-    if (ws) {
-      // Kill all terminals for this workspace's panels
-      await Promise.all(ws.panels.map((p) => window.neoAPI.killTerminal(p.id)))
+    const panelsToKill =
+      activeSessionPanels[id] || appState.workspaces.find((w) => w.id === id)?.panels || []
+    if (panelsToKill.length > 0) {
+      // Kill all active terminals for this workspace's panels
+      await Promise.all(panelsToKill.map((p) => window.neoAPI.killTerminal(p.id)))
     }
     setRunningWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
+    setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
+    setActiveSessionPanels((prev) => {
+      const copy = { ...prev }
+      delete copy[id]
+      return copy
+    })
   }
 
   const handleRestartWorkspace = (id: string): void => {
+    const ws = appState.workspaces.find((w) => w.id === id)
+    if (ws) {
+      // Explicit restart applies the latest saved workspace configuration
+      setActiveSessionPanels((prev) => ({
+        ...prev,
+        [id]: ws.panels
+      }))
+    }
+    setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
     setWorkspaceRestartKeys((prev) => ({
       ...prev,
       [id]: (prev[id] || 0) + 1
@@ -118,16 +159,33 @@ export const App: React.FC = () => {
 
   const handleSaveWorkspaceModal = (savedWorkspace: Workspace): void => {
     let updatedWorkspaces: Workspace[]
+    const isRunning = runningWorkspaceIds.includes(savedWorkspace.id)
 
     if (editingWorkspace) {
       updatedWorkspaces = appState.workspaces.map((w) =>
         w.id === savedWorkspace.id ? savedWorkspace : w
       )
-      // Trigger a restart of its terminals so updated commands/paths take effect
-      handleRestartWorkspace(savedWorkspace.id)
+      if (isRunning) {
+        // Workspace is currently running: do NOT restart terminals or touch activeSessionPanels!
+        // Running consoles will NOT be interrupted. Flag workspace as having pending config changes.
+        setPendingChangesWorkspaceIds((prev) =>
+          prev.includes(savedWorkspace.id) ? prev : [...prev, savedWorkspace.id]
+        )
+      } else {
+        // Workspace is stopped: update session panels configuration directly
+        setActiveSessionPanels((prev) => ({
+          ...prev,
+          [savedWorkspace.id]: savedWorkspace.panels
+        }))
+        setPendingChangesWorkspaceIds((prev) => prev.filter((id) => id !== savedWorkspace.id))
+      }
     } else {
       updatedWorkspaces = [...appState.workspaces, savedWorkspace]
       // Start the newly created workspace
+      setActiveSessionPanels((prev) => ({
+        ...prev,
+        [savedWorkspace.id]: savedWorkspace.panels
+      }))
       setRunningWorkspaceIds((prev) => [...prev, savedWorkspace.id])
     }
 
@@ -148,11 +206,23 @@ export const App: React.FC = () => {
     // Stop terminals if running
     await handleStopWorkspace(id)
 
+    setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
+    setActiveSessionPanels((prev) => {
+      const copy = { ...prev }
+      delete copy[id]
+      return copy
+    })
+
     const updatedWorkspaces = appState.workspaces.filter((w) => w.id !== id)
     let newActiveId = appState.activeWorkspaceId
     if (newActiveId === id) {
       newActiveId = updatedWorkspaces[0].id
       if (!runningWorkspaceIds.includes(newActiveId)) {
+        const nextWs = updatedWorkspaces[0]
+        setActiveSessionPanels((prev) => ({
+          ...prev,
+          [newActiveId]: nextWs.panels
+        }))
         setRunningWorkspaceIds((prev) => [...prev, newActiveId])
       }
     }
@@ -175,19 +245,33 @@ export const App: React.FC = () => {
   const handleResetDefaults = async (): Promise<void> => {
     await window.neoAPI.killAllTerminals()
     setRunningWorkspaceIds([])
+    setActiveSessionPanels({})
+    setPendingChangesWorkspaceIds([])
     const freshState = await window.neoAPI.getStore()
     setAppState(freshState)
     if (freshState.activeWorkspaceId) {
-      setRunningWorkspaceIds([freshState.activeWorkspaceId])
+      const activeWs =
+        freshState.workspaces.find((w) => w.id === freshState.activeWorkspaceId) ||
+        freshState.workspaces[0]
+      if (activeWs) {
+        setActiveSessionPanels({
+          [activeWs.id]: activeWs.panels
+        })
+        setRunningWorkspaceIds([activeWs.id])
+      }
     }
   }
 
   const isCurrentWorkspaceRunning = runningWorkspaceIds.includes(activeWorkspace.id)
+  const currentSessionPanels = activeSessionPanels[activeWorkspace.id] || activeWorkspace.panels
+  const hasPendingChanges = pendingChangesWorkspaceIds.includes(activeWorkspace.id)
 
   // Calculate count of active terminal processes across ALL running workspaces
-  const totalRunningPanelsCount = appState.workspaces
-    .filter((w) => runningWorkspaceIds.includes(w.id))
-    .reduce((sum, w) => sum + w.panels.length, 0)
+  const totalRunningPanelsCount = runningWorkspaceIds.reduce((sum, wsId) => {
+    const panels =
+      activeSessionPanels[wsId] || appState.workspaces.find((w) => w.id === wsId)?.panels || []
+    return sum + panels.length
+  }, 0)
 
   // Main workspace view containing header, idle message and terminal grid
   const mainWorkspaceContent = (
@@ -195,8 +279,10 @@ export const App: React.FC = () => {
       {/* Header for the currently active workspace */}
       <WorkspaceHeader
         workspace={activeWorkspace}
+        activePanels={currentSessionPanels}
         panelsMetrics={telemetry?.panels || {}}
         isRunning={isCurrentWorkspaceRunning}
+        hasPendingChanges={hasPendingChanges}
         onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
         onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
         onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
@@ -232,6 +318,7 @@ export const App: React.FC = () => {
         .map((ws) => {
           const isSelected = ws.id === activeWorkspace.id
           const restartKey = workspaceRestartKeys[ws.id] || 0
+          const panelsToRender = activeSessionPanels[ws.id] || ws.panels
 
           return (
             <div
@@ -242,7 +329,7 @@ export const App: React.FC = () => {
             >
               <TerminalGrid
                 key={`${ws.id}-${restartKey}`}
-                panels={ws.panels}
+                panels={panelsToRender}
                 panelsMetrics={telemetry?.panels || {}}
                 isActive={isSelected}
               />
@@ -257,6 +344,7 @@ export const App: React.FC = () => {
       workspaces={appState.workspaces}
       activeWorkspaceId={appState.activeWorkspaceId}
       runningWorkspaceIds={runningWorkspaceIds}
+      pendingChangesWorkspaceIds={pendingChangesWorkspaceIds}
       position={sidebarPosition}
       onSelectWorkspace={handleSelectWorkspace}
       onNewWorkspace={handleNewWorkspace}
@@ -305,6 +393,7 @@ export const App: React.FC = () => {
       <WorkspaceModal
         isOpen={isWorkspaceModalOpen}
         workspace={editingWorkspace}
+        isRunning={editingWorkspace ? runningWorkspaceIds.includes(editingWorkspace.id) : false}
         onClose={() => {
           setIsWorkspaceModalOpen(false)
           setEditingWorkspace(null)

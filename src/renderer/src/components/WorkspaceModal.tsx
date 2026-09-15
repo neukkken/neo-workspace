@@ -5,6 +5,7 @@ import { Workspace, PanelConfig } from '../types'
 interface WorkspaceModalProps {
   workspace: Workspace | null
   isOpen: boolean
+  isRunning?: boolean
   onClose: () => void
   onSave: (workspace: Workspace) => void
 }
@@ -12,6 +13,7 @@ interface WorkspaceModalProps {
 export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   workspace,
   isOpen,
+  isRunning = false,
   onClose,
   onSave
 }) => {
@@ -103,6 +105,17 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
         {/* Body Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Running workspace notice banner */}
+          {isEditing && isRunning && (
+            <div className="p-3 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200/90 text-xs font-mono flex items-start space-x-2.5">
+              <span className="text-amber-400 font-bold shrink-0 mt-0.5">💡</span>
+              <div className="leading-relaxed">
+                <span className="font-semibold text-amber-300">Workspace en ejecución:</span>{' '}
+                Los cambios se guardarán sin reiniciar ni cerrar tus terminales activas para no interrumpir tu trabajo. Se aplicarán la próxima vez que reinicies el workspace.
+              </div>
+            </div>
+          )}
+
           {/* Workspace General Info */}
           <div className="grid grid-cols-4 gap-3">
             <div className="col-span-3 space-y-1">

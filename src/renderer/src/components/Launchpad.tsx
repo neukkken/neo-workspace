@@ -6,6 +6,7 @@ interface LaunchpadProps {
   workspaces: Workspace[]
   activeWorkspaceId: string
   runningWorkspaceIds: string[]
+  pendingChangesWorkspaceIds?: string[]
   position?: SidebarPosition
   onSelectWorkspace: (id: string) => void
   onNewWorkspace: () => void
@@ -18,6 +19,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
   workspaces,
   activeWorkspaceId,
   runningWorkspaceIds,
+  pendingChangesWorkspaceIds = [],
   position = 'left',
   onSelectWorkspace,
   onNewWorkspace,
@@ -71,14 +73,22 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                 )}
 
                 {/* Status LED */}
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
-                    isRunning
-                      ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
-                      : 'bg-zinc-700/80 border border-zinc-600/50'
-                  }`}
-                  title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
-                />
+                <div className="relative flex items-center justify-center shrink-0">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                      isRunning
+                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
+                        : 'bg-zinc-700/80 border border-zinc-600/50'
+                    }`}
+                    title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
+                  />
+                  {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                    <span
+                      title="Cambios guardados pendientes de aplicar al reiniciar"
+                      className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
+                    />
+                  )}
+                </div>
 
                 <span
                   className={`truncate max-w-[120px] font-medium ${
@@ -87,6 +97,15 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                 >
                   {ws.name}
                 </span>
+
+                {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                  <span
+                    title="Cambios guardados pendientes de aplicar al reiniciar"
+                    className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
+                  >
+                    ⚙
+                  </span>
+                )}
 
                 <span
                   className={`text-[10px] font-mono ${
@@ -210,18 +229,26 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
 
                 <div className="flex items-center space-x-2.5 truncate pl-1">
                   {/* Status LED */}
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
-                      isRunning
-                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
-                        : 'bg-zinc-700/80 border border-zinc-600/50'
-                    }`}
-                    title={
-                      isRunning
-                        ? 'Activo y corriendo en segundo plano'
-                        : 'Aún no iniciado'
-                    }
-                  />
+                  <div className="relative flex items-center justify-center shrink-0">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                        isRunning
+                          ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
+                          : 'bg-zinc-700/80 border border-zinc-600/50'
+                      }`}
+                      title={
+                        isRunning
+                          ? 'Activo y corriendo en segundo plano'
+                          : 'Aún no iniciado'
+                      }
+                    />
+                    {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                      <span
+                        title="Cambios guardados pendientes de aplicar al reiniciar"
+                        className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
+                      />
+                    )}
+                  </div>
 
                   <FolderKanban
                     size={13}
@@ -244,6 +271,15 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                 </div>
 
                 <div className="flex items-center space-x-1.5">
+                  {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                    <span
+                      title="Cambios guardados pendientes de aplicar al reiniciar"
+                      className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
+                    >
+                      ⚙
+                    </span>
+                  )}
+
                   <span
                     className={`text-[11px] font-mono ${
                       isActive
