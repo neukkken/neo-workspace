@@ -2,12 +2,12 @@
 
 <div align="center">
 
-  <img src="resources/icon-matrix-minimal.svg" alt="NeoWork Logo" width="100" height="100" />
+  <img src="resources/icon-matrix-minimal.svg" alt="NeoWork Logo" width="96" height="96" />
 
-  <h3>La consola y orquestador de entornos de trabajo para desarrolladores</h3>
+  <h3>A modern workspace orchestrator and terminal dashboard for developers</h3>
 
   <p>
-    Ejecuta, organiza y supervisa múltiples terminales, procesos y servidores en paralelo con telemetría en tiempo real.
+    Launch, organize, and monitor multiple terminals, background services, and development processes in parallel with real-time telemetry.
   </p>
 
   <p>
@@ -20,185 +20,185 @@
 
 ---
 
-## 🌟 Proyecto de Código Abierto (Open Source)
+## Open Source Project
 
-**NeoWork es un proyecto libre y de código abierto** distribuido bajo los términos de la **Licencia MIT**.
+**NeoWork is free and open-source software** distributed under the terms of the **MIT License**.
 
-Creemos en herramientas para desarrolladores que sean:
-- **Transparentes y Privadas:** Tus scripts, rutas de proyectos y variables se guardan únicamente de forma local en tu máquina.
-- **Sin Bloqueos Propietarios:** Puedes auditar, bifurcar (fork), personalizar o extender cualquier módulo libremente.
-- **Construidas por y para la Comunidad:** Invitamos y agradecemos las contribuciones de cualquier desarrollador alrededor del mundo.
+Built around developer-first principles:
+- **Local-first and Private:** All configurations, scripts, and directories stay strictly on your local machine. No remote tracking or telemetry servers.
+- **No Vendor Lock-in:** Fork, audit, extend, or customize any module freely.
+- **Community-Driven:** Contributions, feature proposals, and feedback from developers worldwide are welcomed and encouraged.
 
 ---
 
-## 🚀 Descarga e Instalación
+## Downloads and Installation
 
-Puedes descargar los binarios oficiales precompilados directamente desde la sección de **[Releases](https://github.com/neukkken/neo-workspace/releases)**:
+Precompiled binary packages are available directly from the **[Releases](https://github.com/neukkken/neo-workspace/releases)** page:
 
-### 🪟 Windows
-- **Instalador guiado:** `NeoWork-Setup-1.3.1.exe` (Instalación automática y accesos directos).
-- **Ejecutable Portable:** `NeoWork-1.3.1-portable.exe` (No requiere instalación ni privilegios de administrador).
+### Windows
+- **Setup Installer:** `NeoWork-Setup-1.3.1.exe` (Recommended for automatic updates and desktop shortcuts).
+- **Portable Executable:** `NeoWork-1.3.1-portable.exe` (Run directly without installation or administrator privileges).
 
-### 🐧 Linux
-- **AppImage universal:** `NeoWork-1.3.1.AppImage` (Ejecutable en cualquier distribución Linux moderna).
+### Linux
+- **Universal AppImage:** `NeoWork-1.3.1.AppImage` (Runs on modern Linux distributions).
   ```bash
   chmod +x NeoWork-1.3.1.AppImage
   ./NeoWork-1.3.1.AppImage
   ```
-- **Paquete Debian / Ubuntu:** `NeoWork_1.3.1_amd64.deb`
+- **Debian / Ubuntu Package:** `NeoWork_1.3.1_amd64.deb`
   ```bash
   sudo dpkg -i NeoWork_1.3.1_amd64.deb
   ```
 
 ---
 
-## ✨ Características Principales
+## Key Features
 
-1. **Gestión de Múltiples Workspaces (Launchpad lateral):**
-   - Crea, edita y elimina entornos de trabajo independientes por proyecto.
-   - Cada workspace guarda su propia cuadrícula de terminales, comandos asignados y rutas de trabajo (`cwd`).
-   - Persistencia local automática en formato JSON.
+1. **Multi-Workspace Management (Sidebar Launchpad):**
+   - Create, edit, and organize isolated development workspaces per project.
+   - Each workspace persists its own terminal grid layout, startup commands, and working directories (`cwd`).
+   - Automatic local storage using clean JSON schema.
 
-2. **Terminales Reales e Interactivas (Pseudo-terminales PTY):**
-   - Motor nativo basado en `node-pty` y `xterm.js` con soporte para colores ANSI 24-bit TrueColor.
-   - Totalmente interactivo: soporta `Ctrl+C`, preguntas interactivas `y/n`, comandos interactivos de Git, Vite, Docker, etc.
-   - Soporta auto-ajuste de columnas y filas (`FitAddon`) al redimensionar la ventana.
+2. **Native Interactive Pseudo-Terminals (PTY):**
+   - Native engine powered by `node-pty` and `xterm.js` with full 24-bit TrueColor ANSI support.
+   - Fully interactive execution: handles `Ctrl+C`, confirmation prompts (`y/n`), interactive Git commands, Docker, Vite, and development CLI tools.
+   - Dynamic terminal reflow via `FitAddon` on window resize.
 
-3. **Selector Visual de Carpetas:**
-   - Escribe la ruta manualmente o haz clic en **"Browse"** para abrir el explorador de archivos nativo de tu sistema operativo.
+3. **Visual Directory Picker:**
+   - Type paths manually or use the native OS folder dialog to select workspace roots without typographical errors.
 
-4. **Auto-ejecución de Procesos:**
-   - Configura comandos iniciales por panel que se lanzan automáticamente al abrir el workspace (ej. `npm run dev`, `docker compose up`, `git status`).
-   - Posibilidad de activar o pausar la auto-ejecución panel por panel.
+4. **Automated Process Execution:**
+   - Define custom startup commands per panel (e.g., `npm run dev`, `docker compose up`, `python agent.py`).
+   - Toggle auto-execution per terminal on demand.
 
-5. **Telemetría en Tiempo Real:**
-   - Indicador en vivo de consumo de **CPU %** y **RAM (MB)** por cada panel y terminal individual mediante `pidusage`.
-   - Métricas agregadas a nivel de workspace y del sistema en la barra superior.
+5. **Real-Time Telemetry:**
+   - Live **CPU %** and **RAM (MB)** usage tracking per terminal process powered by `pidusage`.
+   - Aggregated workspace and system load monitoring displayed in the title bar.
 
-6. **Controles Rápidos por Panel:**
-   - **Restart:** Reinicia el proceso y vuelve a ejecutar el comando configurado.
-   - **Clear:** Limpia el buffer de la terminal.
-   - **Maximize / Restore:** Amplía un panel al 100% de la pantalla para inspeccionar logs largos y regresa a la cuadrícula con un clic.
-   - **Copy Path:** Copia rápidamente la ruta de trabajo al portapapeles del sistema.
+6. **Quick Action Controls:**
+   - **Restart:** Instantly restart the assigned process.
+   - **Clear:** Flush terminal scrollback buffer.
+   - **Maximize / Restore:** Expand any terminal panel to full view for inspecting deep stack traces or long build logs, then return to the grid with one click.
+   - **Copy Path:** Copy the panel's active directory to clipboard.
 
-7. **Diseño Moderno de Alto Rendimiento:**
-   - Paleta oscura profesional en tonos grafito y zinc (`#090a0c`).
-   - Acentos en verde esmeralda (`#10b981`), badges sutiles y tipografías para desarrolladores (`Inter` y `JetBrains Mono`).
+7. **Clean Developer Interface:**
+   - Dark graphite and zinc theme (`#090a0c`) designed to reduce visual fatigue.
+   - Subtle emerald accents (`#10b981`) and developer typography (`Inter` and `JetBrains Mono`).
 
 ---
 
-## 🎨 Identidad Visual y Opciones de Iconos
+## Visual Identity and Icon Options
 
-NeoWork incluye varias propuestas de diseño minimalistas diseñadas para encajar en entornos modernos:
+NeoWork includes minimal design assets tailored for development tools:
 
-| Opción | Nombre | Concepto Visual | Archivo |
+| Option | Name | Concept | Asset File |
 | :---: | :---: | :--- | :--- |
-| **A** | **Matrix Minimal (Activo)** | Squircle carbón mate con el chevron y prompt de terminal `>_` en gradiente esmeralda neón con resplandor sutil. | [`resources/icon-matrix-minimal.svg`](resources/icon-matrix-minimal.svg) |
-| **B** | **Neo Grid** | Representación geométrica de la cuadrícula 2x2 de workspaces con nodos interactivos y pulsos de telemetría. | [`resources/icon-neo-grid.svg`](resources/icon-neo-grid.svg) |
-| **C** | **Neo Monogram** | Letra **N** estilizada integrada con trazos de terminal chevron y pilares de consola en gradiente verde. | [`resources/icon-neo-monogram.svg`](resources/icon-neo-monogram.svg) |
+| **A** | **Matrix Minimal (Active)** | Matte carbon squircle featuring a luminous emerald terminal prompt glyph (`>_`). | [`resources/icon-matrix-minimal.svg`](resources/icon-matrix-minimal.svg) |
+| **B** | **Neo Grid** | Minimal geometric 2x2 grid representing workspace nodes and telemetry states. | [`resources/icon-neo-grid.svg`](resources/icon-neo-grid.svg) |
+| **C** | **Neo Monogram** | Stylized letter 'N' composed of terminal chevrons and cursor pillars. | [`resources/icon-neo-monogram.svg`](resources/icon-neo-monogram.svg) |
 
 ---
 
-## 🛠️ Desarrollo Local
+## Local Development
 
-Si deseas compilar o desarrollar localmente:
+To run or build the project from source:
 
-### Requisitos Previos
-- [Node.js](https://nodejs.org/) (versión 20 o superior recomendada)
-- `npm` o `pnpm`
-- Herramientas de compilación C++ de tu SO para compilar `node-pty`:
+### Prerequisites
+- [Node.js](https://nodejs.org/) (version 20+ recommended)
+- `npm` or `pnpm`
+- C++ build tools for compiling `node-pty`:
   - **Linux (Ubuntu/Debian):** `sudo apt install build-essential python3`
-  - **Windows:** `npm install --global --production windows-build-tools` o herramientas de C++ en Visual Studio Installer.
+  - **Windows:** Visual Studio C++ build tools
 
-### Pasos
+### Setup
 
-1. **Clonar el repositorio:**
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/neukkken/neo-workspace.git
    cd neo-workspace
    ```
 
-2. **Instalar dependencias:**
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-3. **Iniciar en modo desarrollo (HMR en vivo):**
+3. **Run in development mode (with HMR):**
    ```bash
    npm run dev
    ```
 
-4. **Verificación de tipos TypeScript:**
+4. **Run TypeScript type verification:**
    ```bash
    npm run typecheck
    ```
 
-5. **Compilar aplicación:**
+5. **Build bundle:**
    ```bash
    npm run build
    ```
 
-6. **Empaquetar ejecutables:**
+6. **Package executables locally:**
    ```bash
-   # Para tu sistema actual:
+   # Package for current host OS:
    npm run dist
 
-   # Específico para Windows:
+   # Windows target:
    npm run dist:win
 
-   # Específico para Linux:
+   # Linux target:
    npm run dist:linux
    ```
 
 ---
 
-## 🏗️ Arquitectura del Proyecto
+## Project Architecture
 
 ```
-neowork/
+neo-workspace/
 ├── .github/
 │   └── workflows/
-│       └── release.yml        # CI/CD automatizado en GitHub Actions (Win y Linux)
-├── build/                     # Iconos y artefactos de empaquetado (.png, .ico)
-├── resources/                 # Opciones de iconos vectoriales SVG
+│       └── release.yml        # Multi-platform CI/CD for Windows & Linux
+├── build/                     # App packaging icons (.png, .ico)
+├── resources/                 # Vector design assets (SVG)
 ├── src/
 │   ├── main/
-│   │   ├── index.ts           # Proceso Principal de Electron y gestión de ventanas
-│   │   ├── pty-manager.ts     # Orquestador de procesos PTY nativos (node-pty)
-│   │   ├── store.ts           # Almacenamiento y persistencia JSON de workspaces
-│   │   └── telemetry.ts       # Monitor de telemetría de CPU y memoria (pidusage)
+│   │   ├── index.ts           # Electron main process & window management
+│   │   ├── pty-manager.ts     # Native PTY orchestration (node-pty)
+│   │   ├── store.ts           # Workspace JSON persistence
+│   │   └── telemetry.ts       # Process telemetry monitor (pidusage)
 │   ├── preload/
-│   │   ├── index.ts           # ContextBridge seguro con APIs expuestas al renderer
-│   │   └── index.d.ts         # Tipado estricto de window.neoAPI
+│   │   ├── index.ts           # Secure ContextBridge IPC layer
+│   │   └── index.d.ts         # TypeScript definitions for window.neoAPI
 │   └── renderer/
-│       ├── index.html         # HTML base con fuentes JetBrains Mono e Inter
+│       ├── index.html         # HTML root with developer font stacks
 │       └── src/
-│           ├── main.tsx       # Punto de entrada React
-│           ├── App.tsx        # Contenedor principal y sincronización de estado
-│           ├── types.ts       # Modelos de datos TypeScript
-│           ├── components/    # Componentes modulares (TerminalGrid, Launchpad, etc.)
+│           ├── main.tsx       # React entry point
+│           ├── App.tsx        # Root component and state synchronization
+│           ├── types.ts       # Shared TypeScript schemas
+│           ├── components/    # UI components (TerminalGrid, Launchpad, etc.)
 │           └── styles/
-│               └── index.css  # Estilos base con Tailwind CSS
-├── electron.vite.config.ts    # Configuración de empaquetado Electron + Vite
-├── electron-builder.json      # Configuración de instaladores multiplataforma
-├── LICENSE                    # Licencia MIT de Código Abierto
+│               └── index.css  # Tailwind CSS definitions
+├── electron.vite.config.ts    # Bundling configuration (Electron + Vite)
+├── electron-builder.json      # Cross-platform installer specifications
+├── LICENSE                    # MIT Open Source License
 └── package.json
 ```
 
 ---
 
-## 🤝 Contribuciones
+## Contributing
 
-¡Las contribuciones son bienvenidas y muy apreciadas!
+Contributions are welcome. To contribute:
 
-1. Haz un Fork del proyecto.
-2. Crea una rama para tu feature o fix (`git checkout -b feature/nueva-mejora`).
-3. Confirma tus cambios (`git commit -m 'feat: agrega nueva funcionalidad'`).
-4. Haz push a tu rama (`git push origin feature/nueva-mejora`).
-5. Abre un **Pull Request**.
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feat/your-feature-name`).
+3. Commit your changes using conventional commit style (`git commit -m 'feat: describe change'`).
+4. Push to your branch (`git push origin feat/your-feature-name`).
+5. Open a Pull Request against `master`.
 
 ---
 
-## 📄 Licencia
+## License
 
-Este proyecto está licenciado bajo los términos de la **Licencia MIT** - consulta el archivo [LICENSE](LICENSE) para más detalles.
+This project is licensed under the terms of the **MIT License**. See the [LICENSE](LICENSE) file for details.
