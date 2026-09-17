@@ -60,7 +60,7 @@ export const App: React.FC = () => {
     )
   }
 
-  const activeWorkspace =
+  const activeWorkspace: Workspace | undefined =
     appState.workspaces.find((w) => w.id === appState.activeWorkspaceId) || appState.workspaces[0]
 
   const sidebarPosition: SidebarPosition = appState.settings?.sidebarPosition || 'left'
@@ -201,8 +201,6 @@ export const App: React.FC = () => {
   }
 
   const handleDeleteWorkspace = async (id: string): Promise<void> => {
-    if (appState.workspaces.length <= 1) return
-
     // Stop terminals if running
     await handleStopWorkspace(id)
 
@@ -216,8 +214,8 @@ export const App: React.FC = () => {
     const updatedWorkspaces = appState.workspaces.filter((w) => w.id !== id)
     let newActiveId = appState.activeWorkspaceId
     if (newActiveId === id) {
-      newActiveId = updatedWorkspaces[0].id
-      if (!runningWorkspaceIds.includes(newActiveId)) {
+      newActiveId = updatedWorkspaces.length > 0 ? updatedWorkspaces[0].id : ''
+      if (newActiveId && !runningWorkspaceIds.includes(newActiveId)) {
         const nextWs = updatedWorkspaces[0]
         setActiveSessionPanels((prev) => ({
           ...prev,
@@ -262,9 +260,15 @@ export const App: React.FC = () => {
     }
   }
 
-  const isCurrentWorkspaceRunning = runningWorkspaceIds.includes(activeWorkspace.id)
-  const currentSessionPanels = activeSessionPanels[activeWorkspace.id] || activeWorkspace.panels
-  const hasPendingChanges = pendingChangesWorkspaceIds.includes(activeWorkspace.id)
+  const isCurrentWorkspaceRunning = activeWorkspace
+    ? runningWorkspaceIds.includes(activeWorkspace.id)
+    : false
+  const currentSessionPanels = activeWorkspace
+    ? activeSessionPanels[activeWorkspace.id] || activeWorkspace.panels
+    : []
+  const hasPendingChanges = activeWorkspace
+    ? pendingChangesWorkspaceIds.includes(activeWorkspace.id)
+    : false
 
   // Calculate count of active terminal processes across ALL running workspaces
   const totalRunningPanelsCount = runningWorkspaceIds.reduce((sum, wsId) => {
@@ -276,66 +280,88 @@ export const App: React.FC = () => {
   // Main workspace view containing header, idle message and terminal grid
   const mainWorkspaceContent = (
     <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0b0d10] overflow-hidden relative">
-      {/* Header for the currently active workspace */}
-      <WorkspaceHeader
-        workspace={activeWorkspace}
-        activePanels={currentSessionPanels}
-        panelsMetrics={telemetry?.panels || {}}
-        isRunning={isCurrentWorkspaceRunning}
-        hasPendingChanges={hasPendingChanges}
-        onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
-        onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
-        onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
-        onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
-      />
-
-      {/* If the current workspace is stopped, show idle prompt */}
-      {!isCurrentWorkspaceRunning && (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
-          <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
-            <Power size={24} className="text-zinc-500" />
+      {!activeWorkspace ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 shadow-xl">
+            <span className="text-2xl font-mono text-emerald-400 font-bold">&gt;_</span>
           </div>
-          <h3 className="font-mono text-sm font-semibold text-zinc-200 uppercase tracking-wide">
-            WORKSPACE DETENIDO // {activeWorkspace.name}
-          </h3>
-          <p className="font-mono text-xs text-zinc-500 max-w-sm mt-1 mb-5">
-            Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando
-            en segundo plano. Haz clic para iniciarlas.
+          <h2 className="font-mono text-base font-semibold text-zinc-100 uppercase tracking-wider mb-1">
+            BIENVENIDO A NEOWORK
+          </h2>
+          <p className="font-mono text-xs text-zinc-400 max-w-md mb-6 leading-relaxed">
+            No tienes ningún workspace configurado aún. Crea tu primer entorno de trabajo con tus terminales, rutas de proyecto y comandos de inicio.
           </p>
           <button
-            onClick={() => handleStartWorkspace(activeWorkspace.id)}
-            className="flex items-center space-x-2 px-5 py-2 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/10"
+            onClick={handleNewWorkspace}
+            className="flex items-center space-x-2 px-6 py-2.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/20"
           >
-            <Play size={14} fill="currentColor" />
-            <span>INICIAR TERMINALES DEL WORKSPACE</span>
+            <span>+ CREAR PRIMER WORKSPACE</span>
           </button>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Header for the currently active workspace */}
+          <WorkspaceHeader
+            workspace={activeWorkspace}
+            activePanels={currentSessionPanels}
+            panelsMetrics={telemetry?.panels || {}}
+            isRunning={isCurrentWorkspaceRunning}
+            hasPendingChanges={hasPendingChanges}
+            onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
+            onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
+            onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
+            onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
+          />
 
-      {/* Render running workspaces: active one is visible, others stay mounted in background via 'hidden' */}
-      {appState.workspaces
-        .filter((ws) => runningWorkspaceIds.includes(ws.id))
-        .map((ws) => {
-          const isSelected = ws.id === activeWorkspace.id
-          const restartKey = workspaceRestartKeys[ws.id] || 0
-          const panelsToRender = activeSessionPanels[ws.id] || ws.panels
-
-          return (
-            <div
-              key={ws.id}
-              className={`flex-1 min-h-0 min-w-0 h-full w-full ${
-                isSelected ? 'flex flex-col' : 'hidden'
-              }`}
-            >
-              <TerminalGrid
-                key={`${ws.id}-${restartKey}`}
-                panels={panelsToRender}
-                panelsMetrics={telemetry?.panels || {}}
-                isActive={isSelected}
-              />
+          {/* If the current workspace is stopped, show idle prompt */}
+          {!isCurrentWorkspaceRunning && (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
+              <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
+                <Power size={24} className="text-zinc-500" />
+              </div>
+              <h3 className="font-mono text-sm font-semibold text-zinc-200 uppercase tracking-wide">
+                WORKSPACE DETENIDO // {activeWorkspace.name}
+              </h3>
+              <p className="font-mono text-xs text-zinc-500 max-w-sm mt-1 mb-5">
+                Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando
+                en segundo plano. Haz clic para iniciarlas.
+              </p>
+              <button
+                onClick={() => handleStartWorkspace(activeWorkspace.id)}
+                className="flex items-center space-x-2 px-5 py-2 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/10"
+              >
+                <Play size={14} fill="currentColor" />
+                <span>INICIAR TERMINALES DEL WORKSPACE</span>
+              </button>
             </div>
-          )
-        })}
+          )}
+
+          {/* Render running workspaces: active one is visible, others stay mounted in background via 'hidden' */}
+          {appState.workspaces
+            .filter((ws) => runningWorkspaceIds.includes(ws.id))
+            .map((ws) => {
+              const isSelected = ws.id === activeWorkspace.id
+              const restartKey = workspaceRestartKeys[ws.id] || 0
+              const panelsToRender = activeSessionPanels[ws.id] || ws.panels
+
+              return (
+                <div
+                  key={ws.id}
+                  className={`flex-1 min-h-0 min-w-0 h-full w-full ${
+                    isSelected ? 'flex flex-col' : 'hidden'
+                  }`}
+                >
+                  <TerminalGrid
+                    key={`${ws.id}-${restartKey}`}
+                    panels={panelsToRender}
+                    panelsMetrics={telemetry?.panels || {}}
+                    isActive={isSelected}
+                  />
+                </div>
+              )
+            })}
+        </>
+      )}
     </main>
   )
 

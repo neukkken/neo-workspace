@@ -143,22 +143,25 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                   >
                     <Edit2 size={10} />
                   </button>
-                  {workspaces.length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDeleteWorkspace(ws.id)
-                      }}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={10} />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDeleteWorkspace(ws.id)
+                    }}
+                    className="p-0.5 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={10} />
+                  </button>
                 </div>
               </div>
             )
           })}
+          {workspaces.length === 0 && (
+            <span className="text-[11px] font-mono text-zinc-500 italic px-2">
+              No hay workspaces creados
+            </span>
+          )}
         </div>
 
         {/* Right: Compact Add Workspace Button */}
@@ -316,23 +319,29 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                     >
                       <Edit2 size={11} />
                     </button>
-                    {workspaces.length > 1 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDeleteWorkspace(ws.id)
-                        }}
-                        className="p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
-                        title="Eliminar Workspace"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteWorkspace(ws.id)
+                      }}
+                      className="p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
+                      title="Eliminar Workspace"
+                    >
+                      <Trash2 size={11} />
+                    </button>
                   </div>
                 </div>
               </div>
             )
           })}
+          {workspaces.length === 0 && (
+            <div className="p-4 text-center">
+              <p className="text-xs font-mono text-zinc-500 mb-2">No hay workspaces</p>
+              <p className="text-[10px] font-mono text-zinc-600 leading-relaxed">
+                Crea tu primer workspace para comenzar
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
