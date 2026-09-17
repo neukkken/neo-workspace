@@ -45,6 +45,8 @@
         "arch": ["x64"]
       }
     ],
+    "maintainer": "NeoWork Contributors <contact@neowork.dev>",
+    "syncDesktopName": true,
     "category": "Development",
     "icon": "build/icon.png"
   }
