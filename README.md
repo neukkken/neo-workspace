@@ -11,7 +11,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.3.1-emerald?style=flat-square&logo=electron" alt="Version" /></a>
+    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.3.2-emerald?style=flat-square&logo=electron" alt="Version" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
     <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-zinc?style=flat-square&logo=linux" alt="Cross-Platform" /></a>
     <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
@@ -36,18 +36,18 @@ Built around developer-first principles:
 Precompiled binary packages are available directly from the **[Releases](https://github.com/neukkken/neo-workspace/releases)** page:
 
 ### Windows
-- **Setup Installer:** `NeoWork-Setup-1.3.1.exe` (Recommended for automatic updates and desktop shortcuts).
-- **Portable Executable:** `NeoWork-1.3.1-portable.exe` (Run directly without installation or administrator privileges).
+- **Setup Installer:** `NeoWork-Setup-1.3.2.exe` (Recommended for automatic updates and desktop shortcuts).
+- **Portable Executable:** `NeoWork-1.3.2-portable.exe` (Run directly without installation or administrator privileges).
 
 ### Linux
-- **Universal AppImage:** `NeoWork-1.3.1.AppImage` (Runs on modern Linux distributions).
+- **Universal AppImage:** `NeoWork-1.3.2.AppImage` (Runs on modern Linux distributions).
   ```bash
-  chmod +x NeoWork-1.3.1.AppImage
-  ./NeoWork-1.3.1.AppImage
+  chmod +x NeoWork-1.3.2.AppImage
+  ./NeoWork-1.3.2.AppImage
   ```
-- **Debian / Ubuntu Package:** `NeoWork_1.3.1_amd64.deb`
+- **Debian / Ubuntu Package:** `NeoWork_1.3.2_amd64.deb`
   ```bash
-  sudo dpkg -i NeoWork_1.3.1_amd64.deb
+  sudo dpkg -i NeoWork_1.3.2_amd64.deb
   ```
 
 ---

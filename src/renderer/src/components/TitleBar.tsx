@@ -45,7 +45,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span className="text-zinc-500">::</span>
           <span className="text-emerald-400">CORE_ORCHESTRATOR</span>
           <span className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded font-mono ml-1">
-            v1.0.1
+            v1.3.2
           </span>
         </div>
       </div>
