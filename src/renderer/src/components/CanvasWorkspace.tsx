@@ -176,12 +176,26 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     }
   }
 
-  // Zoom with Wheel
+  // Zoom with Wheel centered at cursor position
   const handleWheel = (e: React.WheelEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey) {
       e.preventDefault()
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92
-      setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.35), 2.2))
+      const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.35), 2.2)
+      if (newZoom === zoom) return
+
+      // Anchor zoom around current mouse coordinates
+      const newPanX = mx - ((mx - pan.x) / zoom) * newZoom
+      const newPanY = my - ((my - pan.y) / zoom) * newZoom
+
+      setZoom(newZoom)
+      setPan({ x: newPanX, y: newPanY })
     } else {
       // Regular scroll pans vertically or horizontally
       setPan((prev) => ({
@@ -283,6 +297,21 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     }
   }, [isPanning, draggingCardId, resizingCardId, zoom, cards, onSaveCanvasCards])
 
+  const handleZoomCenter = (factor: number): void => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    const mx = rect ? rect.width / 2 : window.innerWidth / 2
+    const my = rect ? rect.height / 2 : window.innerHeight / 2
+
+    const newZoom = Math.min(Math.max(zoom * factor, 0.35), 2.2)
+    if (newZoom === zoom) return
+
+    const newPanX = mx - ((mx - pan.x) / zoom) * newZoom
+    const newPanY = my - ((my - pan.y) / zoom) * newZoom
+
+    setZoom(newZoom)
+    setPan({ x: newPanX, y: newPanY })
+  }
+
   const handleResetView = (): void => {
     setPan({ x: 0, y: 0 })
     setZoom(1)
@@ -311,7 +340,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         <div className="h-4 w-px bg-zinc-800 mx-1" />
 
         <button
-          onClick={() => setZoom((z) => Math.min(z * 1.15, 2.2))}
+          onClick={() => handleZoomCenter(1.15)}
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
           title="Zoom In (Ctrl + Wheel)"
         >
@@ -323,7 +352,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         </span>
 
         <button
-          onClick={() => setZoom((z) => Math.max(z * 0.85, 0.35))}
+          onClick={() => handleZoomCenter(0.85)}
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
           title="Zoom Out (Ctrl + Wheel)"
         >
