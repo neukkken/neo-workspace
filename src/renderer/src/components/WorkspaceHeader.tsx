@@ -1,5 +1,5 @@
 import React from 'react'
-import { Edit, RotateCcw, Activity, Play, Square } from 'lucide-react'
+import { Edit, RotateCcw, Activity, Play, Square, LayoutGrid, Layers } from 'lucide-react'
 import { Workspace, ProcessMetrics } from '../types'
 
 interface WorkspaceHeaderProps {
@@ -8,6 +8,8 @@ interface WorkspaceHeaderProps {
   panelsMetrics: Record<string, ProcessMetrics>
   isRunning: boolean
   hasPendingChanges?: boolean
+  layoutMode?: import('../types').WorkspaceLayoutMode
+  onToggleLayoutMode?: () => void
   onEditWorkspace: () => void
   onRestartAll: () => void
   onStartWorkspace: () => void
@@ -20,6 +22,8 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   panelsMetrics,
   isRunning,
   hasPendingChanges = false,
+  layoutMode = 'grid',
+  onToggleLayoutMode,
   onEditWorkspace,
   onRestartAll,
   onStartWorkspace,
@@ -96,6 +100,31 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
               <strong className="text-zinc-200 font-medium">{Math.round(totalRam * 10) / 10}MB</strong>]
             </span>
           </div>
+        )}
+
+        {/* Layout Mode Toggle: Grid vs Canvas */}
+        {onToggleLayoutMode && (
+          <button
+            onClick={onToggleLayoutMode}
+            className={`flex items-center space-x-1 text-xs font-mono px-2.5 py-1 rounded transition-colors ${
+              layoutMode === 'canvas'
+                ? 'text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800'
+            }`}
+            title="Alternar entre Vista Cuadrícula y Canvas Libre (Ctrl+Shift+F)"
+          >
+            {layoutMode === 'canvas' ? (
+              <>
+                <Layers size={11} className="text-cyan-400" />
+                <span className="hidden sm:inline">Canvas</span>
+              </>
+            ) : (
+              <>
+                <LayoutGrid size={11} className="text-zinc-400" />
+                <span className="hidden sm:inline">Grid</span>
+              </>
+            )}
+          </button>
         )}
 
         {/* Start / Stop Toggle */}

@@ -1,15 +1,17 @@
 import React, { useState } from 'react'
-import { Save, Settings, Check, Terminal } from 'lucide-react'
+import { Save, Settings, Check, Terminal, Keyboard } from 'lucide-react'
 
 interface StatusBarProps {
   onSave: () => Promise<void>
   onOpenSettings: () => void
+  onOpenShortcuts?: () => void
   activePanelsCount: number
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   onSave,
   onOpenSettings,
+  onOpenShortcuts,
   activePanelsCount
 }) => {
   const [saving, setSaving] = useState(false)
@@ -57,6 +59,17 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             </>
           )}
         </button>
+
+        {onOpenShortcuts && (
+          <button
+            onClick={onOpenShortcuts}
+            className="flex items-center space-x-1 px-2.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 transition-colors"
+            title="Atajos de Teclado (?)"
+          >
+            <Keyboard size={11} className="text-zinc-400" />
+            <span>SHORTCUTS</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenSettings}

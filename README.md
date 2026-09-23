@@ -85,6 +85,16 @@ Precompiled binary packages are available directly from the **[Releases](https:/
    - Dark graphite and zinc theme (`#090a0c`) designed to reduce visual fatigue.
    - Subtle emerald accents (`#10b981`) and developer typography (`Inter` and `JetBrains Mono`).
 
+8. **Infinite Free-form Canvas Mode:**
+   - Toggle between classical structured Grid and free-form Infinite Board (`Ctrl + Shift + F`).
+   - Pan freely across the canvas, zoom in and out (30% to 220%) with mouse wheel.
+   - Drag and resize terminal console nodes and embedded web browser cards side by side.
+   - Live embedded browsers allow real-time local web development preview (`http://localhost:5173`, etc.) with refresh and navigation controls directly on the canvas.
+
+9. **Keyboard Shortcuts System:**
+   - Control workspaces, layout toggling, restarts, and terminal text without leaving the keyboard.
+   - Press `?` or click the shortcuts button to inspect the interactive shortcuts cheatsheet modal.
+
 ---
 
 ## Visual Identity and Icon Options

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Terminal, Minus, Square, X, SlidersHorizontal, Activity } from 'lucide-react'
+import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle } from 'lucide-react'
 import { SystemMetrics } from '../types'
 
 interface TitleBarProps {
   systemMetrics?: SystemMetrics
   activeWorkspaceName?: string
   onOpenSettings?: () => void
+  onOpenShortcuts?: () => void
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -72,6 +73,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               RAM <strong className="text-zinc-200">{systemMetrics.usedMemMb}MB</strong>
             </span>
           </div>
+        )}
+
+        {onOpenShortcuts && (
+          <button
+            onClick={onOpenShortcuts}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
+            title="Atajos de Teclado (?)"
+          >
+            <HelpCircle size={13} />
+          </button>
         )}
 
         {onOpenSettings && (

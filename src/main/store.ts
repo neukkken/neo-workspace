@@ -11,11 +11,32 @@ export interface PanelConfig {
   autoStart: boolean
 }
 
+export type NodeKind = 'terminal' | 'browser'
+
+export interface CanvasCard {
+  id: string
+  kind: NodeKind
+  title: string
+  x: number
+  y: number
+  width: number
+  height: number
+  zIndex?: number
+  cwd?: string
+  command?: string
+  autoStart?: boolean
+  url?: string
+}
+
+export type WorkspaceLayoutMode = 'grid' | 'canvas'
+
 export interface Workspace {
   id: string
   name: string
   code: string
   panels: PanelConfig[]
+  layoutMode?: WorkspaceLayoutMode
+  canvasCards?: CanvasCard[]
 }
 
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'

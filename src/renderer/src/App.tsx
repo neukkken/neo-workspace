@@ -4,10 +4,12 @@ import { TitleBar } from './components/TitleBar'
 import { Launchpad } from './components/Launchpad'
 import { WorkspaceHeader } from './components/WorkspaceHeader'
 import { TerminalGrid } from './components/TerminalGrid'
+import { CanvasWorkspace } from './components/CanvasWorkspace'
 import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
-import { Workspace, AppState, TelemetryPayload, SidebarPosition, PanelConfig } from './types'
+import { ShortcutsModal } from './components/ShortcutsModal'
+import { Workspace, AppState, TelemetryPayload, SidebarPosition, PanelConfig, CanvasCard } from './types'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -21,6 +23,8 @@ export const App: React.FC = () => {
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false)
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false)
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true)
 
   // Load initial workspaces from store
   useEffect(() => {
@@ -39,15 +43,87 @@ export const App: React.FC = () => {
       }
     })
 
-    // Listen to real-time telemetry updates
-    const unsubscribeTelemetry = window.neoAPI.onTelemetry((data) => {
-      setTelemetry(data)
-    })
+    // Global Keyboard Shortcuts Listener
+    const handleGlobalKeyDown = (e: KeyboardEvent): void => {
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+
+      // Help modal with ? (Shift + /)
+      if (!isInput && e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        setIsShortcutsModalOpen((prev) => !prev)
+        return
+      }
+
+      // Escape closes open modals
+      if (e.key === 'Escape') {
+        setIsShortcutsModalOpen(false)
+        setIsSettingsModalOpen(false)
+        setIsWorkspaceModalOpen(false)
+        return
+      }
+
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey
+
+      // Ctrl + N: Create new workspace
+      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        handleNewWorkspace()
+        return
+      }
+
+      // Ctrl + B: Toggle sidebar visibility
+      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        setIsSidebarVisible((prev) => !prev)
+        return
+      }
+
+      // Ctrl + S: Save all workspaces
+      if (isCtrlOrCmd && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        handleSaveAll()
+        return
+      }
+
+      // Ctrl + Shift + F: Toggle Grid vs Canvas
+      if (isCtrlOrCmd && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        if (appState && appState.activeWorkspaceId) {
+          handleToggleLayoutMode(appState.activeWorkspaceId)
+        }
+        return
+      }
+
+      // Ctrl + Shift + R: Restart active workspace
+      if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault()
+        if (appState && appState.activeWorkspaceId) {
+          handleRestartWorkspace(appState.activeWorkspaceId)
+        }
+        return
+      }
+
+      // Ctrl + 1..9: Quick switch workspaces
+      if (isCtrlOrCmd && !e.shiftKey && e.key >= '1' && e.key <= '9') {
+        const index = parseInt(e.key, 10) - 1
+        if (appState && appState.workspaces[index]) {
+          e.preventDefault()
+          handleSelectWorkspace(appState.workspaces[index].id)
+        }
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
 
     return () => {
       unsubscribeTelemetry()
+      window.removeEventListener('keydown', handleGlobalKeyDown)
     }
-  }, [])
+  }, [appState, runningWorkspaceIds, activeSessionPanels])
 
   if (!appState) {
     return (
@@ -145,6 +221,23 @@ export const App: React.FC = () => {
       ...prev,
       [id]: (prev[id] || 0) + 1
     }))
+  }
+
+  const handleToggleLayoutMode = (workspaceId: string): void => {
+    const ws = appState.workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return
+    const nextMode = ws.layoutMode === 'canvas' ? 'grid' : 'canvas'
+    const updatedWorkspaces = appState.workspaces.map((w) =>
+      w.id === workspaceId ? { ...w, layoutMode: nextMode } : w
+    )
+    persistState({ ...appState, workspaces: updatedWorkspaces })
+  }
+
+  const handleSaveCanvasCards = (workspaceId: string, cards: CanvasCard[]): void => {
+    const updatedWorkspaces = appState.workspaces.map((w) =>
+      w.id === workspaceId ? { ...w, canvasCards: cards } : w
+    )
+    persistState({ ...appState, workspaces: updatedWorkspaces })
   }
 
   const handleNewWorkspace = (): void => {
@@ -307,6 +400,8 @@ export const App: React.FC = () => {
             panelsMetrics={telemetry?.panels || {}}
             isRunning={isCurrentWorkspaceRunning}
             hasPendingChanges={hasPendingChanges}
+            layoutMode={activeWorkspace.layoutMode || 'grid'}
+            onToggleLayoutMode={() => handleToggleLayoutMode(activeWorkspace.id)}
             onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
             onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
             onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
@@ -343,6 +438,7 @@ export const App: React.FC = () => {
               const isSelected = ws.id === activeWorkspace.id
               const restartKey = workspaceRestartKeys[ws.id] || 0
               const panelsToRender = activeSessionPanels[ws.id] || ws.panels
+              const isCanvas = ws.layoutMode === 'canvas'
 
               return (
                 <div
@@ -351,12 +447,21 @@ export const App: React.FC = () => {
                     isSelected ? 'flex flex-col' : 'hidden'
                   }`}
                 >
-                  <TerminalGrid
-                    key={`${ws.id}-${restartKey}`}
-                    panels={panelsToRender}
-                    panelsMetrics={telemetry?.panels || {}}
-                    isActive={isSelected}
-                  />
+                  {isCanvas ? (
+                    <CanvasWorkspace
+                      key={`${ws.id}-canvas`}
+                      workspace={ws}
+                      panelsMetrics={telemetry?.panels || {}}
+                      onSaveCanvasCards={(cards) => handleSaveCanvasCards(ws.id, cards)}
+                    />
+                  ) : (
+                    <TerminalGrid
+                      key={`${ws.id}-${restartKey}`}
+                      panels={panelsToRender}
+                      panelsMetrics={telemetry?.panels || {}}
+                      isActive={isSelected}
+                    />
+                  )}
                 </div>
               )
             })}
@@ -387,10 +492,11 @@ export const App: React.FC = () => {
         systemMetrics={telemetry?.system}
         activeWorkspaceName={activeWorkspace?.name}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
       />
 
       {/* TOP POSITION */}
-      {sidebarPosition === 'top' && launchpadComponent}
+      {isSidebarVisible && sidebarPosition === 'top' && launchpadComponent}
 
       {/* CENTRAL AREA */}
       {sidebarPosition === 'top' || sidebarPosition === 'bottom' ? (
@@ -399,19 +505,20 @@ export const App: React.FC = () => {
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          {sidebarPosition === 'left' && launchpadComponent}
+          {isSidebarVisible && sidebarPosition === 'left' && launchpadComponent}
           {mainWorkspaceContent}
-          {sidebarPosition === 'right' && launchpadComponent}
+          {isSidebarVisible && sidebarPosition === 'right' && launchpadComponent}
         </div>
       )}
 
       {/* BOTTOM POSITION */}
-      {sidebarPosition === 'bottom' && launchpadComponent}
+      {isSidebarVisible && sidebarPosition === 'bottom' && launchpadComponent}
 
       {/* Footer Status Bar */}
       <StatusBar
         onSave={handleSaveAll}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
         activePanelsCount={totalRunningPanelsCount}
       />
 
@@ -433,6 +540,11 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsModalOpen(false)}
         onPositionChange={handleUpdateSidebarPosition}
         onResetDefaults={handleResetDefaults}
+      />
+
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
     </div>
   )
