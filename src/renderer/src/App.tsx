@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Play, Power } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Launchpad } from './components/Launchpad'
@@ -26,24 +26,48 @@ export const App: React.FC = () => {
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
 
-  // Load initial workspaces from store
-  useEffect(() => {
-    window.neoAPI.getStore().then((state) => {
-      setAppState(state)
-      // Automatically start the initial active workspace
-      if (state.activeWorkspaceId) {
-        const activeWs =
-          state.workspaces.find((w) => w.id === state.activeWorkspaceId) || state.workspaces[0]
-        if (activeWs) {
-          setActiveSessionPanels({
-            [activeWs.id]: activeWs.panels
-          })
-          setRunningWorkspaceIds([activeWs.id])
-        }
-      }
-    })
+  const appStateRef = useRef<AppState | null>(null)
+  appStateRef.current = appState
 
-    // Global Keyboard Shortcuts Listener
+  const runningWorkspaceIdsRef = useRef<string[]>([])
+  runningWorkspaceIdsRef.current = runningWorkspaceIds
+
+  // 1. Load initial workspaces from store once on mount
+  useEffect(() => {
+    window.neoAPI
+      .getStore()
+      .then((state) => {
+        setAppState(state)
+        const initialWs =
+          (state.activeWorkspaceId &&
+            state.workspaces.find((w) => w.id === state.activeWorkspaceId)) ||
+          state.workspaces[0]
+
+        if (initialWs) {
+          setActiveSessionPanels({
+            [initialWs.id]: initialWs.panels
+          })
+          setRunningWorkspaceIds([initialWs.id])
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to getStore from neoAPI:', err)
+        setAppState({ activeWorkspaceId: '', workspaces: [] })
+      })
+  }, [])
+
+  // 2. Listen to real-time telemetry updates
+  useEffect(() => {
+    const unsubscribe = window.neoAPI.onTelemetry((data) => {
+      setTelemetry(data)
+    })
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
+  // 3. Global Keyboard Shortcuts Listener
+  useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
       const isInput =
         e.target instanceof HTMLInputElement ||
@@ -88,11 +112,14 @@ export const App: React.FC = () => {
         return
       }
 
+      const current = appStateRef.current
+      if (!current) return
+
       // Ctrl + Shift + F: Toggle Grid vs Canvas
       if (isCtrlOrCmd && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault()
-        if (appState && appState.activeWorkspaceId) {
-          handleToggleLayoutMode(appState.activeWorkspaceId)
+        if (current.activeWorkspaceId) {
+          handleToggleLayoutMode(current.activeWorkspaceId)
         }
         return
       }
@@ -100,8 +127,8 @@ export const App: React.FC = () => {
       // Ctrl + Shift + R: Restart active workspace
       if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault()
-        if (appState && appState.activeWorkspaceId) {
-          handleRestartWorkspace(appState.activeWorkspaceId)
+        if (current.activeWorkspaceId) {
+          handleRestartWorkspace(current.activeWorkspaceId)
         }
         return
       }
@@ -109,21 +136,19 @@ export const App: React.FC = () => {
       // Ctrl + 1..9: Quick switch workspaces
       if (isCtrlOrCmd && !e.shiftKey && e.key >= '1' && e.key <= '9') {
         const index = parseInt(e.key, 10) - 1
-        if (appState && appState.workspaces[index]) {
+        if (current.workspaces[index]) {
           e.preventDefault()
-          handleSelectWorkspace(appState.workspaces[index].id)
+          handleSelectWorkspace(current.workspaces[index].id)
         }
         return
       }
     }
 
     window.addEventListener('keydown', handleGlobalKeyDown)
-
     return () => {
-      unsubscribeTelemetry()
       window.removeEventListener('keydown', handleGlobalKeyDown)
     }
-  }, [appState, runningWorkspaceIds, activeSessionPanels])
+  }, [])
 
   if (!appState) {
     return (

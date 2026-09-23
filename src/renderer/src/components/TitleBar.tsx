@@ -12,7 +12,8 @@ interface TitleBarProps {
 export const TitleBar: React.FC<TitleBarProps> = ({
   systemMetrics,
   activeWorkspaceName,
-  onOpenSettings
+  onOpenSettings,
+  onOpenShortcuts
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
 

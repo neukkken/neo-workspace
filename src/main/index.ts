@@ -30,6 +30,20 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  mainWindow.webContents.on('console-message', (event: any) => {
+    if (event?.level >= 2 && event?.message) {
+      console.warn(`[RENDERER warn/err] ${event.message}`)
+    }
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[LOAD FAIL] ${errorCode}: ${errorDescription} at ${validatedURL}`)
+  })
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[RENDERER CRASHED]`, details)
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -155,7 +169,7 @@ app.whenReady().then(() => {
   })
 
   const gotTheLock = app.requestSingleInstanceLock()
-  if (!gotTheLock) {
+  if (!gotTheLock && app.isPackaged) {
     app.exit(0)
     return
   }
