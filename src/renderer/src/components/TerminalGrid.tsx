@@ -45,50 +45,42 @@ export const TerminalGrid: React.FC<TerminalGridProps> = ({
     }
   }
 
-  // If one panel is maximized, keep all panels mounted but show the maximized one on top
+  // Single mount map: each panel mounted exactly once.
+  // When maximizedPanelId is active, the maximized panel expands to absolute inset-0 and others hide,
+  // preventing double-mounting and keeping the DOM tree clean.
   return (
-    <div className="flex-1 relative h-full w-full min-h-0 overflow-hidden">
-      {/* Grid container: visible when nothing is maximized */}
+    <div className="flex-1 relative h-full w-full min-h-0 overflow-hidden p-2">
       <div
-        className={`h-full w-full p-2 gap-2 ${
-          maximizedPanelId ? 'hidden' : `grid ${getGridClasses()}`
+        className={`h-full w-full gap-2 ${
+          maximizedPanelId ? 'relative' : `grid ${getGridClasses()}`
         }`}
       >
-        {panels.map((panel) => (
-          <div key={panel.id} className="min-h-0 min-w-0 h-full w-full">
-            <TerminalPanel
-              panel={panel}
-              metrics={panelsMetrics[panel.id]}
-              isMaximized={false}
-              isActive={isActive && !maximizedPanelId}
-              onToggleMaximize={handleToggleMaximize}
-            />
-          </div>
-        ))}
-      </div>
+        {panels.map((panel) => {
+          const isMax = panel.id === maximizedPanelId
+          const isHidden = maximizedPanelId !== null && !isMax
 
-      {/* Maximized container: when a panel is maximized, overlay it without unmounting other panels */}
-      {maximizedPanelId && (
-        <div className="absolute inset-0 z-20 p-2 h-full w-full min-h-0 bg-[#090a0d]">
-          {panels.map((panel) => {
-            const isThisMaximized = panel.id === maximizedPanelId
-            return (
-              <div
-                key={panel.id}
-                className={`h-full w-full min-h-0 ${isThisMaximized ? 'block' : 'hidden'}`}
-              >
-                <TerminalPanel
-                  panel={panel}
-                  metrics={panelsMetrics[panel.id]}
-                  isMaximized={true}
-                  isActive={isActive && isThisMaximized}
-                  onToggleMaximize={handleToggleMaximize}
-                />
-              </div>
-            )
-          })}
-        </div>
-      )}
+          return (
+            <div
+              key={panel.id}
+              className={
+                maximizedPanelId
+                  ? isMax
+                    ? 'absolute inset-0 z-20 h-full w-full'
+                    : 'hidden'
+                  : 'min-h-0 min-w-0 h-full w-full'
+              }
+            >
+              <TerminalPanel
+                panel={panel}
+                metrics={panelsMetrics[panel.id]}
+                isMaximized={isMax}
+                isActive={isActive && !isHidden}
+                onToggleMaximize={handleToggleMaximize}
+              />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

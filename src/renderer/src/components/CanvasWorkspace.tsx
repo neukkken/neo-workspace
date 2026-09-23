@@ -13,6 +13,7 @@ import {
 import { CanvasCard, ProcessMetrics, Workspace } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
+import { terminalPool } from '../services/terminal-pool'
 
 interface CanvasWorkspaceProps {
   workspace: Workspace
@@ -45,6 +46,33 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       zIndex: idx + 1
     }))
   })
+
+  // Synchronize any panels that exist in the workspace but not in cards
+  useEffect(() => {
+    setCards((prev) => {
+      const missingPanels = workspace.panels.filter(
+        (p) => !prev.some((c) => c.id === p.id)
+      )
+      if (missingPanels.length === 0) return prev
+
+      const newCards: CanvasCard[] = missingPanels.map((p, i) => ({
+        id: p.id,
+        kind: 'terminal' as const,
+        title: p.title,
+        cwd: p.cwd,
+        command: p.command,
+        autoStart: p.autoStart,
+        x: 60 + ((prev.length + i) % 2) * 580,
+        y: 60 + Math.floor((prev.length + i) / 2) * 440,
+        width: 550,
+        height: 400,
+        zIndex: prev.length + i + 1
+      }))
+      const updated = [...prev, ...newCards]
+      onSaveCanvasCards(updated)
+      return updated
+    })
+  }, [workspace.panels, onSaveCanvasCards])
 
   // Pan & Zoom state
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -115,6 +143,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   }
 
   const handleDeleteCard = (id: string): void => {
+    terminalPool.destroyTerminal(id)
     updateCardsAndNotify((prev) => prev.filter((c) => c.id !== id))
     if (focusedCardId === id) setFocusedCardId(null)
   }

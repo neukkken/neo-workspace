@@ -10,6 +10,7 @@ import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { Workspace, AppState, TelemetryPayload, SidebarPosition, PanelConfig, CanvasCard } from './types'
+import { terminalPool } from './services/terminal-pool'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -221,7 +222,12 @@ export const App: React.FC = () => {
       activeSessionPanels[id] || appState.workspaces.find((w) => w.id === id)?.panels || []
     if (panelsToKill.length > 0) {
       // Kill all active terminals for this workspace's panels
-      await Promise.all(panelsToKill.map((p) => window.neoAPI.killTerminal(p.id)))
+      await Promise.all(
+        panelsToKill.map(async (p) => {
+          terminalPool.destroyTerminal(p.id)
+          return window.neoAPI.killTerminal(p.id)
+        })
+      )
     }
     setRunningWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
     setPendingChangesWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
@@ -235,7 +241,10 @@ export const App: React.FC = () => {
   const handleRestartWorkspace = (id: string): void => {
     const ws = appState.workspaces.find((w) => w.id === id)
     if (ws) {
-      // Explicit restart applies the latest saved workspace configuration
+      // Explicit restart applies the latest saved workspace configuration and restarts terminals
+      ws.panels.forEach((p) => {
+        terminalPool.getTerminal(p.id)?.restart()
+      })
       setActiveSessionPanels((prev) => ({
         ...prev,
         [id]: ws.panels
@@ -359,6 +368,7 @@ export const App: React.FC = () => {
   }
 
   const handleResetDefaults = async (): Promise<void> => {
+    terminalPool.destroyAll()
     await window.neoAPI.killAllTerminals()
     setRunningWorkspaceIds([])
     setActiveSessionPanels({})
