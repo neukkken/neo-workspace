@@ -174,6 +174,10 @@ app.whenReady().then(() => {
     return mainWindow?.isMaximized() ?? false
   })
 
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion()
+  })
+
   ipcMain.on('window:close', () => {
     mainWindow?.close()
   })

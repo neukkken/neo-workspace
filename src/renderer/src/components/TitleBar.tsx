@@ -16,9 +16,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onOpenShortcuts
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
+  const [appVersion, setAppVersion] = useState('1.5.0')
 
   useEffect(() => {
     window.neoAPI.isWindowMaximized().then(setIsMaximized)
+    if (window.neoAPI.getAppVersion) {
+      window.neoAPI.getAppVersion().then((ver) => {
+        if (ver) setAppVersion(ver)
+      }).catch(() => {})
+    }
   }, [])
 
   const handleMinimize = (): void => {
@@ -47,7 +53,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span className="text-zinc-500">::</span>
           <span className="text-emerald-400">CORE_ORCHESTRATOR</span>
           <span className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded font-mono ml-1">
-            v1.4.0
+            v{appVersion}
           </span>
         </div>
       </div>

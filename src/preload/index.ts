@@ -159,7 +159,8 @@ const neoAPI = {
   minimizeWindow: (): void => ipcRenderer.send('window:minimize'),
   maximizeWindow: (): void => ipcRenderer.send('window:maximize'),
   closeWindow: (): void => ipcRenderer.send('window:close'),
-  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized')
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
 }
 
 if (process.contextIsolated) {

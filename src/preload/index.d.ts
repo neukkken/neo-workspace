@@ -39,6 +39,7 @@ declare global {
       maximizeWindow: () => void
       closeWindow: () => void
       isWindowMaximized: () => Promise<boolean>
+      getAppVersion: () => Promise<string>
     }
   }
 }

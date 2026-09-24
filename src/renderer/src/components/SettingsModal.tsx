@@ -40,6 +40,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDownloadUpdate,
   onQuitAndInstallUpdate
 }) => {
+  const [appVersion, setAppVersion] = React.useState('1.5.0')
+
+  React.useEffect(() => {
+    if (window.neoAPI.getAppVersion) {
+      window.neoAPI.getAppVersion().then((ver) => {
+        if (ver) setAppVersion(ver)
+      }).catch(() => {})
+    }
+  }, [])
+
   if (!isOpen) return null
 
   const positions: {
@@ -153,7 +163,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <span>ACTUALIZACIONES DEL SISTEMA</span>
               </div>
               <span className="text-[10px] text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                v1.4.0
+                v{appVersion}
               </span>
             </div>
 
@@ -187,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-emerald-400">
                     <CheckCircle2 size={14} />
-                    <span>Tienes la versión más reciente (v1.4.0)</span>
+                    <span>Tienes la versión más reciente (v{appVersion})</span>
                   </div>
                   <button
                     onClick={onCheckForUpdates}
