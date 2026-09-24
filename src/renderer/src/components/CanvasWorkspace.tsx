@@ -8,11 +8,14 @@ import {
   ZoomOut,
   RotateCcw,
   Move,
-  Layers
+  Layers,
+  FileText,
+  Sparkles
 } from 'lucide-react'
 import { CanvasCard, ProcessMetrics, Workspace } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
+import { NoteCard } from './NoteCard'
 import { terminalPool } from '../services/terminal-pool'
 
 interface CanvasWorkspaceProps {
@@ -140,6 +143,46 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     }
     updateCardsAndNotify((prev) => [...prev, newCard])
     setFocusedCardId(newId)
+  }
+
+  // Add new Note / Scratchpad card
+  const handleAddNote = (): void => {
+    const newId = `canvas-note-${Date.now()}`
+    const newCard: CanvasCard = {
+      id: newId,
+      kind: 'note',
+      title: 'NOTAS / TAREAS',
+      noteColor: 'emerald',
+      noteContent: '### Sprint Notes & TODOs\n- [x] Configure backend endpoints\n- [ ] Verify test tokens\n- [ ] Check migration script',
+      x: Math.round(-pan.x / zoom + 160),
+      y: Math.round(-pan.y / zoom + 120),
+      width: 380,
+      height: 320,
+      zIndex: cards.length + 1
+    }
+    updateCardsAndNotify((prev) => [...prev, newCard])
+    setFocusedCardId(newId)
+  }
+
+  // Auto-arrange all cards in clean grid layout
+  const handleAutoArrange = (): void => {
+    if (cards.length === 0) return
+    const cols = cards.length > 4 ? 3 : 2
+    const colWidth = 570
+    const rowHeight = 430
+    const startX = 60
+    const startY = 60
+
+    updateCardsAndNotify((prev) =>
+      prev.map((c, i) => ({
+        ...c,
+        x: startX + (i % cols) * colWidth,
+        y: startY + Math.floor(i / cols) * rowHeight,
+        zIndex: i + 1
+      }))
+    )
+    setPan({ x: 0, y: 0 })
+    setZoom(1)
   }
 
   const handleDeleteCard = (id: string): void => {
@@ -337,7 +380,23 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           <span>+ Browser</span>
         </button>
 
+        <button
+          onClick={handleAddNote}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-colors font-medium"
+        >
+          <FileText size={13} />
+          <span>+ Note</span>
+        </button>
+
         <div className="h-4 w-px bg-zinc-800 mx-1" />
+
+        <button
+          onClick={handleAutoArrange}
+          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors"
+          title="Auto-organizar cuadrícula limpia"
+        >
+          <Sparkles size={13} />
+        </button>
 
         <button
           onClick={() => handleZoomCenter(1.15)}
@@ -402,6 +461,21 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
               if (card.kind === 'browser') {
                 return (
                   <BrowserCard
+                    key={card.id}
+                    card={card}
+                    isFocused={isFocused}
+                    onFocus={() => bringToFront(card.id)}
+                    onUpdate={(updates) => handleUpdateCard(card.id, updates)}
+                    onDelete={handleDeleteCard}
+                    onDragStart={handleDragStart}
+                    onResizeStart={handleResizeStart}
+                  />
+                )
+              }
+
+              if (card.kind === 'note') {
+                return (
+                  <NoteCard
                     key={card.id}
                     card={card}
                     isFocused={isFocused}

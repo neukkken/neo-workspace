@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { Terminal, Move, Trash2, Maximize2, Minimize2, RotateCw, Eraser, Folder } from 'lucide-react'
+import { Terminal, Move, Trash2, Maximize2, Minimize2, RotateCw, Eraser, Folder, Search } from 'lucide-react'
 import { CanvasCard, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
 
@@ -88,6 +88,13 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
             </div>
           )}
 
+          <button
+            onClick={() => termRef.current?.toggleSearch()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            title="Buscar en buffer (Ctrl+F)"
+          >
+            <Search size={11} />
+          </button>
           <button
             onClick={handleRestart}
             className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"

@@ -17,7 +17,8 @@ import {
   SidebarPosition,
   PanelConfig,
   CanvasCard,
-  UpdateStatusPayload
+  UpdateStatusPayload,
+  TerminalThemeName
 } from './types'
 import { terminalPool } from './services/terminal-pool'
 
@@ -49,6 +50,12 @@ export const App: React.FC = () => {
       .getStore()
       .then((state) => {
         setAppState(state)
+        if (state.settings?.terminalTheme) {
+          terminalPool.setTheme(state.settings.terminalTheme as TerminalThemeName)
+        }
+        if (state.settings?.terminalFontSize) {
+          terminalPool.setFontSize(state.settings.terminalFontSize)
+        }
         const initialWs =
           (state.activeWorkspaceId &&
             state.workspaces.find((w) => w.id === state.activeWorkspaceId)) ||
@@ -525,6 +532,93 @@ export const App: React.FC = () => {
     </main>
   )
 
+  const handleDuplicateWorkspace = (ws: Workspace): void => {
+    if (!appState) return
+    const newId = `ws-${Date.now()}`
+    const cloned: Workspace = {
+      ...ws,
+      id: newId,
+      name: `${ws.name} (Copia)`,
+      code: `${(appState.workspaces.length + 1).toString().padStart(2, '0')}`,
+      panels: ws.panels.map((p, idx) => ({
+        ...p,
+        id: `panel-${Date.now()}-${idx + 1}`
+      })),
+      canvasCards: ws.canvasCards?.map((c, idx) => ({
+        ...c,
+        id: c.kind === 'terminal' ? `panel-${Date.now()}-${idx + 1}` : `${c.kind}-${Date.now()}-${idx + 1}`
+      }))
+    }
+    const nextWorkspaces = [...appState.workspaces, cloned]
+    const nextState = { ...appState, workspaces: nextWorkspaces }
+    setAppState(nextState)
+    saveStateToDisk(nextState)
+  }
+
+  const handleExportWorkspaces = async (): Promise<void> => {
+    if (!appState) return
+    const jsonStr = JSON.stringify(appState.workspaces, null, 2)
+    await window.neoAPI.writeClipboard(jsonStr)
+    alert('¡Configuración de workspaces copiada al portapapeles en formato JSON!')
+  }
+
+  const handleImportWorkspaces = async (): Promise<void> => {
+    if (!appState) return
+    const text = await window.neoAPI.readClipboard()
+    let raw = text
+    if (!raw || !raw.trim().startsWith('[')) {
+      const input = prompt('Pega aquí el contenido JSON de los workspaces:')
+      if (!input) return
+      raw = input
+    }
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (confirm(`¿Importar ${parsed.length} workspaces y añadirlos a tu lista actual?`)) {
+          const imported = parsed.map((w: Workspace, i: number) => ({
+            ...w,
+            id: `ws-${Date.now()}-${i + 1}`
+          }))
+          const nextWorkspaces = [...appState.workspaces, ...imported]
+          const nextState = { ...appState, workspaces: nextWorkspaces }
+          setAppState(nextState)
+          saveStateToDisk(nextState)
+          alert(`¡${imported.length} workspaces importados con éxito!`)
+        }
+      } else {
+        alert('El texto pegado no es una lista de workspaces válida.')
+      }
+    } catch (e) {
+      alert(`Error al analizar JSON: ${e}`)
+    }
+  }
+
+  const handleThemeChange = (theme: TerminalThemeName): void => {
+    if (!appState) return
+    terminalPool.setTheme(theme)
+    const nextSettings = {
+      ...appState.settings,
+      sidebarPosition: appState.settings?.sidebarPosition || 'left',
+      terminalTheme: theme
+    }
+    const nextState = { ...appState, settings: nextSettings }
+    setAppState(nextState)
+    saveStateToDisk(nextState)
+  }
+
+  const handleFontSizeChange = (size: number): void => {
+    if (!appState) return
+    terminalPool.setFontSize(size)
+    const nextSettings = {
+      ...appState.settings,
+      sidebarPosition: appState.settings?.sidebarPosition || 'left',
+      terminalFontSize: size
+    }
+    const nextState = { ...appState, settings: nextSettings }
+    setAppState(nextState)
+    saveStateToDisk(nextState)
+  }
+
   const launchpadComponent = (
     <Launchpad
       workspaces={appState.workspaces}
@@ -535,6 +629,7 @@ export const App: React.FC = () => {
       onSelectWorkspace={handleSelectWorkspace}
       onNewWorkspace={handleNewWorkspace}
       onEditWorkspace={handleEditWorkspace}
+      onDuplicateWorkspace={handleDuplicateWorkspace}
       onDeleteWorkspace={handleDeleteWorkspace}
       onStopWorkspace={handleStopWorkspace}
     />
@@ -606,8 +701,14 @@ export const App: React.FC = () => {
         isOpen={isSettingsModalOpen}
         sidebarPosition={sidebarPosition}
         updateStatus={updateStatus}
+        terminalTheme={appState.settings?.terminalTheme || 'matrix'}
+        terminalFontSize={appState.settings?.terminalFontSize || 12.5}
         onClose={() => setIsSettingsModalOpen(false)}
         onPositionChange={handleUpdateSidebarPosition}
+        onThemeChange={handleThemeChange}
+        onFontSizeChange={handleFontSizeChange}
+        onExportWorkspaces={handleExportWorkspaces}
+        onImportWorkspaces={handleImportWorkspaces}
         onResetDefaults={handleResetDefaults}
         onCheckForUpdates={handleCheckForUpdates}
         onDownloadUpdate={handleDownloadUpdate}

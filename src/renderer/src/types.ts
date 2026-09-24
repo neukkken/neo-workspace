@@ -6,7 +6,9 @@ export interface PanelConfig {
   autoStart: boolean
 }
 
-export type NodeKind = 'terminal' | 'browser'
+export type NodeKind = 'terminal' | 'browser' | 'note'
+
+export type NoteColor = 'emerald' | 'amber' | 'cyan' | 'purple' | 'zinc'
 
 export interface CanvasCard {
   id: string
@@ -23,6 +25,9 @@ export interface CanvasCard {
   autoStart?: boolean
   // For browser kind:
   url?: string
+  // For note kind:
+  noteContent?: string
+  noteColor?: NoteColor
 }
 
 export type WorkspaceLayoutMode = 'grid' | 'canvas'
@@ -38,8 +43,13 @@ export interface Workspace {
 
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 
+export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
+
 export interface AppSettings {
   sidebarPosition: SidebarPosition
+  terminalTheme?: TerminalThemeName
+  terminalFontSize?: number
+  defaultShell?: string
 }
 
 export interface AppState {

@@ -6,12 +6,22 @@ import React, {
   useState,
   useCallback
 } from 'react'
-import { Copy, Clipboard, CheckSquare, Eraser } from 'lucide-react'
+import {
+  Copy,
+  Clipboard,
+  CheckSquare,
+  Eraser,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  X
+} from 'lucide-react'
 import { terminalPool, ManagedTerminal } from '../services/terminal-pool'
 
 export interface XTermViewHandle {
   clear: () => void
   restart: () => void
+  toggleSearch: () => void
 }
 
 interface XTermViewProps {
@@ -34,14 +44,93 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
     const managedRef = useRef<ManagedTerminal | null>(null)
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
+    // Search bar state
+    const [isSearching, setIsSearching] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [matchStatus, setMatchStatus] = useState<boolean | null>(null)
+    const searchInputRef = useRef<HTMLInputElement>(null)
+
+    const handleOpenSearch = useCallback(() => {
+      setIsSearching(true)
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      }, 50)
+    }, [])
+
+    const handleCloseSearch = useCallback(() => {
+      setIsSearching(false)
+      setSearchQuery('')
+      setMatchStatus(null)
+      managedRef.current?.clearSearch()
+      managedRef.current?.term.focus()
+    }, [])
+
+    const handleSearchChange = (query: string): void => {
+      setSearchQuery(query)
+      if (!query.trim()) {
+        managedRef.current?.clearSearch()
+        setMatchStatus(null)
+        return
+      }
+      const found = managedRef.current?.findNext(query) ?? false
+      setMatchStatus(found)
+    }
+
+    const handleSearchNext = (): void => {
+      if (!searchQuery.trim()) return
+      const found = managedRef.current?.findNext(searchQuery) ?? false
+      setMatchStatus(found)
+    }
+
+    const handleSearchPrev = (): void => {
+      if (!searchQuery.trim()) return
+      const found = managedRef.current?.findPrevious(searchQuery) ?? false
+      setMatchStatus(found)
+    }
+
     useImperativeHandle(ref, () => ({
       clear: () => {
         managedRef.current?.clear()
       },
       restart: () => {
         managedRef.current?.restart()
+      },
+      toggleSearch: () => {
+        if (isSearching) {
+          handleCloseSearch()
+        } else {
+          handleOpenSearch()
+        }
       }
     }))
+
+    // Global shortcut Ctrl+F inside this terminal to open search
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent): void => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+          const activeEl = document.activeElement
+          if (
+            slotRef.current &&
+            (slotRef.current.contains(activeEl) || activeEl === searchInputRef.current)
+          ) {
+            e.preventDefault()
+            e.stopPropagation()
+            if (isSearching) {
+              searchInputRef.current?.focus()
+              searchInputRef.current?.select()
+            } else {
+              handleOpenSearch()
+            }
+          }
+        }
+      }
+
+      window.addEventListener('keydown', handleKeyDown, true)
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown, true)
+      }
+    }, [isSearching, handleOpenSearch])
 
     // Close context menu on outside click or escape
     const closeContextMenu = useCallback(() => {
@@ -148,8 +237,6 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       return () => {
         clearTimeout(timer)
         resizeObserver.disconnect()
-        // Detach element from this slot when unmounting or switching view
-        // Crucial: we do NOT destroy or kill the terminal here!
         if (managed.container.parentNode === slot) {
           slot.removeChild(managed.container)
         }
@@ -176,13 +263,76 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
         className="w-full h-full overflow-hidden bg-[#090a0d] relative select-text cursor-text"
         style={{ padding: '2px 4px' }}
       >
+        {/* In-Terminal Floating Search Bar */}
+        {isSearching && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-2 right-4 z-30 flex items-center space-x-1.5 bg-[#14171d]/95 backdrop-blur-md border border-zinc-700/90 px-2 py-1 rounded shadow-2xl animate-in fade-in zoom-in-95 duration-100 text-xs font-mono"
+          >
+            <Search size={12} className="text-zinc-400 shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (e.shiftKey) {
+                    handleSearchPrev()
+                  } else {
+                    handleSearchNext()
+                  }
+                } else if (e.key === 'Escape') {
+                  handleCloseSearch()
+                }
+              }}
+              placeholder="Buscar en buffer..."
+              className="w-36 sm:w-44 bg-transparent text-zinc-100 text-xs focus:outline-none placeholder-zinc-500 font-sans"
+            />
+
+            {searchQuery && (
+              <span
+                className={`text-[10px] px-1 rounded ${
+                  matchStatus === false
+                    ? 'text-rose-400 bg-rose-500/10'
+                    : 'text-emerald-400 bg-emerald-500/10'
+                }`}
+              >
+                {matchStatus === false ? '0' : '✓'}
+              </span>
+            )}
+
+            <button
+              onClick={handleSearchPrev}
+              title="Anterior (Shift+Enter)"
+              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
+            >
+              <ChevronUp size={13} />
+            </button>
+            <button
+              onClick={handleSearchNext}
+              title="Siguiente (Enter)"
+              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
+            >
+              <ChevronDown size={13} />
+            </button>
+            <button
+              onClick={handleCloseSearch}
+              title="Cerrar (Esc)"
+              className="p-0.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded transition-colors"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
         {/* Floating Context Menu */}
         {contextMenu && (
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
-              top: `${Math.min(contextMenu.y, window.innerHeight - 180)}px`,
+              top: `${Math.min(contextMenu.y, window.innerHeight - 200)}px`,
               left: `${Math.min(contextMenu.x, window.innerWidth - 220)}px`,
               zIndex: 9999
             }}
@@ -213,6 +363,20 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                 <span>Pegar</span>
               </div>
               <span className="text-[10px] text-zinc-500">Ctrl+Shift+V</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeContextMenu()
+                handleOpenSearch()
+              }}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer transition-colors"
+            >
+              <div className="flex items-center space-x-2">
+                <Search size={13} className="text-zinc-400" />
+                <span>Buscar</span>
+              </div>
+              <span className="text-[10px] text-zinc-500">Ctrl+F</span>
             </button>
 
             <div className="h-px bg-zinc-800 my-1" />

@@ -8,37 +8,53 @@ import {
   PanelRight,
   PanelTop,
   PanelBottom,
-  LayoutGrid,
   DownloadCloud,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Sparkles
+  Sparkles,
+  Terminal,
+  Type,
+  FileDown,
+  FileUp,
+  Palette
 } from 'lucide-react'
-import { SidebarPosition, UpdateStatusPayload } from '../types'
+import { SidebarPosition, UpdateStatusPayload, TerminalThemeName } from '../types'
 
 interface SettingsModalProps {
   isOpen: boolean
   sidebarPosition: SidebarPosition
   updateStatus: UpdateStatusPayload | null
+  terminalTheme?: TerminalThemeName
+  terminalFontSize?: number
   onClose: () => void
   onPositionChange: (pos: SidebarPosition) => void
+  onThemeChange?: (theme: TerminalThemeName) => void
+  onFontSizeChange?: (size: number) => void
   onResetDefaults: () => void
   onCheckForUpdates: () => void
   onDownloadUpdate: () => void
   onQuitAndInstallUpdate: () => void
+  onExportWorkspaces?: () => void
+  onImportWorkspaces?: () => void
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   sidebarPosition,
   updateStatus,
+  terminalTheme = 'matrix',
+  terminalFontSize = 12.5,
   onClose,
   onPositionChange,
+  onThemeChange,
+  onFontSizeChange,
   onResetDefaults,
   onCheckForUpdates,
   onDownloadUpdate,
-  onQuitAndInstallUpdate
+  onQuitAndInstallUpdate,
+  onExportWorkspaces,
+  onImportWorkspaces
 }) => {
   const [appVersion, setAppVersion] = React.useState('1.5.0')
 
@@ -72,26 +88,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'top',
-      label: 'Arriba',
-      desc: 'Barra superior (100% ancho para terminales)',
+      label: 'Superior',
+      desc: 'Barra horizontal superior',
       icon: PanelTop
     },
     {
       id: 'bottom',
-      label: 'Abajo',
-      desc: 'Barra inferior estilo dock (100% ancho)',
+      label: 'Inferior',
+      desc: 'Barra horizontal inferior',
       icon: PanelBottom
     }
   ]
 
+  const themes: { id: TerminalThemeName; label: string; bg: string; accent: string }[] = [
+    { id: 'matrix', label: 'Cyber Matrix', bg: '#090a0d', accent: '#10b981' },
+    { id: 'dracula', label: 'Dracula Dark', bg: '#1e1f29', accent: '#ff79c6' },
+    { id: 'tokyo', label: 'Tokyo Night', bg: '#16161e', accent: '#7aa2f7' },
+    { id: 'monokai', label: 'Monokai Pro', bg: '#222328', accent: '#ffd866' },
+    { id: 'nord', label: 'Nordic Frost', bg: '#242933', accent: '#88c0d0' }
+  ]
+
+  const fontSizes = [11, 12.5, 14, 16]
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none">
-      <div className="bg-[#0f1115] border border-zinc-700/80 rounded-lg w-full max-w-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
+      <div className="bg-[#0f1115] border border-zinc-700/80 rounded-lg w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 font-mono text-xs">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#14171d] border-b border-zinc-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2 text-sm font-mono font-semibold text-zinc-100">
+        <div className="px-5 py-3.5 bg-[#14171d] border-b border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-sm font-semibold text-zinc-100">
             <Sliders size={15} className="text-emerald-400" />
-            <span>ORCHESTRATOR SETTINGS</span>
+            <span>CONFIGURACIÓN DEL SISTEMA</span>
           </div>
           <button
             onClick={onClose}
@@ -101,20 +127,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Content (Scrollable) */}
-        <div className="p-5 space-y-5 font-mono text-xs overflow-y-auto flex-1">
-          {/* Position Selector */}
-          <div className="space-y-2.5">
-            <div className="flex items-center space-x-2 text-zinc-200 font-semibold">
-              <LayoutGrid size={13} className="text-emerald-400" />
-              <span>POSICIÓN DEL LAUNCHPAD (WORKSPACES)</span>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Sidebar Position Section */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="font-semibold text-zinc-200 text-xs tracking-wider">
+                POSICIÓN DEL LAUNCHPAD
+              </h3>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Selecciona la orientación de la barra de workspaces en la interfaz.
+              </p>
             </div>
-            <p className="text-[11px] text-zinc-400">
-              Elige dónde ubicar el panel de workspaces. Colocarlo arriba o abajo libera el 100%
-              del ancho de la pantalla para las terminales.
-            </p>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <div className="grid grid-cols-2 gap-2.5">
               {positions.map((pos) => {
                 const IconComponent = pos.icon
                 const isSelected = sidebarPosition === pos.id
@@ -152,6 +178,93 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 )
               })}
+            </div>
+          </div>
+
+          {/* Terminal Appearance Section */}
+          <div className="bg-[#0b0d10] border border-zinc-800 rounded-md p-3.5 space-y-3">
+            <div className="flex items-center space-x-2 text-zinc-200 font-semibold">
+              <Palette size={13} className="text-emerald-400" />
+              <span>PERSONALIZACIÓN DE TERMINAL</span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] text-zinc-400">TEMA DE COLOR DE CONSOLA</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {themes.map((th) => {
+                  const isCurrent = terminalTheme === th.id
+                  return (
+                    <button
+                      key={th.id}
+                      onClick={() => onThemeChange?.(th.id)}
+                      className={`flex items-center space-x-2 p-2 rounded border text-left transition-all ${
+                        isCurrent
+                          ? 'border-emerald-500 bg-zinc-900 text-zinc-100 ring-1 ring-emerald-500/30'
+                          : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full border border-zinc-700 shrink-0"
+                        style={{ backgroundColor: th.accent }}
+                      />
+                      <span className="truncate text-[11px]">{th.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 text-zinc-400 text-[11px]">
+                <Type size={12} className="text-zinc-500" />
+                <span>Tamaño de fuente:</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                {fontSizes.map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => onFontSizeChange?.(size)}
+                    className={`px-2 py-1 rounded text-[10px] transition-colors ${
+                      terminalFontSize === size
+                        ? 'bg-emerald-500 text-zinc-950 font-bold'
+                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {size}px
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Backup & Portability Section */}
+          <div className="bg-[#0b0d10] border border-zinc-800 rounded-md p-3.5 space-y-3">
+            <div className="flex items-center space-x-2 text-zinc-200 font-semibold">
+              <FileDown size={13} className="text-cyan-400" />
+              <span>RESPALDO Y PORTABILIDAD</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Exporta tu configuración de workspaces en formato JSON para respaldar o compartir con tu equipo, o importa una configuración existente.
+            </p>
+            <div className="flex items-center space-x-2 pt-1">
+              {onExportWorkspaces && (
+                <button
+                  onClick={onExportWorkspaces}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                >
+                  <FileDown size={12} />
+                  <span>Exportar Workspaces</span>
+                </button>
+              )}
+              {onImportWorkspaces && (
+                <button
+                  onClick={onImportWorkspaces}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                >
+                  <FileUp size={12} />
+                  <span>Importar Workspaces</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -273,10 +386,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex justify-end pt-1">
                     <button
                       onClick={onQuitAndInstallUpdate}
-                      className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs transition-colors shadow-lg shadow-emerald-500/30"
+                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs transition-colors shadow-md shadow-emerald-500/20"
                     >
-                      <RotateCcw size={13} />
-                      <span>Reiniciar y Actualizar Ahora</span>
+                      <Sparkles size={13} />
+                      <span>Reiniciar y Actualizar</span>
                     </button>
                   </div>
                 </div>
@@ -284,17 +397,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {updateStatus?.state === 'error' && (
                 <div className="space-y-2">
-                  <div className="flex items-center space-x-2 text-amber-400">
+                  <div className="flex items-center space-x-2 text-rose-400">
                     <AlertCircle size={14} />
-                    <span className="font-semibold">Información del actualizador</span>
+                    <span>Error al verificar o descargar actualizaciones.</span>
                   </div>
-                  <p className="text-[10px] text-zinc-400 leading-snug">
-                    {updateStatus.error || 'No se pudo conectar al servicio de actualizaciones.'}
-                  </p>
+                  {updateStatus.error && (
+                    <p className="text-[10px] text-zinc-500 bg-zinc-950 p-2 rounded border border-zinc-800">
+                      {updateStatus.error}
+                    </p>
+                  )}
                   <div className="flex justify-end pt-1">
                     <button
                       onClick={onCheckForUpdates}
-                      className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                      className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors"
                     >
                       Reintentar
                     </button>

@@ -62,6 +62,11 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
       category: 'Terminal & Consola'
     },
     {
+      keys: ['Ctrl', 'F'],
+      description: 'Buscar en el buffer de la terminal activa',
+      category: 'Terminal & Consola'
+    },
+    {
       keys: ['?'],
       description: 'Abrir esta guía de atajos de teclado',
       category: 'Navegación & Workspaces'

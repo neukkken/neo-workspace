@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Edit2, Trash2, Layers, FolderKanban, Square } from 'lucide-react'
+import { Plus, Edit2, Trash2, Layers, FolderKanban, Square, Copy } from 'lucide-react'
 import { Workspace, SidebarPosition } from '../types'
 
 interface LaunchpadProps {
@@ -11,6 +11,7 @@ interface LaunchpadProps {
   onSelectWorkspace: (id: string) => void
   onNewWorkspace: () => void
   onEditWorkspace: (workspace: Workspace) => void
+  onDuplicateWorkspace?: (workspace: Workspace) => void
   onDeleteWorkspace: (id: string) => void
   onStopWorkspace?: (id: string) => void
 }
@@ -24,6 +25,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
   onSelectWorkspace,
   onNewWorkspace,
   onEditWorkspace,
+  onDuplicateWorkspace,
   onDeleteWorkspace,
   onStopWorkspace
 }) => {
@@ -131,6 +133,18 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                       title="Detener procesos"
                     >
                       <Square size={9} fill="currentColor" />
+                    </button>
+                  )}
+                  {onDuplicateWorkspace && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDuplicateWorkspace(ws)
+                      }}
+                      className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors"
+                      title="Duplicar Workspace"
+                    >
+                      <Copy size={9} />
                     </button>
                   )}
                   <button
@@ -307,6 +321,18 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                         title="Detener procesos"
                       >
                         <Square size={10} fill="currentColor" />
+                      </button>
+                    )}
+                    {onDuplicateWorkspace && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onDuplicateWorkspace(ws)
+                        }}
+                        className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors"
+                        title="Duplicar Workspace"
+                      >
+                        <Copy size={11} />
                       </button>
                     )}
                     <button

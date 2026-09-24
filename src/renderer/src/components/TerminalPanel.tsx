@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { RotateCw, Eraser, Maximize2, Minimize2, Copy, Check, Folder } from 'lucide-react'
+import { RotateCw, Eraser, Maximize2, Minimize2, Copy, Check, Folder, Search } from 'lucide-react'
 import { PanelConfig, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
 
@@ -77,6 +77,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
           {/* Action buttons */}
           <div className="flex items-center space-x-1 border-l border-zinc-800 pl-1.5">
+            <button
+              onClick={() => termRef.current?.toggleSearch()}
+              className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
+              title="Buscar en buffer (Ctrl+F)"
+            >
+              <Search size={12} />
+            </button>
             <button
               onClick={handleRestart}
               className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"

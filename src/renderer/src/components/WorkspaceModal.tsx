@@ -1,6 +1,56 @@
 import React, { useState } from 'react'
-import { X, Plus, Trash2, FolderOpen, Terminal, Check } from 'lucide-react'
+import { X, Plus, Trash2, FolderOpen, Terminal, Check, Sparkles } from 'lucide-react'
 import { Workspace, PanelConfig } from '../types'
+
+interface PresetTemplate {
+  name: string
+  description: string
+  defaultName: string
+  panels: Array<{ title: string; command: string; autoStart: boolean }>
+}
+
+const PRESET_TEMPLATES: Record<string, PresetTemplate> = {
+  fullstack: {
+    name: 'Full-Stack Web',
+    defaultName: 'FullStack App',
+    description: 'Frontend Vite + Backend Node + Docker',
+    panels: [
+      { title: 'FRONTEND-DEV', command: 'npm run dev', autoStart: true },
+      { title: 'BACKEND-API', command: 'npm run start:dev', autoStart: true },
+      { title: 'DB-DOCKER', command: 'docker compose up', autoStart: false }
+    ]
+  },
+  python_ai: {
+    name: 'Python & AI',
+    defaultName: 'AI Service',
+    description: 'FastAPI Server + Worker + Scripts',
+    panels: [
+      { title: 'API-SERVER', command: 'uvicorn main:app --reload', autoStart: true },
+      { title: 'WORKER-TASK', command: 'celery -A tasks worker --loglevel=info', autoStart: false },
+      { title: 'SCRIPTS-CLI', command: '', autoStart: false }
+    ]
+  },
+  microservices: {
+    name: 'Microservicios',
+    defaultName: 'Microservices Cluster',
+    description: 'Gateway + Auth + Core + Docker',
+    panels: [
+      { title: 'API-GATEWAY', command: 'npm run dev', autoStart: true },
+      { title: 'AUTH-SERVICE', command: 'npm run dev', autoStart: true },
+      { title: 'CORE-SERVICE', command: 'npm run dev', autoStart: true },
+      { title: 'DOCKER-INFRA', command: 'docker ps', autoStart: false }
+    ]
+  },
+  mobile: {
+    name: 'Mobile App',
+    defaultName: 'Mobile Project',
+    description: 'React Native / Metro + API',
+    panels: [
+      { title: 'METRO-BUNDLER', command: 'npx expo start', autoStart: true },
+      { title: 'BACKEND-API', command: 'npm run dev', autoStart: true }
+    ]
+  }
+}
 
 interface WorkspaceModalProps {
   workspace: Workspace | null
@@ -34,6 +84,20 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       }
     ]
   )
+
+  const handleApplyPreset = (preset: PresetTemplate): void => {
+    if (!name.trim()) {
+      setName(preset.defaultName)
+    }
+    const generatedPanels: PanelConfig[] = preset.panels.map((p, idx) => ({
+      id: `panel-${Date.now()}-${idx + 1}`,
+      title: p.title,
+      cwd: panels[0]?.cwd || '',
+      command: p.command,
+      autoStart: p.autoStart
+    }))
+    setPanels(generatedPanels)
+  }
 
   const handleAddPanel = (): void => {
     const newId = `panel-${Date.now()}-${panels.length + 1}`
@@ -112,6 +176,33 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               <div className="leading-relaxed">
                 <span className="font-semibold text-amber-300">Workspace en ejecución:</span>{' '}
                 Los cambios se guardarán sin reiniciar ni cerrar tus terminales activas para no interrumpir tu trabajo. Se aplicarán la próxima vez que reinicies el workspace.
+              </div>
+            </div>
+          )}
+
+          {/* Template Presets Picker (New Workspaces Only) */}
+          {!isEditing && (
+            <div className="space-y-1.5 p-3 rounded-lg bg-[#0a0c0f] border border-zinc-800/90">
+              <label className="text-[11px] font-mono text-zinc-400 flex items-center space-x-1.5 font-medium">
+                <Sparkles size={12} className="text-amber-400" />
+                <span>PLANTILLAS PREDEFINIDAS (OPCIONAL)</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                {Object.entries(PRESET_TEMPLATES).map(([key, tpl]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleApplyPreset(tpl)}
+                    className="text-left p-2 rounded bg-zinc-900/80 border border-zinc-800/80 hover:border-emerald-500/60 hover:bg-zinc-800/90 transition-all text-xs group cursor-pointer"
+                  >
+                    <div className="font-semibold text-zinc-200 group-hover:text-emerald-400 font-mono text-[11px] truncate">
+                      {tpl.name}
+                    </div>
+                    <div className="text-[10px] text-zinc-500 truncate mt-0.5">
+                      {tpl.description}
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}

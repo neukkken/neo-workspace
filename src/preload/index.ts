@@ -27,6 +27,9 @@ export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 
 export interface AppSettings {
   sidebarPosition: SidebarPosition
+  terminalTheme?: string
+  terminalFontSize?: number
+  defaultShell?: string
 }
 
 export interface AppState {
