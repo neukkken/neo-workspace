@@ -9,7 +9,16 @@ import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
-import { Workspace, AppState, TelemetryPayload, SidebarPosition, PanelConfig, CanvasCard } from './types'
+import { UpdateNotificationToast } from './components/UpdateNotificationToast'
+import {
+  Workspace,
+  AppState,
+  TelemetryPayload,
+  SidebarPosition,
+  PanelConfig,
+  CanvasCard,
+  UpdateStatusPayload
+} from './types'
 import { terminalPool } from './services/terminal-pool'
 
 export const App: React.FC = () => {
@@ -26,6 +35,7 @@ export const App: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
 
   const appStateRef = useRef<AppState | null>(null)
   appStateRef.current = appState
@@ -61,6 +71,16 @@ export const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = window.neoAPI.onTelemetry((data) => {
       setTelemetry(data)
+    })
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
+  // 3. Listen to auto-updater status updates
+  useEffect(() => {
+    const unsubscribe = window.neoAPI.onUpdaterStatus((status) => {
+      setUpdateStatus(status)
     })
     return () => {
       unsubscribe()
@@ -520,6 +540,18 @@ export const App: React.FC = () => {
     />
   )
 
+  const handleCheckForUpdates = (): void => {
+    window.neoAPI.checkForUpdates()
+  }
+
+  const handleDownloadUpdate = (): void => {
+    window.neoAPI.downloadUpdate()
+  }
+
+  const handleQuitAndInstallUpdate = (): void => {
+    window.neoAPI.quitAndInstallUpdate()
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#090a0d] text-zinc-200">
       {/* Top Frameless TitleBar */}
@@ -555,6 +587,7 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
         activePanelsCount={totalRunningPanelsCount}
+        updateAvailable={updateStatus?.state === 'available' || updateStatus?.state === 'downloaded'}
       />
 
       {/* Modals */}
@@ -572,14 +605,26 @@ export const App: React.FC = () => {
       <SettingsModal
         isOpen={isSettingsModalOpen}
         sidebarPosition={sidebarPosition}
+        updateStatus={updateStatus}
         onClose={() => setIsSettingsModalOpen(false)}
         onPositionChange={handleUpdateSidebarPosition}
         onResetDefaults={handleResetDefaults}
+        onCheckForUpdates={handleCheckForUpdates}
+        onDownloadUpdate={handleDownloadUpdate}
+        onQuitAndInstallUpdate={handleQuitAndInstallUpdate}
       />
 
       <ShortcutsModal
         isOpen={isShortcutsModalOpen}
         onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      {/* Floating Update Notification Toast */}
+      <UpdateNotificationToast
+        status={updateStatus}
+        onDownload={handleDownloadUpdate}
+        onRestart={handleQuitAndInstallUpdate}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
     </div>
   )

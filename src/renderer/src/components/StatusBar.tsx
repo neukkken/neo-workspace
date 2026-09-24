@@ -6,13 +6,15 @@ interface StatusBarProps {
   onOpenSettings: () => void
   onOpenShortcuts?: () => void
   activePanelsCount: number
+  updateAvailable?: boolean
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   onSave,
   onOpenSettings,
   onOpenShortcuts,
-  activePanelsCount
+  activePanelsCount,
+  updateAvailable
 }) => {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -73,10 +75,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         <button
           onClick={onOpenSettings}
-          className="flex items-center space-x-1 px-2.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 transition-colors"
-          title="Open Settings"
+          className={`flex items-center space-x-1 px-2.5 py-0.5 rounded border transition-colors ${
+            updateAvailable
+              ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/60 text-emerald-300'
+              : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300 hover:text-zinc-100'
+          }`}
+          title={updateAvailable ? 'Nueva versión disponible en Settings' : 'Open Settings'}
         >
-          <Settings size={11} className="text-zinc-400" />
+          {updateAvailable && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>}
+          <Settings size={11} className={updateAvailable ? 'text-emerald-400' : 'text-zinc-400'} />
           <span>SETTINGS</span>
         </button>
       </div>

@@ -5,6 +5,11 @@
     "output": "dist",
     "buildResources": "build"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "neukkken",
+    "repo": "neo-workspace"
+  },
   "files": [
     "out/**/*",
     "package.json",

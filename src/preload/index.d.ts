@@ -1,4 +1,15 @@
-import { AppSettings, AppState, PanelConfig, ProcessMetrics, SidebarPosition, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace } from './index'
+import {
+  AppSettings,
+  AppState,
+  PanelConfig,
+  ProcessMetrics,
+  SidebarPosition,
+  SpawnOptions,
+  SystemMetrics,
+  TelemetryPayload,
+  Workspace,
+  UpdateStatusPayload
+} from './index'
 
 declare global {
   interface Window {
@@ -19,6 +30,11 @@ declare global {
         callback: (exitInfo: { code: number; signal?: number }) => void
       ) => () => void
       onTelemetry: (callback: (data: TelemetryPayload) => void) => () => void
+      // Auto-Updater
+      checkForUpdates: () => Promise<UpdateStatusPayload>
+      downloadUpdate: () => Promise<boolean>
+      quitAndInstallUpdate: () => void
+      onUpdaterStatus: (callback: (status: UpdateStatusPayload) => void) => () => void
       minimizeWindow: () => void
       maximizeWindow: () => void
       closeWindow: () => void
@@ -27,4 +43,15 @@ declare global {
   }
 }
 
-export { AppSettings, AppState, PanelConfig, ProcessMetrics, SidebarPosition, SpawnOptions, SystemMetrics, TelemetryPayload, Workspace }
+export {
+  AppSettings,
+  AppState,
+  PanelConfig,
+  ProcessMetrics,
+  SidebarPosition,
+  SpawnOptions,
+  SystemMetrics,
+  TelemetryPayload,
+  Workspace,
+  UpdateStatusPayload
+}

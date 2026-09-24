@@ -3,11 +3,13 @@ import { join } from 'path'
 import { StoreManager, AppState } from './store'
 import { PtyManager, SpawnOptions } from './pty-manager'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
+import { AppUpdater } from './updater'
 
 let mainWindow: BrowserWindow | null = null
 const store = new StoreManager()
 const ptyManager = new PtyManager()
 let telemetryMonitor: TelemetryMonitor | null = null
+let appUpdater: AppUpdater | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -64,6 +66,12 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // Connect updater to main window and check in background
+  if (mainWindow) {
+    appUpdater?.setMainWindow(mainWindow)
+    appUpdater?.checkOnStartup()
+  }
+
   mainWindow.on('closed', () => {
     telemetryMonitor?.stop()
     ptyManager.killAll()
@@ -72,6 +80,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  appUpdater = new AppUpdater()
+
   // Store IPC
   ipcMain.handle('store:get', () => {
     return store.getState()

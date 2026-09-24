@@ -65,6 +65,8 @@ jobs:
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
+            dist/*.yml
+            dist/*.blockmap
           if-no-files-found: warn
 
   release:
@@ -85,8 +87,12 @@ jobs:
         with:
           files: |
             dist-release/windows-packages/*.exe
+            dist-release/windows-packages/*.yml
+            dist-release/windows-packages/*.blockmap
             dist-release/linux-packages/*.AppImage
             dist-release/linux-packages/*.deb
+            dist-release/linux-packages/*.yml
+            dist-release/linux-packages/*.blockmap
           draft: false
           prerelease: false
           generate_release_notes: true

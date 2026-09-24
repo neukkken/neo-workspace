@@ -51,6 +51,35 @@ export interface TelemetryPayload {
   panels: Record<string, ProcessMetrics>
 }
 
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface UpdateInfo {
+  version: string
+  releaseDate?: string
+  releaseNotes?: string
+}
+
+export interface UpdateProgress {
+  percent: number
+  transferredMb: number
+  totalMb: number
+  bytesPerSecond: number
+}
+
+export interface UpdateStatusPayload {
+  state: UpdateState
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  error?: string
+}
+
 const neoAPI = {
   getStore: (): Promise<AppState> => ipcRenderer.invoke('store:get'),
   saveStore: (state: AppState): Promise<boolean> => ipcRenderer.invoke('store:save', state),
@@ -111,6 +140,19 @@ const neoAPI = {
     ipcRenderer.on('telemetry:update', handler)
     return () => {
       ipcRenderer.removeListener('telemetry:update', handler)
+    }
+  },
+
+  // Auto Updater APIs
+  checkForUpdates: (): Promise<UpdateStatusPayload> => ipcRenderer.invoke('updater:check'),
+  downloadUpdate: (): Promise<boolean> => ipcRenderer.invoke('updater:download'),
+  quitAndInstallUpdate: (): void => ipcRenderer.send('updater:quit-and-install'),
+  onUpdaterStatus: (callback: (status: UpdateStatusPayload) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatusPayload): void =>
+      callback(status)
+    ipcRenderer.on('updater:status', handler)
+    return () => {
+      ipcRenderer.removeListener('updater:status', handler)
     }
   },
 

@@ -63,3 +63,32 @@ export interface TelemetryPayload {
   system: SystemMetrics
   panels: Record<string, ProcessMetrics>
 }
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface UpdateInfo {
+  version: string
+  releaseDate?: string
+  releaseNotes?: string
+}
+
+export interface UpdateProgress {
+  percent: number
+  transferredMb: number
+  totalMb: number
+  bytesPerSecond: number
+}
+
+export interface UpdateStatusPayload {
+  state: UpdateState
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  error?: string
+}
