@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react'
-import { Terminal, Move, Trash2, Maximize2, Minimize2, RotateCw, Eraser, Folder, Search } from 'lucide-react'
+import React, { useRef, useState, useEffect } from 'react'
+import { Terminal, Move, Trash2, Maximize2, Minimize2, RotateCw, Eraser, Folder, Search, Globe, Download } from 'lucide-react'
 import { CanvasCard, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
+import { terminalPool } from '../services/terminal-pool'
 
 interface TerminalCanvasCardProps {
   card: CanvasCard
@@ -12,6 +13,7 @@ interface TerminalCanvasCardProps {
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: (e: React.MouseEvent, id: string) => void
+  onOpenInBrowser?: (url: string) => void
 }
 
 export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
@@ -22,10 +24,21 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
   onUpdate,
   onDelete,
   onDragStart,
-  onResizeStart
+  onResizeStart,
+  onOpenInBrowser
 }) => {
   const termRef = useRef<XTermViewHandle>(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const managed = terminalPool.getTerminal(card.id)
+    if (managed) {
+      if (managed.lastDetectedUrl) setDetectedUrl(managed.lastDetectedUrl)
+      return managed.onUrlDetected((url) => setDetectedUrl(url))
+    }
+    return undefined
+  }, [card.id])
 
   const handleRestart = (): void => {
     termRef.current?.restart()
@@ -33,6 +46,23 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
 
   const handleClear = (): void => {
     termRef.current?.clear()
+  }
+
+  const handleExportLog = (): void => {
+    const text = terminalPool.exportLog(card.id)
+    if (!text) {
+      alert('La terminal no contiene registros para exportar.')
+      return
+    }
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${card.title || 'terminal'}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const cardStyle: React.CSSProperties = isExpanded
@@ -57,9 +87,15 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
 
   return (
     <div
-      style={cardStyle}
+      style={{ ...cardStyle, overscrollBehavior: 'contain' }}
       onClick={onFocus}
-      className={`flex flex-col bg-[#0c0e12] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
+      onWheel={(e) => {
+        e.stopPropagation()
+        if (!isFocused) {
+          e.preventDefault()
+        }
+      }}
+      className={`canvas-card pointer-events-auto flex flex-col bg-[#0c0e12] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
         isFocused
           ? 'border-emerald-500/80 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/40'
           : 'border-zinc-800/90 hover:border-zinc-700/80'
@@ -76,6 +112,23 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           <span className="font-mono text-[11px] font-semibold tracking-wide text-zinc-100 uppercase truncate">
             PANEL::{card.title || 'TERMINAL'}
           </span>
+
+          {detectedUrl && (
+            <button
+              onClick={() => {
+                if (onOpenInBrowser) {
+                  onOpenInBrowser(detectedUrl)
+                } else {
+                  window.open(detectedUrl, '_blank')
+                }
+              }}
+              className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono transition-colors cursor-pointer animate-in fade-in"
+              title={`Abrir ${detectedUrl}`}
+            >
+              <Globe size={10} className="text-cyan-400 shrink-0" />
+              <span className="truncate max-w-[120px]">{detectedUrl.replace('http://', '')}</span>
+            </button>
+          )}
         </div>
 
         {/* Right: Metrics & Controls */}
@@ -94,6 +147,13 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
             title="Buscar en buffer (Ctrl+F)"
           >
             <Search size={11} />
+          </button>
+          <button
+            onClick={handleExportLog}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            title="Exportar logs a archivo (.log)"
+          >
+            <Download size={11} />
           </button>
           <button
             onClick={handleRestart}
@@ -133,8 +193,9 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           panelId={card.id}
           cwd={card.cwd || ''}
           command={card.command || ''}
+          env={card.env}
           autoStart={card.autoStart ?? true}
-          isActive={true}
+          isActive={isFocused}
         />
       </div>
 

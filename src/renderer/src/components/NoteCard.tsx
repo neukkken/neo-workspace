@@ -98,10 +98,32 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     onUpdate({ title: finalTitle })
   }
 
+  const [isPreview, setIsPreview] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyContent = async (): Promise<void> => {
+    await window.neoAPI.writeClipboard(noteContent)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
     const val = e.target.value
     setNoteContent(val)
     onUpdate({ noteContent: val })
+  }
+
+  const handleToggleTask = (taskLineIdx: number): void => {
+    const lines = noteContent.split('\n')
+    const line = lines[taskLineIdx]
+    if (line.includes('- [ ] ')) {
+      lines[taskLineIdx] = line.replace('- [ ] ', '- [x] ')
+    } else if (line.includes('- [x] ') || line.includes('- [X] ')) {
+      lines[taskLineIdx] = line.replace(/- \[[xX]\] /, '- [ ] ')
+    }
+    const updated = lines.join('\n')
+    setNoteContent(updated)
+    onUpdate({ noteContent: updated })
   }
 
   const handleAddCheckbox = (): void => {
@@ -139,9 +161,15 @@ export const NoteCard: React.FC<NoteCardProps> = ({
 
   return (
     <div
-      style={cardStyle}
+      style={{ ...cardStyle, overscrollBehavior: 'contain' }}
       onClick={onFocus}
-      className={`flex flex-col bg-[#0d0f13] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
+      onWheel={(e) => {
+        e.stopPropagation()
+        if (!isFocused) {
+          e.preventDefault()
+        }
+      }}
+      className={`canvas-card pointer-events-auto flex flex-col bg-[#0d0f13] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
         isFocused ? `${styleConfig.border} ${styleConfig.glow}` : 'border-zinc-800 hover:border-zinc-700'
       }`}
     >
@@ -184,6 +212,24 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         {/* Right: Controls */}
         <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()}>
           <button
+            onClick={() => setIsPreview((p) => !p)}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+              isPreview ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'
+            }`}
+            title={isPreview ? 'Modo Edición' : 'Vista Previa Renderizada'}
+          >
+            {isPreview ? 'Editar' : 'Vista'}
+          </button>
+
+          <button
+            onClick={handleCopyContent}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            title="Copiar texto de la nota"
+          >
+            <span className="text-[10px]">{copied ? '✓' : '⧉'}</span>
+          </button>
+
+          <button
             onClick={handleCycleColor}
             className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
             title={`Cambiar color (${styleConfig.tag})`}
@@ -217,15 +263,61 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         </div>
       </div>
 
-      {/* Note Body: Editable Textarea */}
-      <div className="flex-1 w-full p-2.5 bg-[#090a0d] flex flex-col min-h-0 select-text">
-        <textarea
-          value={noteContent}
-          onChange={handleContentChange}
-          placeholder="Escribe notas, tareas (- [ ]), comandos o recordatorios aquí..."
-          className="w-full h-full bg-transparent text-zinc-200 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-zinc-600 no-scrollbar"
-          spellCheck={false}
-        />
+      {/* Note Body */}
+      <div
+        style={{ overscrollBehavior: 'contain' }}
+        className={`flex-1 w-full p-2.5 bg-[#090a0d] flex flex-col min-h-0 select-text ${
+          isFocused ? 'overflow-auto' : 'overflow-hidden pointer-events-none'
+        }`}
+      >
+        {isPreview ? (
+          <div className="space-y-1 text-xs font-mono text-zinc-300 leading-relaxed">
+            {noteContent.split('\n').map((line, idx) => {
+              if (line.startsWith('### ')) {
+                return <h3 key={idx} className="font-bold text-zinc-100 text-sm mt-2 mb-1">{line.replace('### ', '')}</h3>
+              }
+              if (line.startsWith('## ')) {
+                return <h2 key={idx} className="font-bold text-emerald-400 text-sm mt-2 mb-1">{line.replace('## ', '')}</h2>
+              }
+              if (line.startsWith('# ')) {
+                return <h1 key={idx} className="font-bold text-white text-base mt-2 mb-1">{line.replace('# ', '')}</h1>
+              }
+              if (line.includes('- [ ] ') || line.includes('- [x] ') || line.includes('- [X] ')) {
+                const checked = line.includes('- [x] ') || line.includes('- [X] ')
+                const text = line.replace(/- \[[ xX]\] /, '')
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => handleToggleTask(idx)}
+                    className="flex items-center space-x-2 cursor-pointer hover:bg-zinc-900/60 py-0.5 px-1 rounded transition-colors group"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleToggleTask(idx)}
+                      className="rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className={`${checked ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                      {text}
+                    </span>
+                  </div>
+                )
+              }
+              if (!line.trim()) {
+                return <div key={idx} className="h-2" />
+              }
+              return <p key={idx} className="text-zinc-400">{line}</p>
+            })}
+          </div>
+        ) : (
+          <textarea
+            value={noteContent}
+            onChange={handleContentChange}
+            placeholder="Escribe notas, tareas (- [ ]), comandos o recordatorios aquí..."
+            className="w-full h-full bg-transparent text-zinc-200 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-zinc-600 no-scrollbar"
+            spellCheck={false}
+          />
+        )}
       </div>
 
       {/* Footer bar with character count */}

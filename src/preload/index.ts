@@ -4,6 +4,7 @@ export interface SpawnOptions {
   panelId: string
   cwd: string
   command?: string
+  env?: Record<string, string>
   cols?: number
   rows?: number
 }
@@ -16,18 +17,24 @@ export interface PanelConfig {
   autoStart: boolean
 }
 
+export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
+
+export type WorkspaceLayoutMode = 'grid' | 'canvas'
+
 export interface Workspace {
   id: string
   name: string
   code: string
   panels: PanelConfig[]
+  layoutMode?: WorkspaceLayoutMode
+  canvasCards?: any[]
 }
 
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 
 export interface AppSettings {
   sidebarPosition: SidebarPosition
-  terminalTheme?: string
+  terminalTheme?: TerminalThemeName
   terminalFontSize?: number
   defaultShell?: string
 }
@@ -83,7 +90,8 @@ export interface UpdateStatusPayload {
   error?: string
 }
 
-const neoAPI = {
+export type NeoAPI = typeof neoAPI
+export const neoAPI = {
   getStore: (): Promise<AppState> => ipcRenderer.invoke('store:get'),
   saveStore: (state: AppState): Promise<boolean> => ipcRenderer.invoke('store:save', state),
 
@@ -163,7 +171,32 @@ const neoAPI = {
   maximizeWindow: (): void => ipcRenderer.send('window:maximize'),
   closeWindow: (): void => ipcRenderer.send('window:close'),
   isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
-  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+
+  // File System & Project Intelligence
+  listDirectory: (dirPath?: string): Promise<{ dir: string; entries: any[]; error?: string }> =>
+    ipcRenderer.invoke('fs:list-directory', dirPath),
+
+  readFile: (filePath: string): Promise<{ content?: string; size?: number; path?: string; name?: string; error?: string }> =>
+    ipcRenderer.invoke('fs:read-file', filePath),
+
+  inspectProject: (
+    dirPath: string
+  ): Promise<{
+    name?: string
+    type: string
+    suggestedCommands: Array<{ label: string; command: string }>
+    hasNeoworkConfig: boolean
+  }> => ipcRenderer.invoke('fs:inspect-project', dirPath),
+
+  readNeoworkConfig: (folderPath: string): Promise<any> =>
+    ipcRenderer.invoke('fs:read-neowork-config', folderPath),
+
+  writeNeoworkConfig: (folderPath: string, workspace: any): Promise<boolean> =>
+    ipcRenderer.invoke('fs:write-neowork-config', { folderPath, workspace }),
+
+  checkPort: (port: number): Promise<{ port: number; isOpen: boolean }> =>
+    ipcRenderer.invoke('net:check-port', port)
 }
 
 if (process.contextIsolated) {

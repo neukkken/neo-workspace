@@ -1,5 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
-import { join } from 'path'
+import { join, extname, basename } from 'path'
+import * as fs from 'fs'
+import * as net from 'net'
 import { StoreManager, AppState } from './store'
 import { PtyManager, SpawnOptions } from './pty-manager'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
@@ -109,9 +111,6 @@ app.whenReady().then(() => {
   ipcMain.handle('clipboard:write', (_event, text: string) => {
     if (typeof text === 'string') {
       clipboard.writeText(text)
-      if (process.platform === 'linux') {
-        clipboard.writeText(text, 'selection')
-      }
       return true
     }
     return false
@@ -155,6 +154,176 @@ app.whenReady().then(() => {
   ipcMain.handle('pty:killAll', () => {
     ptyManager.killAll()
     return true
+  })
+
+  // File System IPC for Canvas Explorer & Project Inspection
+  ipcMain.handle('fs:list-directory', async (_event, targetDir?: string) => {
+    try {
+      const dir =
+        targetDir && fs.existsSync(targetDir)
+          ? targetDir
+          : process.env.HOME || process.env.USERPROFILE || '.'
+      const dirents = await fs.promises.readdir(dir, { withFileTypes: true })
+      const entries = []
+      for (const d of dirents) {
+        if (d.name === '.git' || d.name === 'node_modules') continue
+        const fullPath = join(dir, d.name)
+        let size = 0
+        try {
+          if (!d.isDirectory()) {
+            const stat = fs.statSync(fullPath)
+            size = stat.size
+          }
+        } catch {}
+        entries.push({
+          name: d.name,
+          path: fullPath,
+          isDirectory: d.isDirectory(),
+          size,
+          extension: d.isDirectory() ? undefined : extname(d.name).toLowerCase()
+        })
+      }
+      entries.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
+      return { dir, entries }
+    } catch (err: any) {
+      console.error('fs:list-directory error:', err)
+      return { dir: targetDir || '', entries: [], error: err.message }
+    }
+  })
+
+  ipcMain.handle('fs:read-file', async (_event, filePath: string) => {
+    try {
+      if (!fs.existsSync(filePath)) return { error: 'File not found' }
+      const stat = fs.statSync(filePath)
+      if (stat.isDirectory()) return { error: 'Path is a directory' }
+      if (stat.size > 2 * 1024 * 1024) {
+        return { error: 'File exceeds 2MB limit for preview' }
+      }
+      const buffer = await fs.promises.readFile(filePath)
+      const sampleSize = Math.min(buffer.length, 1024)
+      for (let i = 0; i < sampleSize; i++) {
+        if (buffer[i] === 0) {
+          return { error: 'Binary file preview not supported', isBinary: true, size: stat.size, path: filePath, name: basename(filePath) }
+        }
+      }
+      const content = buffer.toString('utf-8')
+      return { content, size: stat.size, path: filePath, name: basename(filePath) }
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  })
+
+  ipcMain.handle('fs:inspect-project', async (_event, targetDir: string) => {
+    try {
+      if (!targetDir || !fs.existsSync(targetDir)) {
+        return { type: 'unknown', suggestedCommands: [], hasNeoworkConfig: false }
+      }
+      const suggestions: Array<{ label: string; command: string }> = []
+      let projType = 'generic'
+      let name: string | undefined
+
+      const pkgPath = join(targetDir, 'package.json')
+      if (fs.existsSync(pkgPath)) {
+        projType = 'node'
+        try {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+          if (pkg.name) name = pkg.name
+          if (pkg.scripts) {
+            for (const [scriptName] of Object.entries(pkg.scripts)) {
+              suggestions.push({
+                label: `npm run ${scriptName}`,
+                command: `npm run ${scriptName}`
+              })
+            }
+          }
+        } catch {}
+      }
+
+      const cargoPath = join(targetDir, 'Cargo.toml')
+      if (fs.existsSync(cargoPath)) {
+        projType = 'rust'
+        suggestions.push({ label: 'cargo run', command: 'cargo run' })
+        suggestions.push({ label: 'cargo test', command: 'cargo test' })
+        suggestions.push({ label: 'cargo build', command: 'cargo build' })
+      }
+
+      if (fs.existsSync(join(targetDir, 'requirements.txt')) || fs.existsSync(join(targetDir, 'pyproject.toml'))) {
+        projType = 'python'
+        if (fs.existsSync(join(targetDir, 'main.py'))) {
+          suggestions.push({ label: 'python main.py', command: 'python main.py' })
+        }
+        suggestions.push({ label: 'pytest', command: 'pytest' })
+      }
+
+      if (fs.existsSync(join(targetDir, 'docker-compose.yml')) || fs.existsSync(join(targetDir, 'compose.yaml'))) {
+        suggestions.push({ label: 'docker compose up', command: 'docker compose up' })
+      }
+
+      const hasNeoworkConfig = fs.existsSync(join(targetDir, '.neowork.json'))
+
+      return {
+        name,
+        type: projType,
+        suggestedCommands: suggestions,
+        hasNeoworkConfig
+      }
+    } catch (err: any) {
+      return { type: 'unknown', suggestedCommands: [], hasNeoworkConfig: false }
+    }
+  })
+
+  ipcMain.handle('fs:read-neowork-config', async (_event, folderPath: string) => {
+    try {
+      const configPath = join(folderPath, '.neowork.json')
+      if (fs.existsSync(configPath)) {
+        const raw = await fs.promises.readFile(configPath, 'utf-8')
+        return JSON.parse(raw)
+      }
+      return null
+    } catch (err: any) {
+      console.error('Error reading .neowork.json:', err)
+      return null
+    }
+  })
+
+  ipcMain.handle('fs:write-neowork-config', async (_event, { folderPath, workspace }: { folderPath: string; workspace: any }) => {
+    try {
+      const configPath = join(folderPath, '.neowork.json')
+      await fs.promises.writeFile(configPath, JSON.stringify(workspace, null, 2), 'utf-8')
+      return true
+    } catch (err: any) {
+      console.error('Error writing .neowork.json:', err)
+      return false
+    }
+  })
+
+  // Port health check
+  ipcMain.handle('net:check-port', async (_event, port: number) => {
+    return new Promise((resolve) => {
+      const socket = new net.Socket()
+      socket.setTimeout(600)
+
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve({ port, isOpen: true })
+      })
+
+      socket.once('timeout', () => {
+        socket.destroy()
+        resolve({ port, isOpen: false })
+      })
+
+      socket.once('error', () => {
+        socket.destroy()
+        resolve({ port, isOpen: false })
+      })
+
+      socket.connect(port, '127.0.0.1')
+    })
   })
 
   // Window controls

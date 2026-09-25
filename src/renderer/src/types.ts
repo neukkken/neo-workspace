@@ -4,9 +4,10 @@ export interface PanelConfig {
   cwd: string
   command: string
   autoStart: boolean
+  env?: Record<string, string>
 }
 
-export type NodeKind = 'terminal' | 'browser' | 'note'
+export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor'
 
 export type NoteColor = 'emerald' | 'amber' | 'cyan' | 'purple' | 'zinc'
 
@@ -23,11 +24,45 @@ export interface CanvasCard {
   cwd?: string
   command?: string
   autoStart?: boolean
+  env?: Record<string, string>
   // For browser kind:
   url?: string
   // For note kind:
   noteContent?: string
   noteColor?: NoteColor
+  // For explorer kind:
+  explorerPath?: string
+  // For port-monitor kind:
+  monitoredPorts?: number[]
+}
+
+export interface CanvasConnector {
+  id: string
+  fromId: string
+  toId: string
+  label?: string
+  color?: string
+}
+
+export interface FileEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  extension?: string
+}
+
+export interface ProjectInspection {
+  name?: string
+  type: string
+  suggestedCommands: Array<{ label: string; command: string }>
+  hasNeoworkConfig: boolean
+}
+
+export interface PortStatus {
+  port: number
+  isOpen: boolean
+  label?: string
 }
 
 export type WorkspaceLayoutMode = 'grid' | 'canvas'
@@ -39,6 +74,7 @@ export interface Workspace {
   panels: PanelConfig[]
   layoutMode?: WorkspaceLayoutMode
   canvasCards?: CanvasCard[]
+  canvasConnectors?: CanvasConnector[]
 }
 
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'

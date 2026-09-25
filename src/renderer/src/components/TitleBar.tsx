@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle } from 'lucide-react'
+import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search } from 'lucide-react'
 import { SystemMetrics } from '../types'
 
 interface TitleBarProps {
@@ -7,13 +7,15 @@ interface TitleBarProps {
   activeWorkspaceName?: string
   onOpenSettings?: () => void
   onOpenShortcuts?: () => void
+  onOpenCommandPalette?: () => void
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   systemMetrics,
   activeWorkspaceName,
   onOpenSettings,
-  onOpenShortcuts
+  onOpenShortcuts,
+  onOpenCommandPalette
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
   const [appVersion, setAppVersion] = useState('1.5.0')
@@ -58,14 +60,30 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
       </div>
 
-      {/* Center: Active Workspace Indicator */}
-      {activeWorkspaceName && (
-        <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800/70 text-zinc-400 font-mono text-[11px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>WORKSPACE:</span>
-          <span className="text-zinc-100 font-medium">{activeWorkspaceName}</span>
-        </div>
-      )}
+      {/* Center: Active Workspace Indicator & Command Palette */}
+      <div className="flex items-center space-x-3 no-drag">
+        {activeWorkspaceName && (
+          <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800/70 text-zinc-400 font-mono text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>WORKSPACE:</span>
+            <span className="text-zinc-100 font-medium">{activeWorkspaceName}</span>
+          </div>
+        )}
+
+        {onOpenCommandPalette && (
+          <button
+            onClick={onOpenCommandPalette}
+            className="hidden sm:flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 text-[11px] font-mono transition-colors cursor-pointer"
+            title="Abrir paleta de comandos (Ctrl+K / Ctrl+P)"
+          >
+            <Search size={11} className="text-emerald-400" />
+            <span className="text-zinc-400">Comandos...</span>
+            <kbd className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-400 border border-zinc-700 ml-1">
+              Ctrl+K
+            </kbd>
+          </button>
+        )}
+      </div>
 
       {/* Right: Telemetry & Window Controls */}
       <div className="flex items-center space-x-3 no-drag">

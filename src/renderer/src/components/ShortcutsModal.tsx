@@ -17,6 +17,11 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
 
   const shortcuts: ShortcutItem[] = [
     {
+      keys: ['Ctrl', 'K'],
+      description: 'Abrir Paleta de Comandos y Búsqueda global',
+      category: 'Navegación & Workspaces'
+    },
+    {
       keys: ['Ctrl', 'N'],
       description: 'Crear un nuevo Workspace',
       category: 'Navegación & Workspaces'

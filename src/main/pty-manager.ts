@@ -6,6 +6,7 @@ export interface SpawnOptions {
   panelId: string
   cwd: string
   command?: string
+  env?: Record<string, string>
   cols?: number
   rows?: number
 }
@@ -47,6 +48,7 @@ export class PtyManager {
         cwd: workingDir,
         env: {
           ...process.env,
+          ...(options.env || {}),
           TERM: 'xterm-256color',
           COLORTERM: 'truecolor'
         } as Record<string, string>
@@ -69,10 +71,11 @@ export class PtyManager {
         }, 80)
       }
 
-      if (options.command && options.command.trim().length > 0) {
+      const cmd = options.command?.trim()
+      if (cmd && cmd.length > 0) {
         setTimeout(() => {
           if (this.terminals.has(options.panelId)) {
-            ptyProcess.write(`${options.command.trim()}\n`)
+            ptyProcess.write(`${cmd}\n`)
           }
         }, 400)
       }

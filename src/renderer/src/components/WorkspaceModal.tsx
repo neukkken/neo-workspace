@@ -67,8 +67,6 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   onClose,
   onSave
 }) => {
-  if (!isOpen) return null
-
   const isEditing = !!workspace
 
   const [name, setName] = useState(workspace?.name || '')
@@ -84,6 +82,57 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       }
     ]
   )
+
+  const [panelSuggestions, setPanelSuggestions] = useState<Record<number, Array<{ label: string; command: string }>>>({})
+  const [showEnvMap, setShowEnvMap] = useState<Record<number, boolean>>({})
+  const [envInputs, setEnvInputs] = useState<Record<number, string>>({})
+
+  const inspectFolder = async (index: number, folderPath: string): Promise<void> => {
+    if (!folderPath || !folderPath.trim()) return
+    try {
+      const inspection = await window.neoAPI.inspectProject(folderPath.trim())
+      if (inspection.suggestedCommands && inspection.suggestedCommands.length > 0) {
+        setPanelSuggestions((prev) => ({
+          ...prev,
+          [index]: inspection.suggestedCommands
+        }))
+      }
+      if (!name.trim() && inspection.name) {
+        setName(inspection.name)
+      }
+    } catch {}
+  }
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setName(workspace?.name || '')
+      setCode(workspace?.code || '01')
+      const initialPanels =
+        workspace?.panels && workspace.panels.length > 0
+          ? workspace.panels.map((p) => ({ ...p }))
+          : [
+              {
+                id: `panel-${Date.now()}-1`,
+                title: 'TERMINAL-1',
+                cwd: '',
+                command: '',
+                autoStart: true
+              }
+            ]
+      setPanels(initialPanels)
+      const initialEnv: Record<number, string> = {}
+      initialPanels.forEach((p, i) => {
+        if (p.env) {
+          initialEnv[i] = Object.entries(p.env)
+            .map(([k, v]) => `${k}=${v}`)
+            .join('\n')
+        }
+      })
+      setEnvInputs(initialEnv)
+    }
+  }, [workspace, isOpen])
+
+  if (!isOpen) return null
 
   const handleApplyPreset = (preset: PresetTemplate): void => {
     if (!name.trim()) {
@@ -129,6 +178,56 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     const selected = await window.neoAPI.selectDirectory(current)
     if (selected) {
       handleUpdatePanel(index, 'cwd', selected)
+      inspectFolder(index, selected)
+    }
+  }
+
+  const handleExportNeoworkJson = async (): Promise<void> => {
+    const targetDir = panels[0]?.cwd
+    if (!targetDir) {
+      alert('Configura primero una carpeta para el primer panel para guardar .neowork.json')
+      return
+    }
+    const wsToSave = {
+      name: name.trim() || 'My Workspace',
+      code: code.trim() || '01',
+      panels: panels.map((p) => ({
+        title: p.title,
+        cwd: '.',
+        command: p.command,
+        autoStart: p.autoStart
+      }))
+    }
+    const success = await window.neoAPI.writeNeoworkConfig(targetDir, wsToSave)
+    if (success) {
+      alert(`¡Archivo .neowork.json guardado con éxito en ${targetDir}!`)
+    } else {
+      alert('No se pudo guardar el archivo .neowork.json')
+    }
+  }
+
+  const handleImportNeoworkJson = async (): Promise<void> => {
+    const targetDir = panels[0]?.cwd
+    const selectedDir = targetDir || (await window.neoAPI.selectDirectory())
+    if (!selectedDir) return
+    const config = await window.neoAPI.readNeoworkConfig(selectedDir)
+    if (config) {
+      if (config.name) setName(config.name)
+      if (config.code) setCode(config.code)
+      if (Array.isArray(config.panels)) {
+        setPanels(
+          config.panels.map((p: any, i: number) => ({
+            id: `panel-${Date.now()}-${i + 1}`,
+            title: p.title || `PANEL-${i + 1}`,
+            cwd: selectedDir,
+            command: p.command || '',
+            autoStart: p.autoStart ?? true
+          }))
+        )
+      }
+      alert('¡Configuración .neowork.json cargada con éxito!')
+    } else {
+      alert(`No se encontró un archivo .neowork.json en ${selectedDir}`)
     }
   }
 
@@ -137,14 +236,31 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     if (!name.trim()) return
 
     const finalWorkspace: Workspace = {
+      ...workspace,
       id: workspace?.id || `ws-${Date.now()}`,
       name: name.trim(),
       code: code.trim() || '01',
-      panels: panels.map((p) => ({
-        ...p,
-        title: p.title.trim() || 'TERMINAL',
-        cwd: p.cwd.trim()
-      }))
+      panels: panels.map((p, idx) => {
+        let envObj: Record<string, string> | undefined
+        const envStr = envInputs[idx]
+        if (envStr && envStr.trim()) {
+          envObj = {}
+          envStr.split('\n').forEach((line) => {
+            const parts = line.split('=')
+            if (parts.length >= 2) {
+              const k = parts[0].trim()
+              const v = parts.slice(1).join('=').trim()
+              if (k) envObj![k] = v
+            }
+          })
+        }
+        return {
+          ...p,
+          title: p.title.trim() || 'TERMINAL',
+          cwd: p.cwd.trim(),
+          env: envObj
+        }
+      })
     }
 
     onSave(finalWorkspace)
@@ -296,6 +412,21 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       placeholder="e.g. npm run dev"
                       className="w-full bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-emerald-400 placeholder:text-zinc-600"
                     />
+                    {panelSuggestions[idx] && panelSuggestions[idx].length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1 items-center">
+                        <span className="text-[9px] font-mono text-zinc-500">Sugerencias:</span>
+                        {panelSuggestions[idx].slice(0, 5).map((s) => (
+                          <button
+                            key={s.command}
+                            type="button"
+                            onClick={() => handleUpdatePanel(idx, 'command', s.command)}
+                            className="px-1.5 py-0.2 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono transition-colors cursor-pointer"
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -306,7 +437,10 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     <input
                       type="text"
                       value={p.cwd}
-                      onChange={(e) => handleUpdatePanel(idx, 'cwd', e.target.value)}
+                      onChange={(e) => {
+                        handleUpdatePanel(idx, 'cwd', e.target.value)
+                        inspectFolder(idx, e.target.value)
+                      }}
                       placeholder="/home/user/project or C:\dev\project (leave empty for home)"
                       className="flex-1 bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
                     />
@@ -332,27 +466,72 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     />
                     <span>Execute command automatically on workspace load</span>
                   </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowEnvMap((prev) => ({ ...prev, [idx]: !prev[idx] }))}
+                    className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    {showEnvMap[idx] ? 'Ocultar ENV ▲' : '+ Variables ENV ▼'}
+                  </button>
                 </div>
+
+                {/* Environment variables textarea */}
+                {showEnvMap[idx] && (
+                  <div className="pt-1.5">
+                    <label className="text-[10px] font-mono text-zinc-500 block mb-1">
+                      VARIABLES DE ENTORNO (KEY=VALUE, un par por línea)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={envInputs[idx] || ''}
+                      onChange={(e) => setEnvInputs((prev) => ({ ...prev, [idx]: e.target.value }))}
+                      placeholder="PORT=3000&#10;NODE_ENV=development"
+                      className="w-full bg-[#12151a] border border-zinc-800 rounded p-1.5 text-[11px] font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-zinc-800 flex items-center justify-end space-x-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded border border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs font-mono transition-colors"
-            >
-              <Check size={13} strokeWidth={2.5} />
-              <span>Save Workspace</span>
-            </button>
+          <div className="pt-4 border-t border-zinc-800 flex items-center justify-between">
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                onClick={handleImportNeoworkJson}
+                className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+                title="Cargar configuración desde archivo .neowork.json"
+              >
+                Cargar .neowork.json
+              </button>
+              <button
+                type="button"
+                onClick={handleExportNeoworkJson}
+                className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+                title="Guardar archivo .neowork.json en la carpeta del proyecto para Git"
+              >
+                Guardar en repo (.neowork.json)
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3.5 py-1.5 rounded border border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs font-mono transition-colors cursor-pointer"
+              >
+                <Check size={13} strokeWidth={2.5} />
+                <span>Save Workspace</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

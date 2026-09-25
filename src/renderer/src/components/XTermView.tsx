@@ -28,6 +28,7 @@ interface XTermViewProps {
   panelId: string
   cwd: string
   command: string
+  env?: Record<string, string>
   autoStart: boolean
   isActive?: boolean
 }
@@ -39,7 +40,7 @@ interface ContextMenuState {
 }
 
 export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
-  ({ panelId, cwd, command, autoStart, isActive = true }, ref) => {
+  ({ panelId, cwd, command, env, autoStart, isActive = true }, ref) => {
     const slotRef = useRef<HTMLDivElement>(null)
     const managedRef = useRef<ManagedTerminal | null>(null)
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -206,6 +207,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       const managed = terminalPool.getOrCreateTerminal(panelId, {
         cwd,
         command,
+        env,
         autoStart
       })
       managedRef.current = managed
@@ -254,6 +256,33 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       }
       return undefined
     }, [isActive, panelId])
+
+    // Scroll isolation & locking:
+    // If not active, prevent wheel scrolling so unselected terminals don't scroll.
+    // If active, allow terminal scroll but stop propagation so it never leaks to outer canvas.
+    useEffect(() => {
+      const slot = slotRef.current
+      if (!slot) return
+
+      const handleWheelCapture = (e: WheelEvent): void => {
+        if (!isActive) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }
+
+      const handleWheelBubble = (e: WheelEvent): void => {
+        e.stopPropagation()
+      }
+
+      slot.addEventListener('wheel', handleWheelCapture, { capture: true, passive: false })
+      slot.addEventListener('wheel', handleWheelBubble, { capture: false, passive: true })
+
+      return () => {
+        slot.removeEventListener('wheel', handleWheelCapture, { capture: true })
+        slot.removeEventListener('wheel', handleWheelBubble, { capture: false })
+      }
+    }, [isActive])
 
     return (
       <div

@@ -14,6 +14,7 @@ export const TerminalGrid: React.FC<TerminalGridProps> = ({
   isActive = true
 }) => {
   const [maximizedPanelId, setMaximizedPanelId] = useState<string | null>(null)
+  const [selectedPanelId, setSelectedPanelId] = useState<string | null>(() => panels[0]?.id || null)
 
   const handleToggleMaximize = (panelId: string): void => {
     setMaximizedPanelId((prev) => (prev === panelId ? null : panelId))
@@ -55,13 +56,15 @@ export const TerminalGrid: React.FC<TerminalGridProps> = ({
           maximizedPanelId ? 'relative' : `grid ${getGridClasses()}`
         }`}
       >
-        {panels.map((panel) => {
+        {panels.map((panel, idx) => {
           const isMax = panel.id === maximizedPanelId
           const isHidden = maximizedPanelId !== null && !isMax
+          const isSelected = selectedPanelId ? panel.id === selectedPanelId : idx === 0
 
           return (
             <div
               key={panel.id}
+              onClick={() => setSelectedPanelId(panel.id)}
               className={
                 maximizedPanelId
                   ? isMax
@@ -74,7 +77,7 @@ export const TerminalGrid: React.FC<TerminalGridProps> = ({
                 panel={panel}
                 metrics={panelsMetrics[panel.id]}
                 isMaximized={isMax}
-                isActive={isActive && !isHidden}
+                isActive={isActive && !isHidden && isSelected}
                 onToggleMaximize={handleToggleMaximize}
               />
             </div>

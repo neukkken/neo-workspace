@@ -1,6 +1,6 @@
 {
   "name": "neowork",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Developer Workspace Orchestrator and Terminal Dashboard",
   "desktopName": "neowork",
   "main": "./out/main/index.js",
@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "start": "electron .",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "autoskills": "autoskills -y",
     "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build && electron-builder --publish never",

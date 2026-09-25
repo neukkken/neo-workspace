@@ -110,9 +110,15 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
   return (
     <div
-      style={cardStyle}
+      style={{ ...cardStyle, overscrollBehavior: 'contain' }}
       onClick={onFocus}
-      className={`flex flex-col bg-[#0d0f14] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
+      onWheel={(e) => {
+        e.stopPropagation()
+        if (!isFocused) {
+          e.preventDefault()
+        }
+      }}
+      className={`canvas-card pointer-events-auto flex flex-col bg-[#0d0f14] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
         isFocused
           ? 'border-cyan-500/80 shadow-[0_0_20px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/40'
           : 'border-zinc-800/90 hover:border-zinc-700/80'
@@ -226,9 +232,16 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
       </div>
 
       {/* Web Content Iframe Container */}
-      <div className="flex-1 w-full h-full relative min-h-0 bg-[#060709] overflow-auto flex justify-center">
+      <div
+        style={{ overscrollBehavior: 'contain' }}
+        className="flex-1 w-full h-full relative min-h-0 bg-[#060709] overflow-auto flex justify-center"
+      >
         <div
-          style={{ width: getViewportWidth(), height: '100%' }}
+          style={{
+            width: getViewportWidth(),
+            height: '100%',
+            pointerEvents: isFocused ? 'auto' : 'none'
+          }}
           className={`h-full transition-all duration-200 ${
             viewport !== 'full' ? 'border-x border-zinc-800/60 shadow-2xl' : ''
           }`}

@@ -9,6 +9,7 @@ import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
+import { CommandPaletteModal } from './components/CommandPaletteModal'
 import { UpdateNotificationToast } from './components/UpdateNotificationToast'
 import {
   Workspace,
@@ -17,8 +18,10 @@ import {
   SidebarPosition,
   PanelConfig,
   CanvasCard,
+  CanvasConnector,
   UpdateStatusPayload,
-  TerminalThemeName
+  TerminalThemeName,
+  WorkspaceLayoutMode
 } from './types'
 import { terminalPool } from './services/terminal-pool'
 
@@ -35,6 +38,7 @@ export const App: React.FC = () => {
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false)
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
 
@@ -111,6 +115,7 @@ export const App: React.FC = () => {
 
       // Escape closes open modals
       if (e.key === 'Escape') {
+        setIsCommandPaletteOpen(false)
         setIsShortcutsModalOpen(false)
         setIsSettingsModalOpen(false)
         setIsWorkspaceModalOpen(false)
@@ -118,6 +123,13 @@ export const App: React.FC = () => {
       }
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey
+
+      // Ctrl + K or Ctrl + P: Command Palette
+      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'k' || e.key === 'K' || e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setIsCommandPaletteOpen((prev) => !prev)
+        return
+      }
 
       // Ctrl + N: Create new workspace
       if (isCtrlOrCmd && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
@@ -265,13 +277,34 @@ export const App: React.FC = () => {
     })
   }
 
-  const handleRestartWorkspace = (id: string): void => {
+  const handleRestartWorkspace = async (id: string): Promise<void> => {
     const ws = appState.workspaces.find((w) => w.id === id)
     if (ws) {
-      // Explicit restart applies the latest saved workspace configuration and restarts terminals
+      // 1. Identify previous panels for this workspace
+      const previousPanels = activeSessionPanels[id] || []
+      const currentPanelIds = new Set(ws.panels.map((p) => p.id))
+
+      // 2. Kill and destroy any panels that were removed
+      for (const prevPanel of previousPanels) {
+        if (!currentPanelIds.has(prevPanel.id)) {
+          terminalPool.destroyTerminal(prevPanel.id)
+          await window.neoAPI.killTerminal(prevPanel.id)
+        }
+      }
+
+      // 3. For all panels in the latest workspace config, reconfigure and restart
       ws.panels.forEach((p) => {
-        terminalPool.getTerminal(p.id)?.restart()
+        const existing = terminalPool.getTerminal(p.id)
+        if (existing) {
+          existing.restart({
+            cwd: p.cwd,
+            command: p.command,
+            env: p.env,
+            autoStart: p.autoStart
+          })
+        }
       })
+
       setActiveSessionPanels((prev) => ({
         ...prev,
         [id]: ws.panels
@@ -287,16 +320,26 @@ export const App: React.FC = () => {
   const handleToggleLayoutMode = (workspaceId: string): void => {
     const ws = appState.workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
-    const nextMode = ws.layoutMode === 'canvas' ? 'grid' : 'canvas'
-    const updatedWorkspaces = appState.workspaces.map((w) =>
+    const nextMode: WorkspaceLayoutMode = ws.layoutMode === 'canvas' ? 'grid' : 'canvas'
+    const updatedWorkspaces: Workspace[] = appState.workspaces.map((w) =>
       w.id === workspaceId ? { ...w, layoutMode: nextMode } : w
     )
     persistState({ ...appState, workspaces: updatedWorkspaces })
   }
 
-  const handleSaveCanvasCards = (workspaceId: string, cards: CanvasCard[]): void => {
+  const handleSaveCanvasCards = (
+    workspaceId: string,
+    cards: CanvasCard[],
+    connectors?: CanvasConnector[]
+  ): void => {
     const updatedWorkspaces = appState.workspaces.map((w) =>
-      w.id === workspaceId ? { ...w, canvasCards: cards } : w
+      w.id === workspaceId
+        ? {
+            ...w,
+            canvasCards: cards,
+            ...(connectors !== undefined ? { canvasConnectors: connectors } : {})
+          }
+        : w
     )
     persistState({ ...appState, workspaces: updatedWorkspaces })
   }
@@ -511,10 +554,10 @@ export const App: React.FC = () => {
                 >
                   {isCanvas ? (
                     <CanvasWorkspace
-                      key={`${ws.id}-canvas`}
+                      key={`${ws.id}-${restartKey}-canvas`}
                       workspace={ws}
                       panelsMetrics={telemetry?.panels || {}}
-                      onSaveCanvasCards={(cards) => handleSaveCanvasCards(ws.id, cards)}
+                      onSaveCanvasCards={(cards, connectors) => handleSaveCanvasCards(ws.id, cards, connectors)}
                     />
                   ) : (
                     <TerminalGrid
@@ -551,8 +594,7 @@ export const App: React.FC = () => {
     }
     const nextWorkspaces = [...appState.workspaces, cloned]
     const nextState = { ...appState, workspaces: nextWorkspaces }
-    setAppState(nextState)
-    saveStateToDisk(nextState)
+    persistState(nextState)
   }
 
   const handleExportWorkspaces = async (): Promise<void> => {
@@ -581,8 +623,7 @@ export const App: React.FC = () => {
           }))
           const nextWorkspaces = [...appState.workspaces, ...imported]
           const nextState = { ...appState, workspaces: nextWorkspaces }
-          setAppState(nextState)
-          saveStateToDisk(nextState)
+          persistState(nextState)
           alert(`¡${imported.length} workspaces importados con éxito!`)
         }
       } else {
@@ -602,8 +643,7 @@ export const App: React.FC = () => {
       terminalTheme: theme
     }
     const nextState = { ...appState, settings: nextSettings }
-    setAppState(nextState)
-    saveStateToDisk(nextState)
+    persistState(nextState)
   }
 
   const handleFontSizeChange = (size: number): void => {
@@ -615,8 +655,7 @@ export const App: React.FC = () => {
       terminalFontSize: size
     }
     const nextState = { ...appState, settings: nextSettings }
-    setAppState(nextState)
-    saveStateToDisk(nextState)
+    persistState(nextState)
   }
 
   const launchpadComponent = (
@@ -655,6 +694,7 @@ export const App: React.FC = () => {
         activeWorkspaceName={activeWorkspace?.name}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
       {/* TOP POSITION */}
@@ -687,6 +727,7 @@ export const App: React.FC = () => {
 
       {/* Modals */}
       <WorkspaceModal
+        key={editingWorkspace?.id || 'new-workspace'}
         isOpen={isWorkspaceModalOpen}
         workspace={editingWorkspace}
         isRunning={editingWorkspace ? runningWorkspaceIds.includes(editingWorkspace.id) : false}
@@ -718,6 +759,73 @@ export const App: React.FC = () => {
       <ShortcutsModal
         isOpen={isShortcutsModalOpen}
         onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        appState={appState}
+        onSelectWorkspace={(id) => {
+          handleSelectWorkspace(id)
+          setIsCommandPaletteOpen(false)
+        }}
+        onNewWorkspace={() => {
+          handleNewWorkspace()
+          setIsCommandPaletteOpen(false)
+        }}
+        onToggleLayoutMode={() => {
+          if (activeWorkspace) {
+            handleToggleLayoutMode(activeWorkspace.id)
+          }
+        }}
+        onToggleSidebar={() => setIsSidebarVisible((prev) => !prev)}
+        onOpenSettings={() => {
+          setIsSettingsModalOpen(true)
+          setIsCommandPaletteOpen(false)
+        }}
+        onOpenShortcuts={() => {
+          setIsShortcutsModalOpen(true)
+          setIsCommandPaletteOpen(false)
+        }}
+        onRestartActiveWorkspace={() => {
+          if (activeWorkspace) {
+            handleRestartWorkspace(activeWorkspace.id)
+          }
+        }}
+        onAddCanvasCard={(kind) => {
+          if (!activeWorkspace) return
+          if (activeWorkspace.layoutMode !== 'canvas') {
+            handleToggleLayoutMode(activeWorkspace.id)
+          }
+          const baseDir = activeWorkspace.panels[0]?.cwd || ''
+          const newCard: CanvasCard = {
+            id: `${kind}-${Date.now()}`,
+            kind: kind,
+            title:
+              kind === 'terminal'
+                ? 'Nueva Consola'
+                : kind === 'explorer'
+                ? 'Explorador'
+                : kind === 'port-monitor'
+                ? 'Monitor de Puertos'
+                : kind === 'note'
+                ? 'Bloc de Notas'
+                : 'Navegador Web',
+            x: 80 + Math.floor(Math.random() * 80),
+            y: 80 + Math.floor(Math.random() * 80),
+            width:
+              kind === 'explorer' ? 520 : kind === 'note' ? 360 : kind === 'port-monitor' ? 380 : 480,
+            height: kind === 'note' ? 280 : kind === 'port-monitor' ? 340 : 380,
+            cwd: kind === 'terminal' ? (baseDir || undefined) : undefined,
+            explorerPath: kind === 'explorer' ? (baseDir || undefined) : undefined,
+            monitoredPorts: kind === 'port-monitor' ? [3000, 5173, 8080] : undefined,
+            noteColor: kind === 'note' ? 'amber' : undefined,
+            noteContent: kind === 'note' ? '### Nueva Nota\n- [ ] Tarea inicial' : undefined
+          }
+          const currentCards = activeWorkspace.canvasCards || []
+          handleSaveCanvasCards(activeWorkspace.id, [...currentCards, newCard], activeWorkspace.canvasConnectors)
+          setIsCommandPaletteOpen(false)
+        }}
       />
 
       {/* Floating Update Notification Toast */}

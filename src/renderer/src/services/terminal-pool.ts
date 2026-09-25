@@ -8,6 +8,7 @@ export interface TerminalSpawnConfig {
   cwd: string
   command?: string
   autoStart?: boolean
+  env?: Record<string, string>
 }
 
 export interface ManagedTerminal {
@@ -16,13 +17,18 @@ export interface ManagedTerminal {
   term: Terminal
   fitAddon: FitAddon
   searchAddon: SearchAddon
+  config: TerminalSpawnConfig
   cleanup: () => void
   clear: () => void
-  restart: () => void
+  restart: (newConfig?: TerminalSpawnConfig) => void
+  updateConfig: (newConfig: Partial<TerminalSpawnConfig>) => void
   fit: () => void
   findNext: (query: string) => boolean
   findPrevious: (query: string) => boolean
   clearSearch: () => void
+  getBufferText: () => string
+  lastDetectedUrl?: string
+  onUrlDetected: (cb: (url: string) => void) => () => void
 }
 
 export const TERMINAL_THEMES: Record<TerminalThemeName, ITheme> = {
@@ -165,9 +171,11 @@ class TerminalPool {
     }
   }
 
-  public getOrCreateTerminal(panelId: string, config: TerminalSpawnConfig): ManagedTerminal {
+  public getOrCreateTerminal(panelId: string, initialConfig: TerminalSpawnConfig): ManagedTerminal {
+    let config = { ...initialConfig }
     const existing = this.terminals.get(panelId)
     if (existing) {
+      existing.updateConfig(initialConfig)
       return existing
     }
 
@@ -261,6 +269,7 @@ class TerminalPool {
         panelId,
         cwd: config.cwd,
         command: config.autoStart ? (config.command || '') : '',
+        env: config.env,
         cols,
         rows
       })
@@ -271,8 +280,28 @@ class TerminalPool {
       window.neoAPI.writeTerminal(panelId, data)
     })
 
+    const urlRegex = /(https?:\/\/(?:localhost|127\.0\.0\.1):\d+(?:\/[^\s\x1b\x07]*)?)/i
+    let lastUrl: string | undefined
+    const urlListeners = new Set<(url: string) => void>()
+
+    const onUrlDetected = (cb: (url: string) => void): (() => void) => {
+      urlListeners.add(cb)
+      if (lastUrl) cb(lastUrl)
+      return () => {
+        urlListeners.delete(cb)
+      }
+    }
+
     const unsubscribeData = window.neoAPI.onTerminalData(panelId, (data) => {
       term.write(data)
+      const match = data.match(urlRegex)
+      if (match && match[1] !== lastUrl) {
+        lastUrl = match[1]
+        if (managed) {
+          managed.lastDetectedUrl = lastUrl
+        }
+        urlListeners.forEach((cb) => cb(lastUrl!))
+      }
     })
 
     const unsubscribeExit = window.neoAPI.onTerminalExit(panelId, ({ code }) => {
@@ -288,11 +317,36 @@ class TerminalPool {
       term.clear()
     }
 
-    const restart = (): void => {
+    const updateConfig = (newConfig: Partial<TerminalSpawnConfig>): void => {
+      config = { ...config, ...newConfig }
+      if (managed) {
+        managed.config = config
+      }
+    }
+
+    const restart = (newConfig?: TerminalSpawnConfig): void => {
+      if (newConfig) {
+        config = { ...config, ...newConfig }
+        if (managed) {
+          managed.config = config
+        }
+      }
       term.clear()
       const c = term.cols || 80
       const r = term.rows || 24
       spawnPty(c, r)
+    }
+
+    const getBufferText = (): string => {
+      let bufferText = ''
+      const buffer = term.buffer.active
+      for (let i = 0; i < buffer.length; i++) {
+        const line = buffer.getLine(i)
+        if (line) {
+          bufferText += line.translateToString(true) + '\n'
+        }
+      }
+      return bufferText.trimEnd()
     }
 
     const findNext = (query: string): boolean => {
@@ -313,6 +367,7 @@ class TerminalPool {
       onDataDisposable.dispose()
       unsubscribeData()
       unsubscribeExit()
+      urlListeners.clear()
       window.neoAPI.killTerminal(panelId)
       term.dispose()
       if (container.parentNode) {
@@ -326,17 +381,36 @@ class TerminalPool {
       term,
       fitAddon,
       searchAddon,
+      config,
       cleanup,
       clear,
       restart,
+      updateConfig,
       fit,
       findNext,
       findPrevious,
-      clearSearch
+      clearSearch,
+      getBufferText,
+      lastDetectedUrl: lastUrl,
+      onUrlDetected
     }
 
     this.terminals.set(panelId, managed)
     return managed
+  }
+
+  public exportLog(panelId: string): string {
+    const existing = this.terminals.get(panelId)
+    return existing ? existing.getBufferText() : ''
+  }
+
+  public reconfigureAndRestart(panelId: string, newConfig: TerminalSpawnConfig): boolean {
+    const existing = this.terminals.get(panelId)
+    if (existing) {
+      existing.restart(newConfig)
+      return true
+    }
+    return false
   }
 
   public getTerminal(panelId: string): ManagedTerminal | undefined {
