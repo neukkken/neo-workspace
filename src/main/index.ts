@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
 import { join, extname, basename } from 'path'
 import * as fs from 'fs'
 import * as net from 'net'
+import * as XLSX from 'xlsx'
 import { StoreManager, AppState } from './store'
 import { PtyManager, SpawnOptions } from './pty-manager'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
@@ -168,9 +169,14 @@ app.whenReady().then(() => {
       for (const d of dirents) {
         if (d.name === '.git' || d.name === 'node_modules') continue
         const fullPath = join(dir, d.name)
+        let isDir = d.isDirectory()
         let size = 0
         try {
-          if (!d.isDirectory()) {
+          if (d.isSymbolicLink()) {
+            const stat = fs.statSync(fullPath)
+            isDir = stat.isDirectory()
+            if (!isDir) size = stat.size
+          } else if (!isDir) {
             const stat = fs.statSync(fullPath)
             size = stat.size
           }
@@ -178,9 +184,9 @@ app.whenReady().then(() => {
         entries.push({
           name: d.name,
           path: fullPath,
-          isDirectory: d.isDirectory(),
+          isDirectory: isDir,
           size,
-          extension: d.isDirectory() ? undefined : extname(d.name).toLowerCase()
+          extension: isDir ? undefined : extname(d.name).toLowerCase()
         })
       }
       entries.sort((a, b) => {
@@ -200,20 +206,91 @@ app.whenReady().then(() => {
       if (!fs.existsSync(filePath)) return { error: 'File not found' }
       const stat = fs.statSync(filePath)
       if (stat.isDirectory()) return { error: 'Path is a directory' }
-      if (stat.size > 2 * 1024 * 1024) {
-        return { error: 'File exceeds 2MB limit for preview' }
+
+      const ext = extname(filePath).toLowerCase()
+      // Spreadsheet support (Excel .xlsx, .xls, .csv, .tsv, .ods)
+      if (['.xlsx', '.xls', '.csv', '.tsv', '.ods'].includes(ext)) {
+        try {
+          const workbook = XLSX.readFile(filePath, { sheetRows: 100 })
+          const sheets = workbook.SheetNames.map((sheetName) => {
+            const worksheet = workbook.Sheets[sheetName]
+            const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+            return {
+              name: sheetName,
+              rows: rows.slice(0, 100)
+            }
+          })
+          return {
+            type: 'spreadsheet',
+            sheets,
+            size: stat.size,
+            path: filePath,
+            name: basename(filePath)
+          }
+        } catch (excelErr: any) {
+          console.error('Excel parse error:', excelErr)
+          return {
+            type: 'binary',
+            isBinary: true,
+            size: stat.size,
+            path: filePath,
+            name: basename(filePath),
+            error: `No se pudo interpretar el archivo Excel (${excelErr.message})`
+          }
+        }
       }
+
+      if (stat.size > 2 * 1024 * 1024) {
+        return {
+          type: 'binary',
+          isBinary: true,
+          size: stat.size,
+          path: filePath,
+          name: basename(filePath),
+          error: 'El archivo excede los 2MB para previsualización directa.'
+        }
+      }
+
       const buffer = await fs.promises.readFile(filePath)
       const sampleSize = Math.min(buffer.length, 1024)
       for (let i = 0; i < sampleSize; i++) {
         if (buffer[i] === 0) {
-          return { error: 'Binary file preview not supported', isBinary: true, size: stat.size, path: filePath, name: basename(filePath) }
+          return {
+            type: 'binary',
+            isBinary: true,
+            size: stat.size,
+            path: filePath,
+            name: basename(filePath),
+            error: 'Archivo binario. Haz clic en "Abrir en el sistema" para verlo.'
+          }
         }
       }
       const content = buffer.toString('utf-8')
-      return { content, size: stat.size, path: filePath, name: basename(filePath) }
+      return { type: 'text', content, size: stat.size, path: filePath, name: basename(filePath) }
     } catch (err: any) {
       return { error: err.message }
+    }
+  })
+
+  // Shell open path & show item in folder
+  ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
+    try {
+      if (!targetPath || !fs.existsSync(targetPath)) return 'File not found'
+      return await shell.openPath(targetPath)
+    } catch (err: any) {
+      return err.message
+    }
+  })
+
+  ipcMain.handle('shell:show-item-in-folder', async (_event, targetPath: string) => {
+    try {
+      if (targetPath && fs.existsSync(targetPath)) {
+        shell.showItemInFolder(targetPath)
+        return true
+      }
+      return false
+    } catch {
+      return false
     }
   })
 

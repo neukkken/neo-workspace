@@ -177,8 +177,24 @@ export const neoAPI = {
   listDirectory: (dirPath?: string): Promise<{ dir: string; entries: any[]; error?: string }> =>
     ipcRenderer.invoke('fs:list-directory', dirPath),
 
-  readFile: (filePath: string): Promise<{ content?: string; size?: number; path?: string; name?: string; error?: string }> =>
-    ipcRenderer.invoke('fs:read-file', filePath),
+  readFile: (
+    filePath: string
+  ): Promise<{
+    type?: 'text' | 'spreadsheet' | 'binary'
+    content?: string
+    sheets?: Array<{ name: string; rows: any[][] }>
+    size?: number
+    path?: string
+    name?: string
+    error?: string
+    isBinary?: boolean
+  }> => ipcRenderer.invoke('fs:read-file', filePath),
+
+  openPath: (targetPath: string): Promise<string> =>
+    ipcRenderer.invoke('shell:open-path', targetPath),
+
+  showItemInFolder: (targetPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('shell:show-item-in-folder', targetPath),
 
   inspectProject: (
     dirPath: string

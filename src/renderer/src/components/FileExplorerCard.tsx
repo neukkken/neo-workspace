@@ -4,7 +4,10 @@ import {
   FolderOpen,
   FileText,
   FileCode,
+  FileSpreadsheet,
   File,
+  Image as ImageIcon,
+  Archive,
   ArrowLeft,
   RefreshCw,
   Maximize2,
@@ -14,7 +17,10 @@ import {
   Copy,
   Check,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Search,
+  X,
+  Table
 } from 'lucide-react'
 import { CanvasCard, FileEntry } from '../types'
 
@@ -27,6 +33,17 @@ interface FileExplorerCardProps {
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: (e: React.MouseEvent, id: string) => void
   onOpenInBrowser?: (url: string) => void
+}
+
+interface PreviewState {
+  type: 'text' | 'spreadsheet' | 'binary'
+  path: string
+  name: string
+  content?: string
+  sheets?: Array<{ name: string; rows: any[][] }>
+  activeSheetIndex?: number
+  size?: number
+  error?: string
 }
 
 export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
@@ -42,9 +59,10 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [history, setHistory] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [previewFile, setPreviewFile] = useState<{ path: string; name: string; content: string } | null>(null)
+  const [previewFile, setPreviewFile] = useState<PreviewState | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [filterQuery, setFilterQuery] = useState('')
 
   const loadDirectory = async (dirToLoad?: string): Promise<void> => {
     setLoading(true)
@@ -88,23 +106,64 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
 
   const handleOpenFile = async (filePath: string): Promise<void> => {
     try {
+      setLoading(true)
       const res = await window.neoAPI.readFile(filePath)
-      if (res.content !== undefined) {
+      if (res.type === 'spreadsheet' && res.sheets && res.sheets.length > 0) {
         setPreviewFile({
+          type: 'spreadsheet',
+          path: filePath,
+          name: res.name || 'Hoja de Cálculo',
+          sheets: res.sheets,
+          activeSheetIndex: 0,
+          size: res.size
+        })
+      } else if (res.type === 'binary' || res.isBinary) {
+        setPreviewFile({
+          type: 'binary',
+          path: filePath,
+          name: res.name || 'archivo',
+          error: res.error,
+          size: res.size
+        })
+      } else if (res.content !== undefined) {
+        setPreviewFile({
+          type: 'text',
           path: filePath,
           name: res.name || 'preview',
-          content: res.content
+          content: res.content,
+          size: res.size
         })
-      } else if (res.error) {
-        alert(res.error)
+      } else {
+        alert(res.error || 'No se pudo leer el archivo')
       }
     } catch (e) {
       console.error('Failed to open file:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenInSystem = async (filePath: string): Promise<void> => {
+    try {
+      const err = await window.neoAPI.openPath(filePath)
+      if (err) {
+        console.error('Failed to open path in system:', err)
+      }
+    } catch (e) {
+      console.error('Error opening with system:', e)
+    }
+  }
+
+  const handleShowInFolder = async (filePath: string): Promise<void> => {
+    try {
+      await window.neoAPI.showItemInFolder(filePath)
+    } catch (e) {
+      console.error('Error showing in folder:', e)
     }
   }
 
   const handleCopyPreview = async (): Promise<void> => {
-    if (previewFile) {
+    if (previewFile?.content) {
       await window.neoAPI.writeClipboard(previewFile.content)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
@@ -116,21 +175,34 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
       return <Folder size={14} className="text-amber-400 shrink-0" />
     }
     const ext = entry.extension
-    if (['.ts', '.tsx', '.js', '.jsx', '.json', '.html', '.css', '.py', '.rs', '.go'].includes(ext || '')) {
+    if (['.xlsx', '.xls', '.csv', '.tsv', '.ods'].includes(ext || '')) {
+      return <FileSpreadsheet size={14} className="text-emerald-400 shrink-0" />
+    }
+    if (['.ts', '.tsx', '.js', '.jsx', '.json', '.html', '.css', '.py', '.rs', '.go', '.sh', '.bash'].includes(ext || '')) {
       return <FileCode size={14} className="text-cyan-400 shrink-0" />
     }
-    if (['.md', '.txt', '.log', '.env'].includes(ext || '')) {
-      return <FileText size={14} className="text-emerald-400 shrink-0" />
+    if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'].includes(ext || '')) {
+      return <ImageIcon size={14} className="text-purple-400 shrink-0" />
+    }
+    if (['.zip', '.tar', '.gz', '.7z', '.rar'].includes(ext || '')) {
+      return <Archive size={14} className="text-amber-500 shrink-0" />
+    }
+    if (['.md', '.txt', '.log', '.env', '.pdf', '.docx', '.doc'].includes(ext || '')) {
+      return <FileText size={14} className="text-zinc-300 shrink-0" />
     }
     return <File size={14} className="text-zinc-400 shrink-0" />
   }
 
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) return '-'
+  const formatSize = (bytes?: number): string => {
+    if (!bytes || bytes === 0) return '-'
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
+
+  const filteredEntries = filterQuery.trim()
+    ? entries.filter((e) => e.name.toLowerCase().includes(filterQuery.toLowerCase()))
+    : entries
 
   const cardStyle: React.CSSProperties = isExpanded
     ? {
@@ -158,9 +230,6 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
       onClick={onFocus}
       onWheel={(e) => {
         e.stopPropagation()
-        if (!isFocused) {
-          e.preventDefault()
-        }
       }}
       className={`canvas-card pointer-events-auto flex flex-col bg-[#0c0e12] rounded-lg border shadow-2xl overflow-hidden select-none transition-shadow ${
         isFocused
@@ -239,24 +308,74 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
         </button>
       </div>
 
+      {/* Search Filter Bar */}
+      {!previewFile && (
+        <div className="flex items-center px-2.5 py-1 bg-[#0a0c10] border-b border-zinc-800/60 space-x-1.5 text-xs shrink-0">
+          <Search size={11} className="text-zinc-500 shrink-0" />
+          <input
+            type="text"
+            placeholder="Filtrar archivos (.xlsx, test, etc.)..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            className="bg-transparent border-none outline-none text-zinc-200 placeholder-zinc-600 text-[10.5px] font-mono flex-1 min-w-0"
+          />
+          {filterQuery && (
+            <button
+              onClick={() => setFilterQuery('')}
+              className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
+              title="Limpiar filtro"
+            >
+              <X size={11} />
+            </button>
+          )}
+          <span className="text-[10px] text-zinc-600 font-mono shrink-0">
+            {filteredEntries.length} {filteredEntries.length === 1 ? 'item' : 'items'}
+          </span>
+        </div>
+      )}
+
       {/* Body: File list or Preview */}
       <div className="flex-1 flex min-h-0 bg-[#07090c] overflow-hidden">
         {previewFile ? (
           <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0a0c10]">
             {/* Preview Toolbar */}
             <div className="px-3 py-1.5 bg-[#12141a] border-b border-zinc-800 flex items-center justify-between text-xs font-mono shrink-0">
-              <div className="flex items-center space-x-2 truncate">
-                <FileCode size={13} className="text-indigo-400 shrink-0" />
+              <div className="flex items-center space-x-2 truncate min-w-0">
+                {previewFile.type === 'spreadsheet' ? (
+                  <FileSpreadsheet size={13} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <FileCode size={13} className="text-indigo-400 shrink-0" />
+                )}
                 <span className="font-semibold text-zinc-200 truncate">{previewFile.name}</span>
+                {previewFile.size && (
+                  <span className="text-[10px] text-zinc-500 shrink-0">({formatSize(previewFile.size)})</span>
+                )}
               </div>
-              <div className="flex items-center space-x-1.5">
+              <div className="flex items-center space-x-1.5 shrink-0">
                 <button
-                  onClick={handleCopyPreview}
-                  className="flex items-center space-x-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  onClick={() => handleOpenInSystem(previewFile.path)}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] transition-colors"
+                  title="Abrir con la aplicación predeterminada del sistema (ej. Excel / Editor)"
                 >
-                  {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span>{copied ? 'Copiado' : 'Copiar'}</span>
+                  <ExternalLink size={10} />
+                  <span>Abrir en sistema</span>
                 </button>
+                <button
+                  onClick={() => handleShowInFolder(previewFile.path)}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  title="Mostrar en explorador de archivos"
+                >
+                  <Folder size={10} />
+                </button>
+                {previewFile.content && (
+                  <button
+                    onClick={handleCopyPreview}
+                    className="flex items-center space-x-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  >
+                    {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    <span>{copied ? 'Copiado' : 'Copiar'}</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setPreviewFile(null)}
                   className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
@@ -265,29 +384,123 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                 </button>
               </div>
             </div>
+
             {/* Preview content */}
-            <pre
-              style={{ overscrollBehavior: 'contain' }}
-              className={`flex-1 p-3 font-mono text-xs text-zinc-300 leading-relaxed select-text whitespace-pre-wrap ${
-                isFocused ? 'overflow-auto' : 'overflow-hidden pointer-events-none'
-              }`}
-            >
-              {previewFile.content}
-            </pre>
+            {previewFile.type === 'spreadsheet' && previewFile.sheets ? (
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#07090c]">
+                {/* Sheet Tabs */}
+                {previewFile.sheets.length > 1 && (
+                  <div className="flex items-center space-x-1 border-b border-zinc-800 bg-[#0d0f14] px-2 py-1 overflow-x-auto shrink-0 scrollbar-none">
+                    {previewFile.sheets.map((sheet, idx) => (
+                      <button
+                        key={sheet.name}
+                        onClick={() => setPreviewFile((prev) => (prev ? { ...prev, activeSheetIndex: idx } : null))}
+                        className={`px-2.5 py-0.5 rounded text-[10.5px] font-mono transition-colors shrink-0 ${
+                          (previewFile.activeSheetIndex || 0) === idx
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                        }`}
+                      >
+                        <span className="flex items-center space-x-1">
+                          <Table size={10} className="shrink-0" />
+                          <span>{sheet.name}</span>
+                          <span className="text-[9px] text-zinc-500">({sheet.rows.length})</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Spreadsheet Table View */}
+                <div className="flex-1 overflow-auto p-2 scrollbar-thin">
+                  {(() => {
+                    const currentSheet = previewFile.sheets[previewFile.activeSheetIndex || 0]
+                    const rows = currentSheet?.rows || []
+                    if (rows.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-zinc-500 text-xs font-mono">
+                          Hoja de cálculo vacía.
+                        </div>
+                      )
+                    }
+                    const maxCols = Math.max(...rows.map((r) => (Array.isArray(r) ? r.length : 0)), 1)
+                    return (
+                      <table className="w-full border-collapse text-[11px] font-mono text-zinc-300 select-text">
+                        <tbody>
+                          {rows.map((row, rIdx) => {
+                            const isHeader = rIdx === 0
+                            return (
+                              <tr
+                                key={rIdx}
+                                className={`border-b border-zinc-800/60 transition-colors ${
+                                  isHeader
+                                    ? 'bg-zinc-900/90 font-semibold text-emerald-400'
+                                    : 'hover:bg-zinc-800/40'
+                                }`}
+                              >
+                                <td className="px-2 py-1 bg-zinc-950/80 border-r border-zinc-800 text-[10px] text-zinc-600 text-right select-none w-8 shrink-0">
+                                  {rIdx + 1}
+                                </td>
+                                {Array.from({ length: maxCols }).map((_, cIdx) => (
+                                  <td
+                                    key={cIdx}
+                                    className="px-2.5 py-1 border-r border-zinc-800/40 truncate max-w-[240px]"
+                                    title={String(row[cIdx] ?? '')}
+                                  >
+                                    {String(row[cIdx] ?? '')}
+                                  </td>
+                                ))}
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )
+                  })()}
+                </div>
+              </div>
+            ) : previewFile.type === 'binary' ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-400 space-y-3 font-mono">
+                <div className="p-3 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-indigo-400">
+                  <File size={32} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-zinc-200 font-semibold text-sm">{previewFile.name}</p>
+                  <p className="text-[11px] text-zinc-500">{formatSize(previewFile.size)}</p>
+                  <p className="text-[11px] text-zinc-400 max-w-sm">
+                    {previewFile.error || 'Archivo sin previsualización de texto directa.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleOpenInSystem(previewFile.path)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                >
+                  <ExternalLink size={12} />
+                  <span>Abrir en el sistema</span>
+                </button>
+              </div>
+            ) : (
+              <pre
+                style={{ overscrollBehavior: 'contain' }}
+                className="flex-1 p-3 font-mono text-xs text-zinc-300 leading-relaxed select-text whitespace-pre-wrap overflow-auto"
+              >
+                {previewFile.content}
+              </pre>
+            )}
           </div>
         ) : (
           <div
             style={{ overscrollBehavior: 'contain' }}
-            className={`flex-1 p-1.5 space-y-0.5 font-mono text-xs select-none ${
-              isFocused ? 'overflow-y-auto' : 'overflow-hidden pointer-events-none'
-            }`}
+            className="flex-1 p-1.5 space-y-0.5 font-mono text-xs select-none overflow-y-auto"
           >
-            {entries.length === 0 && !loading && (
+            {filteredEntries.length === 0 && !loading && (
               <div className="p-6 text-center text-zinc-600 text-xs">
-                Carpeta vacía o sin archivos visibles.
+                {filterQuery
+                  ? `No se encontraron archivos que coincidan con "${filterQuery}".`
+                  : 'Carpeta vacía o sin archivos visibles.'}
               </div>
             )}
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <div
                 key={entry.path}
                 onDoubleClick={() => handleNavigate(entry)}
@@ -297,21 +510,33 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                   {getFileIcon(entry)}
                   <span className="truncate text-[11px]">{entry.name}</span>
                 </div>
-                <div className="flex items-center space-x-2 text-[10px] text-zinc-500 shrink-0">
+                <div className="flex items-center space-x-1.5 text-[10px] text-zinc-500 shrink-0">
                   <span>{formatSize(entry.size)}</span>
                   {entry.isDirectory ? (
                     <ChevronRight size={12} className="text-zinc-600 group-hover:text-zinc-400" />
                   ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleOpenFile(entry.path)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-indigo-400"
-                      title="Previsualizar"
-                    >
-                      <Eye size={12} />
-                    </button>
+                    <div className="flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleOpenFile(entry.path)
+                        }}
+                        className="p-1 rounded hover:bg-zinc-700/60 text-zinc-400 hover:text-indigo-400"
+                        title="Previsualizar"
+                      >
+                        <Eye size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleOpenInSystem(entry.path)
+                        }}
+                        className="p-1 rounded hover:bg-zinc-700/60 text-zinc-400 hover:text-emerald-400"
+                        title="Abrir con aplicación predeterminada del sistema"
+                      >
+                        <ExternalLink size={12} />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
