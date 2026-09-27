@@ -133,27 +133,42 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           <span className="text-[10px] text-zinc-500 font-mono">({ports.length} puertos)</span>
         </div>
 
-        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={checkAllPorts}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              checkAllPorts()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Escanear puertos ahora"
           >
-            <RefreshCw size={12} className={checking ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={`pointer-events-none ${checking ? 'animate-spin' : ''}`} />
           </button>
           <button
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title={isExpanded ? 'Restaurar' : 'Maximizar'}
           >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
           </button>
           <button
-            onClick={() => onDelete(card.id)}
-            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(card.id)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar tarjeta"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="pointer-events-none" />
           </button>
         </div>
       </div>

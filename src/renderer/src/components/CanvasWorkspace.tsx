@@ -35,10 +35,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 }) => {
   // Initialize cards from workspace panels or canvasCards
   const [cards, setCards] = useState<CanvasCard[]>(() => {
-    if (workspace.canvasCards && workspace.canvasCards.length > 0) {
+    if (Array.isArray(workspace.canvasCards)) {
       return workspace.canvasCards
     }
-    // Generate initial canvas cards from existing panels
+    // Generate initial canvas cards from existing panels only on first creation
     return workspace.panels.map((p, idx) => ({
       id: p.id,
       kind: 'terminal',
@@ -62,13 +62,19 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   // Ref to track last saved cards to prevent circular loops
   const lastSavedCardsJsonRef = useRef<string>(JSON.stringify(cards))
+  const cardsRef = useRef<CanvasCard[]>(cards)
+  cardsRef.current = cards
+
+  const connectorsRef = useRef<CanvasConnector[]>(connectors)
+  connectorsRef.current = connectors
 
   // Synchronize when workspace.canvasCards changes externally (e.g. from CommandPalette)
   useEffect(() => {
-    if (workspace.canvasCards && workspace.canvasCards.length > 0) {
+    if (workspace.canvasCards) {
       const incomingJson = JSON.stringify(workspace.canvasCards)
       if (incomingJson !== lastSavedCardsJsonRef.current) {
         lastSavedCardsJsonRef.current = incomingJson
+        cardsRef.current = workspace.canvasCards
         setCards(workspace.canvasCards)
       }
     }
@@ -84,6 +90,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         ) {
           return prev
         }
+        connectorsRef.current = workspace.canvasConnectors!
         return workspace.canvasConnectors!
       })
     }
@@ -198,23 +205,25 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     (updater: (prev: CanvasCard[]) => CanvasCard[]) => {
       setCards((prev) => {
         const next = updater(prev)
+        cardsRef.current = next
         lastSavedCardsJsonRef.current = JSON.stringify(next)
-        onSaveCanvasCards(next, connectors)
+        onSaveCanvasCards(next, connectorsRef.current)
         return next
       })
     },
-    [onSaveCanvasCards, connectors]
+    [onSaveCanvasCards]
   )
 
   const updateConnectorsAndNotify = useCallback(
     (updater: (prev: CanvasConnector[]) => CanvasConnector[]) => {
       setConnectors((prev) => {
         const next = updater(prev)
-        onSaveCanvasCards(cards, next)
+        connectorsRef.current = next
+        onSaveCanvasCards(cardsRef.current, next)
         return next
       })
     },
-    [cards, onSaveCanvasCards]
+    [onSaveCanvasCards]
   )
 
   // Add new Terminal card
@@ -345,7 +354,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   }
 
   const handleDeleteConnector = (connId: string): void => {
-    updateConnectorsAndNotify((prev) => prev.filter((c) => c.id !== connId))
+    const nextConnectors = connectorsRef.current.filter((c) => c.id !== connId)
+    connectorsRef.current = nextConnectors
+    setConnectors(nextConnectors)
+    onSaveCanvasCards(cardsRef.current, nextConnectors)
   }
 
   // Auto-arrange all cards in clean grid layout
@@ -371,8 +383,19 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   const handleDeleteCard = (id: string): void => {
     terminalPool.destroyTerminal(id)
-    updateCardsAndNotify((prev) => prev.filter((c) => c.id !== id))
-    updateConnectorsAndNotify((prev) => prev.filter((conn) => conn.fromId !== id && conn.toId !== id))
+
+    // Atomically filter both cards and attached connectors in a single synchronous operation
+    const nextCards = cardsRef.current.filter((c) => c.id !== id)
+    const nextConnectors = connectorsRef.current.filter((conn) => conn.fromId !== id && conn.toId !== id)
+
+    cardsRef.current = nextCards
+    connectorsRef.current = nextConnectors
+    lastSavedCardsJsonRef.current = JSON.stringify(nextCards)
+
+    setCards(nextCards)
+    setConnectors(nextConnectors)
+    onSaveCanvasCards(nextCards, nextConnectors)
+
     if (focusedCardId === id) setFocusedCardId(null)
   }
 

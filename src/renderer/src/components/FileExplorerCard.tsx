@@ -70,7 +70,9 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
       const res = await window.neoAPI.listDirectory(dirToLoad)
       setCurrentDir(res.dir)
       setEntries(res.entries || [])
-      onUpdate({ explorerPath: res.dir })
+      if (res.dir && res.dir !== card.explorerPath) {
+        onUpdate({ explorerPath: res.dir })
+      }
     } catch (e) {
       console.error('Failed to load directory:', e)
     } finally {
@@ -78,10 +80,16 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
     }
   }
 
+  // Automatically load directory contents on mount
   useEffect(() => {
-    if (card.explorerPath && card.explorerPath !== currentDir) {
-      loadDirectory(card.explorerPath)
-    } else if (!currentDir) {
+    loadDirectory(card.explorerPath || currentDir)
+  }, [])
+
+  // Reload if card.explorerPath is modified externally
+  const lastExplorerPathPropRef = React.useRef(card.explorerPath)
+  useEffect(() => {
+    if (card.explorerPath && card.explorerPath !== lastExplorerPathPropRef.current) {
+      lastExplorerPathPropRef.current = card.explorerPath
       loadDirectory(card.explorerPath)
     }
   }, [card.explorerPath])
@@ -252,27 +260,42 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => loadDirectory(currentDir)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              loadDirectory(currentDir)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Recargar carpeta"
           >
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={`pointer-events-none ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title={isExpanded ? 'Restaurar' : 'Maximizar'}
           >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
           </button>
           <button
-            onClick={() => onDelete(card.id)}
-            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(card.id)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar tarjeta"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="pointer-events-none" />
           </button>
         </div>
       </div>

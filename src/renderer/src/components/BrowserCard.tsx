@@ -138,58 +138,88 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {/* Responsive viewport controls */}
           <div className="flex items-center space-x-0.5 bg-zinc-900 border border-zinc-800 p-0.5 rounded mr-1">
             <button
-              onClick={() => setViewport('full')}
-              className={`p-1 rounded transition-colors ${
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setViewport('full')
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={`p-1 rounded transition-colors cursor-pointer ${
                 viewport === 'full' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Resolución Completa (100%)"
             >
-              <Monitor size={11} />
+              <Monitor size={11} className="pointer-events-none" />
             </button>
             <button
-              onClick={() => setViewport('tablet')}
-              className={`p-1 rounded transition-colors ${
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setViewport('tablet')
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={`p-1 rounded transition-colors cursor-pointer ${
                 viewport === 'tablet' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Vista Tablet (768px)"
             >
-              <Tablet size={11} />
+              <Tablet size={11} className="pointer-events-none" />
             </button>
             <button
-              onClick={() => setViewport('mobile')}
-              className={`p-1 rounded transition-colors ${
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setViewport('mobile')
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={`p-1 rounded transition-colors cursor-pointer ${
                 viewport === 'mobile' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Vista Móvil (375px)"
             >
-              <Smartphone size={11} />
+              <Smartphone size={11} className="pointer-events-none" />
             </button>
           </div>
 
           <button
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title={isExpanded ? 'Restaurar tamaño' : 'Maximizar tarjeta'}
           >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
           </button>
           <button
-            onClick={handleOpenExternal}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleOpenExternal()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Abrir en navegador externo"
           >
-            <ExternalLink size={12} />
+            <ExternalLink size={12} className="pointer-events-none" />
           </button>
           <button
-            onClick={() => onDelete(card.id)}
-            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(card.id)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar nodo de navegador"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="pointer-events-none" />
           </button>
         </div>
       </div>

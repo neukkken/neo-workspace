@@ -132,7 +132,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
         </div>
 
         {/* Right: Metrics & Controls */}
-        <div className="flex items-center space-x-1.5" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {metrics && (
             <div className="hidden sm:flex items-center space-x-1 text-[10px] font-mono text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-1.5 py-0.5 rounded">
               <span>{metrics.cpu}%</span>
@@ -142,46 +142,76 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           )}
 
           <button
-            onClick={() => termRef.current?.toggleSearch()}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              termRef.current?.toggleSearch()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Buscar en buffer (Ctrl+F)"
           >
-            <Search size={11} />
+            <Search size={11} className="pointer-events-none" />
           </button>
           <button
-            onClick={handleExportLog}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleExportLog()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Exportar logs a archivo (.log)"
           >
-            <Download size={11} />
+            <Download size={11} className="pointer-events-none" />
           </button>
           <button
-            onClick={handleRestart}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRestart()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Restart Terminal Process"
           >
-            <RotateCw size={11} />
+            <RotateCw size={11} className="pointer-events-none" />
           </button>
           <button
-            onClick={handleClear}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleClear()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Clear Console"
           >
-            <Eraser size={11} />
+            <Eraser size={11} className="pointer-events-none" />
           </button>
           <button
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title={isExpanded ? 'Restore Size' : 'Expand Card'}
           >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
           </button>
           <button
-            onClick={() => onDelete(card.id)}
-            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/20 transition-colors"
-            title="Remove Console Node"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(card.id)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
+            title="Eliminar consola"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="pointer-events-none" />
           </button>
         </div>
       </div>

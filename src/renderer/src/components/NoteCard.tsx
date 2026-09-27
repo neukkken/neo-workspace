@@ -210,10 +210,15 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         </div>
 
         {/* Right: Controls */}
-        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => setIsPreview((p) => !p)}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsPreview((p) => !p)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
               isPreview ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'
             }`}
             title={isPreview ? 'Modo Edición' : 'Vista Previa Renderizada'}
@@ -222,43 +227,68 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           </button>
 
           <button
-            onClick={handleCopyContent}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleCopyContent()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
             title="Copiar texto de la nota"
           >
             <span className="text-[10px]">{copied ? '✓' : '⧉'}</span>
           </button>
 
           <button
-            onClick={handleCycleColor}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleCycleColor()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
             title={`Cambiar color (${styleConfig.tag})`}
           >
-            <Palette size={12} className={styleConfig.dot.replace('bg-', 'text-')} />
+            <Palette size={12} className={`pointer-events-none ${styleConfig.dot.replace('bg-', 'text-')}`} />
           </button>
 
           <button
-            onClick={handleAddCheckbox}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleAddCheckbox()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
             title="Añadir tarea (- [ ])"
           >
-            <CheckSquare size={12} />
+            <CheckSquare size={12} className="pointer-events-none" />
           </button>
 
           <button
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
             title={isExpanded ? 'Restaurar tamaño' : 'Maximizar tarjeta'}
           >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
           </button>
 
           <button
-            onClick={() => onDelete(card.id)}
-            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(card.id)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar nota"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="pointer-events-none" />
           </button>
         </div>
       </div>
