@@ -197,38 +197,58 @@ class TerminalPool {
       theme
     })
 
+    // Deduplicate paste events to prevent Chromium + Xterm double-paste bugs
+    let lastPasteText = ''
+    let lastPasteTime = 0
+    const originalPaste = term.paste.bind(term)
+    term.paste = (text: string): void => {
+      const now = Date.now()
+      if (text === lastPasteText && now - lastPasteTime < 300) {
+        return
+      }
+      lastPasteText = text
+      lastPasteTime = now
+      originalPaste(text)
+    }
+
     // Custom key event handler for smart copy / paste
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      if (event.type !== 'keydown') {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey
+
+      // Ctrl + Shift + C (or Ctrl + C when text is selected): Copy selection
+      if (isCtrlOrCmd && (event.key === 'c' || event.key === 'C')) {
+        if (event.shiftKey || term.hasSelection()) {
+          if (event.type === 'keydown') {
+            const selection = term.getSelection()
+            if (selection) {
+              window.neoAPI.writeClipboard(selection)
+            }
+          }
+          event.preventDefault()
+          return false
+        }
         return true
       }
 
-      const isCtrlOrCmd = event.ctrlKey || event.metaKey
-
-      // Ctrl + Shift + C: Copy selection
-      if (isCtrlOrCmd && event.shiftKey && (event.key === 'c' || event.key === 'C')) {
-        if (term.hasSelection()) {
-          const selection = term.getSelection()
-          if (selection) {
-            window.neoAPI.writeClipboard(selection)
-          }
+      // Ctrl + V or Ctrl + Shift + V: Paste from native clipboard
+      if (isCtrlOrCmd && (event.key === 'v' || event.key === 'V')) {
+        event.preventDefault()
+        if (event.type === 'keydown') {
+          window.neoAPI.readClipboard().then((text) => {
+            if (text) {
+              term.paste(text)
+            }
+          })
         }
-        return false
-      }
-
-      // Ctrl + Shift + V: Paste from native clipboard
-      if (isCtrlOrCmd && event.shiftKey && (event.key === 'v' || event.key === 'V')) {
-        window.neoAPI.readClipboard().then((text) => {
-          if (text) {
-            term.paste(text)
-          }
-        })
         return false
       }
 
       // Ctrl + Shift + A: Select all
       if (isCtrlOrCmd && event.shiftKey && (event.key === 'a' || event.key === 'A')) {
-        term.selectAll()
+        event.preventDefault()
+        if (event.type === 'keydown') {
+          term.selectAll()
+        }
         return false
       }
 
