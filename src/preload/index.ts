@@ -212,7 +212,39 @@ export const neoAPI = {
     ipcRenderer.invoke('fs:write-neowork-config', { folderPath, workspace }),
 
   checkPort: (port: number): Promise<{ port: number; isOpen: boolean }> =>
-    ipcRenderer.invoke('net:check-port', port)
+    ipcRenderer.invoke('net:check-port', port),
+
+  // Remote Mobile Gateway
+  getRemoteStatus: (): Promise<{
+    enabled: boolean
+    port: number
+    token: string
+    interfaces: Array<{ name: string; ip: string; type: 'lan' | 'tailscale' | 'other' }>
+    primaryUrl: string
+    tailscaleUrl?: string
+    qrCodeDataUrl: string
+    clientCount: number
+  }> => ipcRenderer.invoke('remote:get-status'),
+
+  toggleRemote: (): Promise<any> => ipcRenderer.invoke('remote:toggle'),
+  regenerateRemoteToken: (): Promise<any> => ipcRenderer.invoke('remote:regenerate-token'),
+  setRemotePort: (port: number): Promise<boolean> => ipcRenderer.invoke('remote:set-port', port),
+
+  onRemoteStatus: (callback: (status: any) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: any): void => callback(status)
+    ipcRenderer.on('remote:status-update', handler)
+    return () => {
+      ipcRenderer.removeListener('remote:status-update', handler)
+    }
+  },
+
+  onRemoteWorkspaceSelect: (callback: (workspaceId: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string): void => callback(workspaceId)
+    ipcRenderer.on('remote:workspace-selected', handler)
+    return () => {
+      ipcRenderer.removeListener('remote:workspace-selected', handler)
+    }
+  }
 }
 
 if (process.contextIsolated) {

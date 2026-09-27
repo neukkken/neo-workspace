@@ -7,10 +7,12 @@ import { StoreManager, AppState } from './store'
 import { PtyManager, SpawnOptions } from './pty-manager'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
 import { AppUpdater } from './updater'
+import { RemoteGateway } from './remote-gateway'
 
 let mainWindow: BrowserWindow | null = null
 const store = new StoreManager()
 const ptyManager = new PtyManager()
+const remoteGateway = new RemoteGateway(ptyManager, store)
 let telemetryMonitor: TelemetryMonitor | null = null
 let appUpdater: AppUpdater | null = null
 
@@ -91,8 +93,49 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('store:save', (_event, state: AppState) => {
+    if (state.activeWorkspaceId) {
+      remoteGateway.setActiveWorkspace(state.activeWorkspaceId)
+    }
     return store.saveState(state)
   })
+
+  // Remote Mobile Gateway IPC
+  ipcMain.handle('remote:get-status', () => {
+    return remoteGateway.getStatus()
+  })
+
+  ipcMain.handle('remote:toggle', async () => {
+    const status = await remoteGateway.getStatus()
+    if (status.enabled) {
+      await remoteGateway.stop()
+    } else {
+      await remoteGateway.start()
+    }
+    return remoteGateway.getStatus()
+  })
+
+  ipcMain.handle('remote:regenerate-token', () => {
+    return remoteGateway.regenerateToken()
+  })
+
+  ipcMain.handle('remote:set-port', async (_event, port: number) => {
+    return remoteGateway.setPort(port)
+  })
+
+  remoteGateway.onStatusChange((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('remote:status-update', status)
+    }
+  })
+
+  remoteGateway.onWorkspaceSelect((workspaceId) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('remote:workspace-selected', workspaceId)
+    }
+  })
+
+  // Start remote gateway
+  remoteGateway.start()
 
   // Directory picker dialog
   ipcMain.handle('dialog:select-directory', async (_event, defaultPath?: string) => {
@@ -450,6 +493,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   telemetryMonitor?.stop()
+  remoteGateway.stop()
   ptyManager.killAll()
   if (process.platform !== 'darwin') {
     app.exit(0)

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search } from 'lucide-react'
+import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Smartphone } from 'lucide-react'
 import { SystemMetrics } from '../types'
 
 interface TitleBarProps {
@@ -8,6 +8,7 @@ interface TitleBarProps {
   onOpenSettings?: () => void
   onOpenShortcuts?: () => void
   onOpenCommandPalette?: () => void
+  onOpenMobileConnect?: () => void
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -15,10 +16,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   activeWorkspaceName,
   onOpenSettings,
   onOpenShortcuts,
-  onOpenCommandPalette
+  onOpenCommandPalette,
+  onOpenMobileConnect
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
-  const [appVersion, setAppVersion] = useState('1.5.0')
+  const [appVersion, setAppVersion] = useState('1.6.2')
+  const [clientCount, setClientCount] = useState(0)
 
   useEffect(() => {
     window.neoAPI.isWindowMaximized().then(setIsMaximized)
@@ -27,6 +30,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         if (ver) setAppVersion(ver)
       }).catch(() => {})
     }
+    if (window.neoAPI.getRemoteStatus) {
+      window.neoAPI.getRemoteStatus().then((s) => {
+        if (s) setClientCount(s.clientCount || 0)
+      }).catch(() => {})
+    }
+    const unsub = window.neoAPI.onRemoteStatus?.((s) => {
+      setClientCount(s?.clientCount || 0)
+    })
+    return () => unsub?.()
   }, [])
 
   const handleMinimize = (): void => {
@@ -98,6 +110,22 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               RAM <strong className="text-zinc-200">{systemMetrics.usedMemMb}MB</strong>
             </span>
           </div>
+        )}
+
+        {onOpenMobileConnect && (
+          <button
+            onClick={onOpenMobileConnect}
+            className="flex items-center space-x-1.5 px-2 py-0.5 rounded text-zinc-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/30 transition-colors"
+            title="Conectar Teléfono Móvil (Gateway Remoto)"
+          >
+            <Smartphone size={13} className="text-emerald-400 shrink-0" />
+            <span className="hidden xl:inline text-[11px] font-mono">Móvil</span>
+            {clientCount > 0 && (
+              <span className="flex items-center space-x-1 px-1 py-0.2 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-400 font-bold">
+                {clientCount}
+              </span>
+            )}
+          </button>
         )}
 
         {onOpenShortcuts && (

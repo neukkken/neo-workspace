@@ -13,6 +13,40 @@ export interface SpawnOptions {
 
 export class PtyManager {
   private terminals = new Map<string, pty.IPty>()
+  private buffers = new Map<string, string[]>()
+  private bufferLengths = new Map<string, number>()
+  private dataSubscribers = new Set<(panelId: string, data: string) => void>()
+  private readonly MAX_BUFFER_SIZE = 120 * 1024 // 120 KB
+
+  private appendBuffer(panelId: string, chunk: string): void {
+    let chunks = this.buffers.get(panelId)
+    if (!chunks) {
+      chunks = []
+      this.buffers.set(panelId, chunks)
+      this.bufferLengths.set(panelId, 0)
+    }
+    chunks.push(chunk)
+    let currentLen = (this.bufferLengths.get(panelId) || 0) + chunk.length
+    this.bufferLengths.set(panelId, currentLen)
+
+    while (currentLen > this.MAX_BUFFER_SIZE && chunks.length > 1) {
+      const removed = chunks.shift()!
+      currentLen -= removed.length
+      this.bufferLengths.set(panelId, currentLen)
+    }
+  }
+
+  public getBuffer(panelId: string): string {
+    const chunks = this.buffers.get(panelId)
+    return chunks ? chunks.join('') : ''
+  }
+
+  public subscribeData(callback: (panelId: string, data: string) => void): () => void {
+    this.dataSubscribers.add(callback)
+    return () => {
+      this.dataSubscribers.delete(callback)
+    }
+  }
 
   private getShell(): string {
     if (process.platform === 'win32') {
@@ -57,6 +91,12 @@ export class PtyManager {
       this.terminals.set(options.panelId, ptyProcess)
 
       ptyProcess.onData((data) => {
+        this.appendBuffer(options.panelId, data)
+        this.dataSubscribers.forEach((cb) => {
+          try {
+            cb(options.panelId, data)
+          } catch {}
+        })
         onData(data)
       })
 
