@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Play, Power } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Launchpad } from './components/Launchpad'
@@ -197,6 +197,31 @@ export const App: React.FC = () => {
     }
   }, [])
 
+  const handleSaveCanvasCards = useCallback(
+    (
+      workspaceId: string,
+      cards: CanvasCard[],
+      connectors?: CanvasConnector[]
+    ): void => {
+      setAppState((prev) => {
+        if (!prev) return prev
+        const updatedWorkspaces = prev.workspaces.map((w) =>
+          w.id === workspaceId
+            ? {
+                ...w,
+                canvasCards: cards,
+                ...(connectors !== undefined ? { canvasConnectors: connectors } : {})
+              }
+            : w
+        )
+        const nextState: AppState = { ...prev, workspaces: updatedWorkspaces }
+        window.neoAPI.saveStore(nextState)
+        return nextState
+      })
+    },
+    []
+  )
+
   if (!appState) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#090a0d] text-zinc-400 font-mono text-xs">
@@ -330,23 +355,6 @@ export const App: React.FC = () => {
     const nextMode: WorkspaceLayoutMode = ws.layoutMode === 'canvas' ? 'grid' : 'canvas'
     const updatedWorkspaces: Workspace[] = appState.workspaces.map((w) =>
       w.id === workspaceId ? { ...w, layoutMode: nextMode } : w
-    )
-    persistState({ ...appState, workspaces: updatedWorkspaces })
-  }
-
-  const handleSaveCanvasCards = (
-    workspaceId: string,
-    cards: CanvasCard[],
-    connectors?: CanvasConnector[]
-  ): void => {
-    const updatedWorkspaces = appState.workspaces.map((w) =>
-      w.id === workspaceId
-        ? {
-            ...w,
-            canvasCards: cards,
-            ...(connectors !== undefined ? { canvasConnectors: connectors } : {})
-          }
-        : w
     )
     persistState({ ...appState, workspaces: updatedWorkspaces })
   }
@@ -815,12 +823,13 @@ export const App: React.FC = () => {
             handleToggleLayoutMode(activeWorkspace.id)
           }
           const baseDir = activeWorkspace.panels[0]?.cwd || ''
+          const currentCards = activeWorkspace.canvasCards || []
           const newCard: CanvasCard = {
-            id: `${kind}-${Date.now()}`,
+            id: `canvas-${kind}-${Date.now()}`,
             kind: kind,
             title:
               kind === 'terminal'
-                ? 'Nueva Consola'
+                ? `TERMINAL-${currentCards.filter((c) => c.kind === 'terminal').length + 1}`
                 : kind === 'explorer'
                 ? 'Explorador'
                 : kind === 'port-monitor'
@@ -839,7 +848,6 @@ export const App: React.FC = () => {
             noteColor: kind === 'note' ? 'amber' : undefined,
             noteContent: kind === 'note' ? '### Nueva Nota\n- [ ] Tarea inicial' : undefined
           }
-          const currentCards = activeWorkspace.canvasCards || []
           handleSaveCanvasCards(activeWorkspace.id, [...currentCards, newCard], activeWorkspace.canvasConnectors)
           setIsCommandPaletteOpen(false)
         }}

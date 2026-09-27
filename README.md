@@ -4,14 +4,14 @@
 
   <img src="resources/icon-matrix-minimal.svg" alt="NeoWork Logo" width="96" height="96" />
 
-  <h3>A modern workspace orchestrator and terminal dashboard for developers</h3>
+  <h3>A modern workspace orchestrator, terminal dashboard, and mobile companion for developers</h3>
 
   <p>
-    Launch, organize, and monitor multiple terminals, background services, and development processes in parallel with real-time telemetry.
+    Launch, organize, and monitor multiple terminals, background services, and development processes in parallel with real-time telemetry, an infinite canvas board, and a remote mobile companion.
   </p>
 
   <p>
-    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.5.0-emerald?style=flat-square&logo=electron" alt="Version" /></a>
+    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.7.1-emerald?style=flat-square&logo=electron" alt="Version" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
     <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-zinc?style=flat-square&logo=linux" alt="Cross-Platform" /></a>
     <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
@@ -25,7 +25,7 @@
 **NeoWork is free and open-source software** distributed under the terms of the **MIT License**.
 
 Built around developer-first principles:
-- **Local-first and Private:** All configurations, scripts, and directories stay strictly on your local machine. No remote tracking or telemetry servers.
+- **Local-first and Private:** All configurations, scripts, and directories stay strictly on your local machine. No third-party tracking, external servers, or remote telemetry.
 - **No Vendor Lock-in:** Fork, audit, extend, or customize any module freely.
 - **Community-Driven:** Contributions, feature proposals, and feedback from developers worldwide are welcomed and encouraged.
 
@@ -36,64 +36,73 @@ Built around developer-first principles:
 Precompiled binary packages are available directly from the **[Releases](https://github.com/neukkken/neo-workspace/releases)** page:
 
 ### Windows
-- **Setup Installer:** `NeoWork-Setup-1.5.0.exe` (Recommended for automatic updates and desktop shortcuts).
-- **Portable Executable:** `NeoWork-1.5.0-portable.exe` (Run directly without installation or administrator privileges).
+- **Setup Installer:** `NeoWork-Setup-1.7.1.exe` (Recommended for automatic updates and desktop shortcuts).
+- **Portable Executable:** `NeoWork-1.7.1-portable.exe` (Run directly without installation or administrator privileges).
 
 ### Linux
-- **Universal AppImage:** `NeoWork-1.5.0.AppImage` (Runs on modern Linux distributions).
+- **Universal AppImage:** `NeoWork-1.7.1.AppImage` (Runs on all modern Linux distributions).
   ```bash
-  chmod +x NeoWork-1.5.0.AppImage
-  ./NeoWork-1.5.0.AppImage
+  chmod +x NeoWork-1.7.1.AppImage
+  ./NeoWork-1.7.1.AppImage
   ```
-- **Debian / Ubuntu Package:** `NeoWork_1.5.0_amd64.deb`
+- **Debian / Ubuntu Package:** `NeoWork_1.7.1_amd64.deb`
   ```bash
-  sudo dpkg -i NeoWork_1.5.0_amd64.deb
+  sudo dpkg -i NeoWork_1.7.1_amd64.deb
   ```
 
 ---
 
 ## Key Features
 
-1. **Multi-Workspace Management (Sidebar Launchpad):**
-   - Create, edit, and organize isolated development workspaces per project.
-   - Each workspace persists its own terminal grid layout, startup commands, and working directories (`cwd`).
-   - Automatic local storage using clean JSON schema.
+### 1. Multi-Workspace Management (Sidebar Launchpad)
+- Create, edit, and organize isolated development workspaces per project.
+- Each workspace persists its own terminal grid layout, startup commands, and working directories (`cwd`).
+- Seamless local storage with clean JSON schema and instant workspace switching.
 
-2. **Native Interactive Pseudo-Terminals (PTY):**
-   - Native engine powered by `node-pty` and `xterm.js` with full 24-bit TrueColor ANSI support.
-   - Fully interactive execution: handles `Ctrl+C`, confirmation prompts (`y/n`), interactive Git commands, Docker, Vite, and development CLI tools.
-   - Dynamic terminal reflow via `FitAddon` on window resize.
+### 2. Native Interactive Pseudo-Terminals (PTY)
+- Native engine powered by `node-pty` and `@xterm/xterm` (v6) with full 24-bit TrueColor ANSI support.
+- Fully interactive execution: handles `Ctrl+C`, interactive confirmation prompts (`y/n`), Git interactive rebases, Docker, Vite, and development CLI tools.
+- Integrated search addon (`@xterm/addon-search`) and clickable terminal URLs (`@xterm/addon-web-links`).
+- Clean clipboard integration with automatic duplicate paste prevention.
+- Dynamic terminal reflow via `FitAddon` on window resize.
 
-3. **Visual Directory Picker:**
-   - Type paths manually or use the native OS folder dialog to select workspace roots without typographical errors.
+### 3. Infinite Free-Form Canvas Mode (Whiteboard)
+- Switch seamlessly between the classical structured Grid and the free-form Infinite Board (`Ctrl + Shift + F`).
+- Smooth pan and zoom (30% to 220%) with cursor-anchored scaling.
+- Freely place, drag, resize, and organize multi-type cards:
+  - **Console Cards:** Spawn independent persistent terminals running in your project directory.
+  - **Embedded Web Browsers:** Real-time local web development previews (`http://localhost:5173`, etc.) with URL navigation, reload, and responsive presets.
+  - **Sticky Notes:** Quick scratchpads and todo lists saved directly with your workspace.
+  - **File Explorer Cards:** Browse directory trees, view code syntax, preview images, and inspect spreadsheet tables.
+  - **Port Monitors:** Live status tracking for active local network ports.
 
-4. **Automated Process Execution:**
-   - Define custom startup commands per panel (e.g., `npm run dev`, `docker compose up`, `python agent.py`).
-   - Toggle auto-execution per terminal on demand.
+### 4. Mobile Companion & Remote Gateway
+- Pair your smartphone or tablet with your desktop over local Wi-Fi via a secure QR code or local PIN.
+- Zero app installation required: works in any modern mobile browser.
+- **Remote AI Prompt Bar:** Trigger prompts directly into running AI coding agents (Claude, Gemini, Antigravity, Aider, OpenCode) from your phone while away from your desk.
+- **Touch-Friendly Terminal Monitor:** Smooth touch-swipe scrolling and clean ANSI terminal log viewing on mobile displays.
+- Quick action controls (Enter, Ctrl+C, Clear) and real-time CPU/RAM telemetry right on your mobile screen.
 
-5. **Real-Time Telemetry:**
-   - Live **CPU %** and **RAM (MB)** usage tracking per terminal process powered by `pidusage`.
-   - Aggregated workspace and system load monitoring displayed in the title bar.
+### 5. Command Palette (`Ctrl + P` / `Ctrl + K`)
+- Fast keyboard-centric navigation across your entire environment.
+- Switch workspaces instantly, toggle between Grid and Canvas modes, spawn cards, trigger settings, or search available commands.
 
-6. **Quick Action Controls:**
-   - **Restart:** Instantly restart the assigned process.
-   - **Clear:** Flush terminal scrollback buffer.
-   - **Maximize / Restore:** Expand any terminal panel to full view for inspecting deep stack traces or long build logs, then return to the grid with one click.
-   - **Copy Path:** Copy the panel's active directory to clipboard.
+### 6. Integrated File Explorer & Excel Viewer
+- Browse project files with smart file icons and hidden file filtering.
+- Full spreadsheet preview support (`.xlsx`, `.xls`, `.csv`) with tabulated sheet viewer, search filter, and "Open in System App" shortcut.
+- Embedded preview for Markdown, JSON, source code, and images.
 
-7. **Clean Developer Interface:**
-   - Dark graphite and zinc theme (`#090a0c`) designed to reduce visual fatigue.
-   - Subtle emerald accents (`#10b981`) and developer typography (`Inter` and `JetBrains Mono`).
+### 7. Real-Time Telemetry & Process Monitoring
+- Live **CPU %** and **RAM (MB)** telemetry per terminal process powered by `pidusage`.
+- Aggregated workspace and system load monitoring displayed dynamically in the title bar.
 
-8. **Infinite Free-form Canvas Mode:**
-   - Toggle between classical structured Grid and free-form Infinite Board (`Ctrl + Shift + F`).
-   - Pan freely across the canvas, zoom in and out (30% to 220%) with mouse wheel.
-   - Drag and resize terminal console nodes and embedded web browser cards side by side.
-   - Live embedded browsers allow real-time local web development preview (`http://localhost:5173`, etc.) with refresh and navigation controls directly on the canvas.
+### 8. Built-in Silent Auto-Updater
+- Integrated with GitHub Releases via `electron-updater`.
+- Checks for updates automatically and notifies you with a non-intrusive toast to download and apply the latest version when ready.
 
-9. **Keyboard Shortcuts System:**
-   - Control workspaces, layout toggling, restarts, and terminal text without leaving the keyboard.
-   - Press `?` or click the shortcuts button to inspect the interactive shortcuts cheatsheet modal.
+### 9. Keyboard Shortcuts System
+- Complete keyboard control for workspace navigation, layout toggling, process restarts, and terminal buffers.
+- Press `?` or click the shortcuts icon in the header to view the full interactive hotkey reference.
 
 ---
 
@@ -117,7 +126,7 @@ To run or build the project from source:
 - [Node.js](https://nodejs.org/) (version 20+ recommended)
 - `npm` or `pnpm`
 - C++ build tools for compiling `node-pty`:
-  - **Linux (Ubuntu/Debian):** `sudo apt install build-essential python3`
+  - **Linux (Ubuntu/Debian/Fedora):** `sudo apt install build-essential python3` / `sudo dnf groupinstall "Development Tools"`
   - **Windows:** Visual Studio C++ build tools
 
 ### Setup
@@ -168,30 +177,51 @@ To run or build the project from source:
 neo-workspace/
 ├── .github/
 │   └── workflows/
-│       └── release.yml        # Multi-platform CI/CD for Windows & Linux
-├── build/                     # App packaging icons (.png, .ico)
-├── resources/                 # Vector design assets (SVG)
+│       └── release.yml             # Multi-platform CI/CD for Windows & Linux
+├── build/                          # App packaging icons (.png, .ico)
+├── resources/                      # Vector design assets (SVG)
 ├── src/
 │   ├── main/
-│   │   ├── index.ts           # Electron main process & window management
-│   │   ├── pty-manager.ts     # Native PTY orchestration (node-pty)
-│   │   ├── store.ts           # Workspace JSON persistence
-│   │   └── telemetry.ts       # Process telemetry monitor (pidusage)
+│   │   ├── index.ts                # Electron main process & window management
+│   │   ├── pty-manager.ts          # Native PTY orchestration (node-pty)
+│   │   ├── remote-gateway.ts       # Mobile Companion HTTP & WebSocket server
+│   │   ├── store.ts                # Workspace JSON persistence
+│   │   ├── telemetry.ts            # Process telemetry monitor (pidusage)
+│   │   └── updater.ts              # In-app GitHub auto-updater service
 │   ├── preload/
-│   │   ├── index.ts           # Secure ContextBridge IPC layer
-│   │   └── index.d.ts         # TypeScript definitions for window.neoAPI
+│   │   ├── index.ts                # Secure ContextBridge IPC layer
+│   │   └── index.d.ts              # TypeScript definitions for window.neoAPI
 │   └── renderer/
-│       ├── index.html         # HTML root with developer font stacks
+│       ├── index.html              # HTML root with developer font stacks
 │       └── src/
-│           ├── main.tsx       # React entry point
-│           ├── App.tsx        # Root component and state synchronization
-│           ├── types.ts       # Shared TypeScript schemas
-│           ├── components/    # UI components (TerminalGrid, Launchpad, etc.)
+│           ├── main.tsx            # React entry point
+│           ├── App.tsx             # Root component and state synchronization
+│           ├── types.ts            # Shared TypeScript schemas
+│           ├── components/         # UI components
+│           │   ├── BrowserCard.tsx         # Embedded browser card for Canvas
+│           │   ├── CanvasWorkspace.tsx     # Infinite whiteboard workspace
+│           │   ├── CommandPaletteModal.tsx # Command palette (Ctrl+K / Ctrl+P)
+│           │   ├── FileExplorerCard.tsx    # File explorer & spreadsheet viewer
+│           │   ├── Launchpad.tsx           # Sidebar workspace switcher
+│           │   ├── MobileConnectModal.tsx  # QR code pairing modal
+│           │   ├── NoteCard.tsx            # Sticky notes card
+│           │   ├── PortMonitorCard.tsx     # Active network port monitor
+│           │   ├── SettingsModal.tsx       # App and gateway preferences
+│           │   ├── ShortcutsModal.tsx      # Hotkeys cheat-sheet
+│           │   ├── StatusBar.tsx           # Telemetry and gateway indicator
+│           │   ├── TerminalCanvasCard.tsx  # Floating terminal node on Canvas
+│           │   ├── TerminalGrid.tsx        # Structured multi-panel terminal grid
+│           │   ├── TerminalPanel.tsx       # Grid terminal panel container
+│           │   ├── TitleBar.tsx            # Title bar with system metrics & quick tools
+│           │   ├── UpdateNotificationToast.tsx # Silent updater alert
+│           │   ├── WorkspaceHeader.tsx     # Workspace controls & breadcrumbs
+│           │   ├── WorkspaceModal.tsx      # Workspace editor modal
+│           │   └── XTermView.tsx           # xterm.js instance with search & web-links
 │           └── styles/
-│               └── index.css  # Tailwind CSS definitions
-├── electron.vite.config.ts    # Bundling configuration (Electron + Vite)
-├── electron-builder.json      # Cross-platform installer specifications
-├── LICENSE                    # MIT Open Source License
+│               └── index.css       # Tailwind CSS definitions
+├── electron.vite.config.ts         # Bundling configuration (Electron + Vite)
+├── electron-builder.json           # Cross-platform installer specifications
+├── LICENSE                         # MIT Open Source License
 └── package.json
 ```
 

@@ -2,6 +2,8 @@ import http from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
 import { networkInterfaces } from 'os'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import QRCode from 'qrcode'
 import { PtyManager } from './pty-manager'
 import { StoreManager } from './store'
@@ -34,6 +36,39 @@ export class RemoteGateway {
   private activeWorkspaceId = ''
   private onStatusChangeCallbacks = new Set<(status: RemoteGatewayStatus) => void>()
   private onWorkspaceSelectCallback?: (workspaceId: string) => void
+
+  private cachedXtermJs: string | null = null
+  private cachedXtermCss: string | null = null
+  private cachedFitAddonJs: string | null = null
+
+  private getAssetContent(type: 'xterm.js' | 'xterm.css' | 'addon-fit.js'): string {
+    try {
+      if (type === 'xterm.js') {
+        if (!this.cachedXtermJs) {
+          const p = require.resolve('@xterm/xterm/lib/xterm.js')
+          this.cachedXtermJs = fs.readFileSync(p, 'utf8')
+        }
+        return this.cachedXtermJs
+      }
+      if (type === 'xterm.css') {
+        if (!this.cachedXtermCss) {
+          const p = require.resolve('@xterm/xterm/css/xterm.css')
+          this.cachedXtermCss = fs.readFileSync(p, 'utf8')
+        }
+        return this.cachedXtermCss
+      }
+      if (type === 'addon-fit.js') {
+        if (!this.cachedFitAddonJs) {
+          const p = require.resolve('@xterm/addon-fit/lib/addon-fit.js')
+          this.cachedFitAddonJs = fs.readFileSync(p, 'utf8')
+        }
+        return this.cachedFitAddonJs
+      }
+    } catch (err) {
+      console.error(`[RemoteGateway] Failed to load asset ${type}:`, err)
+    }
+    return ''
+  }
 
   constructor(
     private ptyManager: PtyManager,
@@ -318,8 +353,18 @@ export class RemoteGateway {
       }
       case 'agent:prompt': {
         if (msg.panelId && typeof msg.prompt === 'string') {
-          const cmd = msg.prompt.endsWith('\n') ? msg.prompt : msg.prompt + '\n'
-          this.ptyManager.write(msg.panelId, cmd)
+          // Normalize prompt: strip trailing newlines and append \r (Carriage Return)
+          // Linux PTYs treat \r as Enter keypress (ICRNL), preventing staircase newline artifacts
+          const cleanPrompt = msg.prompt.replace(/[\r\n]+$/, '')
+          this.ptyManager.write(msg.panelId, cleanPrompt + '\r')
+        }
+        break
+      }
+      case 'pty:resize': {
+        if (msg.panelId && typeof msg.cols === 'number' && typeof msg.rows === 'number') {
+          if (msg.cols >= 15 && msg.rows >= 5) {
+            this.ptyManager.resize(msg.panelId, msg.cols, msg.rows)
+          }
         }
         break
       }
@@ -370,6 +415,51 @@ export class RemoteGateway {
           ]
         })
       )
+      return
+    }
+
+    if (url.pathname === '/xterm.css') {
+      const content = this.getAssetContent('xterm.css')
+      if (content) {
+        res.writeHead(200, {
+          'Content-Type': 'text/css; charset=utf-8',
+          'Cache-Control': 'public, max-age=86400'
+        })
+        res.end(content)
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' })
+        res.end('Not found')
+      }
+      return
+    }
+
+    if (url.pathname === '/xterm.js') {
+      const content = this.getAssetContent('xterm.js')
+      if (content) {
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'public, max-age=86400'
+        })
+        res.end(content)
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' })
+        res.end('Not found')
+      }
+      return
+    }
+
+    if (url.pathname === '/addon-fit.js') {
+      const content = this.getAssetContent('addon-fit.js')
+      if (content) {
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'public, max-age=86400'
+        })
+        res.end(content)
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' })
+        res.end('Not found')
+      }
       return
     }
 
@@ -427,6 +517,16 @@ export class RemoteGateway {
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>NeoWork Mobile</title>
   <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/xterm.css">
+  <script src="/xterm.js"></script>
+  <script src="/addon-fit.js"></script>
+  <script>
+    if (typeof Terminal === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.min.js"><\\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.min.js"><\\/script>');
+    }
+  </script>
   <style>
     :root {
       --bg: #090a0d;
@@ -438,8 +538,7 @@ export class RemoteGateway {
       --emerald-glow: rgba(16, 185, 129, 0.2);
       --cyan: #38bdf8;
       --rose: #f43f5e;
-      --header-h: 56px;
-      --input-h: 68px;
+      --header-h: 52px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body {
@@ -453,13 +552,13 @@ export class RemoteGateway {
     }
     header {
       height: var(--header-h);
-      padding: 0 16px;
+      padding: 0 14px;
       background: #0d0f14;
       border-bottom: 1px solid var(--card-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      shrink: 0;
+      flex-shrink: 0;
       z-index: 10;
     }
     .brand {
@@ -512,20 +611,21 @@ export class RemoteGateway {
       background: var(--rose);
       box-shadow: none;
     }
+
     /* Workspaces Bar */
     .workspace-bar {
-      padding: 8px 12px;
+      padding: 7px 12px;
       background: #090b0e;
       border-bottom: 1px solid #1a1e27;
       display: flex;
-      gap: 8px;
+      gap: 7px;
       overflow-x: auto;
       scrollbar-width: none;
-      shrink: 0;
+      flex-shrink: 0;
     }
     .workspace-bar::-webkit-scrollbar { display: none; }
     .ws-pill {
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 6px;
       background: #12151b;
       border: 1px solid #272c38;
@@ -542,6 +642,7 @@ export class RemoteGateway {
       color: #fff;
       font-weight: 600;
     }
+
     /* Panels / Terminals Bar */
     .panels-bar {
       padding: 6px 12px;
@@ -551,11 +652,11 @@ export class RemoteGateway {
       gap: 6px;
       overflow-x: auto;
       scrollbar-width: none;
-      shrink: 0;
+      flex-shrink: 0;
     }
     .panels-bar::-webkit-scrollbar { display: none; }
     .panel-tab {
-      padding: 5px 12px;
+      padding: 5px 11px;
       border-radius: 5px;
       background: transparent;
       border: 1px solid transparent;
@@ -574,58 +675,124 @@ export class RemoteGateway {
       color: var(--cyan);
       font-weight: 600;
     }
-    /* Terminal Console Viewport */
+
+    /* Terminal Console Viewport with Real XTerm */
     .terminal-container {
       flex: 1;
       min-height: 0;
       position: relative;
-      background: #050608;
+      background: #090a0d;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    .terminal-output {
+    #terminalHost {
       flex: 1;
-      padding: 12px;
-      overflow-y: auto;
-      font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      line-height: 1.45;
-      color: #e2e8f0;
-      white-space: pre-wrap;
-      word-break: break-all;
-      user-select: text;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      padding: 4px 6px;
+      box-sizing: border-box;
+      touch-action: none;
     }
-    /* Quick Actions Overlay Bar */
+    .terminal-panel-wrapper {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+    }
+    .xterm {
+      height: 100%;
+      width: 100%;
+      padding: 0;
+      touch-action: none;
+    }
+    .xterm, .xterm-viewport {
+      background-color: #090a0d !important;
+      -webkit-overflow-scrolling: touch;
+    }
+    .xterm-viewport::-webkit-scrollbar {
+      width: 4px;
+    }
+    .xterm-viewport::-webkit-scrollbar-thumb {
+      background: #272c38;
+      border-radius: 4px;
+    }
+
+    .scroll-bottom-btn {
+      position: absolute;
+      bottom: 48px;
+      right: 14px;
+      background: rgba(24, 29, 38, 0.95);
+      backdrop-filter: blur(8px);
+      color: var(--cyan);
+      border: 1px solid #313848;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+      cursor: pointer;
+      z-index: 25;
+      user-select: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .scroll-bottom-btn:active {
+      transform: scale(0.95);
+      background: #222938;
+    }
+
+    /* Quick Actions Bar */
     .quick-actions {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 4px 10px;
+      padding: 5px 10px;
       background: #0d0f14;
       border-top: 1px solid #1a1e27;
       font-family: monospace;
       font-size: 11px;
+      gap: 6px;
+      flex-shrink: 0;
     }
+    .quick-keys-scroll {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      flex: 1;
+    }
+    .quick-keys-scroll::-webkit-scrollbar { display: none; }
     .quick-btn {
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 5px 9px;
+      border-radius: 5px;
       background: #181d26;
       border: 1px solid #282f3d;
       color: #cbd5e1;
-      font-size: 11px;
+      font-size: 11.5px;
+      font-family: monospace;
       cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
     }
     .quick-btn:active { background: #222938; }
-    .quick-btn.danger { color: #fb7185; }
+    .quick-btn.danger { color: #fb7185; border-color: rgba(244, 63, 94, 0.4); }
+
     /* Bottom Prompt Input Bar */
     .prompt-bar {
-      padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+      padding: 8px 12px max(10px, env(safe-area-inset-bottom));
       background: #0f1218;
       border-top: 1px solid var(--card-border);
       display: flex;
       align-items: center;
       gap: 8px;
-      shrink: 0;
+      flex-shrink: 0;
     }
     .prompt-input {
       flex: 1;
@@ -656,6 +823,7 @@ export class RemoteGateway {
       cursor: pointer;
       font-weight: 900;
       box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+      flex-shrink: 0;
       transition: transform 0.1s;
     }
     .send-btn:active { transform: scale(0.95); }
@@ -665,6 +833,7 @@ export class RemoteGateway {
       color: var(--text-muted);
       font-family: monospace;
       font-size: 12px;
+      line-height: 1.6;
     }
   </style>
 </head>
@@ -687,19 +856,29 @@ export class RemoteGateway {
   <!-- Panels Tabs -->
   <div class="panels-bar" id="panelsBar"></div>
 
-  <!-- Terminal Output -->
-  <div class="terminal-container">
-    <div class="terminal-output" id="terminalOutput"></div>
+  <!-- Terminal Output (Real XTerm Engine) -->
+  <div class="terminal-container" id="terminalContainer">
+    <div id="terminalEmptyState" class="empty-state" style="display:none;"></div>
+    <div id="terminalHost"></div>
+    <button type="button" id="scrollToBottomBtn" class="scroll-bottom-btn" onclick="scrollToBottom()" style="display:none;" title="Ir al final">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+      <span>Al final</span>
+    </button>
     <div class="quick-actions">
-      <div style="display:flex; gap:6px;">
-        <button class="quick-btn danger" onclick="sendData('\x03')">Ctrl+C</button>
-        <button class="quick-btn" onclick="sendData('\r')">Enter ↵</button>
-        <button class="quick-btn" onclick="sendData('\x1b[A')">↑</button>
-        <button class="quick-btn" onclick="sendData('\x1b[B')">↓</button>
-        <button class="quick-btn" onclick="sendData('\t')">Tab ⇥</button>
+      <div class="quick-keys-scroll">
+        <button type="button" class="quick-btn danger" onclick="sendData('\x03')" title="Interrupt">Ctrl+C</button>
+        <button type="button" class="quick-btn" onclick="sendData('\x1b')" title="Escape">Esc</button>
+        <button type="button" class="quick-btn" onclick="sendData('\t')" title="Tab ⇥">Tab ⇥</button>
+        <button type="button" class="quick-btn" onclick="sendData('\x1b[A')" title="History Up">↑</button>
+        <button type="button" class="quick-btn" onclick="sendData('\x1b[B')" title="History Down">↓</button>
+        <button type="button" class="quick-btn" onclick="sendData('\r')" title="Enter">Enter ↵</button>
       </div>
-      <div>
-        <button class="quick-btn" onclick="clearTerminal()">Limpiar</button>
+      <div style="display:flex; gap:5px; flex-shrink:0;">
+        <button type="button" class="quick-btn" onclick="adjustFontSize(-1)" title="Disminuir fuente">A-</button>
+        <button type="button" class="quick-btn" onclick="adjustFontSize(1)" title="Aumentar fuente">A+</button>
+        <button type="button" class="quick-btn" onclick="clearTerminal()" title="Limpiar pantalla">Limpiar</button>
       </div>
     </div>
   </div>
@@ -731,9 +910,11 @@ export class RemoteGateway {
     let activeWorkspaceId = '';
     let activePanelId = '';
     let terminalBuffers = {};
-    let autoScroll = true;
+    const terminals = new Map(); // panelId -> { term, fitAddon, containerEl }
+    let currentFontSize = 11.5;
 
-    const termOutput = document.getElementById('terminalOutput');
+    const terminalHost = document.getElementById('terminalHost');
+    const terminalEmptyState = document.getElementById('terminalEmptyState');
     const promptInput = document.getElementById('promptInput');
     const statusPill = document.getElementById('statusPill');
     const statusText = document.getElementById('statusText');
@@ -771,6 +952,271 @@ export class RemoteGateway {
       };
     }
 
+    function updateScrollToBottomButton() {
+      const scrollBtn = document.getElementById('scrollToBottomBtn');
+      if (!scrollBtn || !activePanelId) return;
+      const item = terminals.get(activePanelId);
+      if (!item || !item.term) {
+        scrollBtn.style.display = 'none';
+        return;
+      }
+      try {
+        const buffer = item.term.buffer.active;
+        if (buffer && buffer.baseY > 0 && buffer.viewportY < buffer.baseY - 1) {
+          scrollBtn.style.display = 'flex';
+        } else {
+          scrollBtn.style.display = 'none';
+        }
+      } catch (e) {
+        scrollBtn.style.display = 'none';
+      }
+    }
+
+    function scrollToBottom() {
+      if (!activePanelId) return;
+      const item = terminals.get(activePanelId);
+      if (item && item.term) {
+        item.term.scrollToBottom();
+        updateScrollToBottomButton();
+      }
+    }
+
+    function attachTouchScroll(wrapper, term) {
+      let startY = 0;
+      let startX = 0;
+      let lastY = 0;
+      let accumulatedDeltaY = 0;
+      let isDragging = false;
+      let lastMoveTime = 0;
+      let velocityY = 0;
+      let momentumAnimId = null;
+      let initialPinchDist = null;
+      const PIXELS_PER_LINE = 16;
+
+      function stopMomentum() {
+        if (momentumAnimId) {
+          cancelAnimationFrame(momentumAnimId);
+          momentumAnimId = null;
+        }
+      }
+
+      wrapper.addEventListener('touchstart', (e) => {
+        stopMomentum();
+        if (e.touches.length === 1) {
+          startY = e.touches[0].clientY;
+          startX = e.touches[0].clientX;
+          lastY = startY;
+          lastMoveTime = Date.now();
+          accumulatedDeltaY = 0;
+          isDragging = false;
+          velocityY = 0;
+          initialPinchDist = null;
+        } else if (e.touches.length === 2) {
+          const p1 = e.touches[0];
+          const p2 = e.touches[1];
+          initialPinchDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+          isDragging = false;
+        }
+      }, { passive: false });
+
+      wrapper.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && initialPinchDist !== null) {
+          e.preventDefault();
+          const p1 = e.touches[0];
+          const p2 = e.touches[1];
+          const currentDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+          const diff = currentDist - initialPinchDist;
+          if (Math.abs(diff) > 35) {
+            adjustFontSize(diff > 0 ? 1 : -1);
+            initialPinchDist = currentDist;
+          }
+          return;
+        }
+
+        if (e.touches.length !== 1) return;
+
+        const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+        const totalDy = currentY - startY;
+        const totalDx = currentX - startX;
+
+        if (!isDragging) {
+          if (Math.abs(totalDy) > 6 && Math.abs(totalDy) > Math.abs(totalDx)) {
+            isDragging = true;
+          } else if (Math.abs(totalDx) > 8) {
+            return;
+          }
+        }
+
+        if (isDragging) {
+          e.preventDefault();
+          const now = Date.now();
+          const dt = Math.max(1, now - lastMoveTime);
+          const dy = lastY - currentY; // positive when swiping up (scroll down to newer lines)
+
+          const instantVelocity = dy / dt;
+          velocityY = velocityY * 0.4 + instantVelocity * 0.6;
+          lastMoveTime = now;
+          lastY = currentY;
+
+          accumulatedDeltaY += dy;
+          const lines = Math.trunc(accumulatedDeltaY / PIXELS_PER_LINE);
+          if (lines !== 0) {
+            term.scrollLines(lines);
+            accumulatedDeltaY -= lines * PIXELS_PER_LINE;
+            updateScrollToBottomButton();
+          }
+        }
+      }, { passive: false });
+
+      wrapper.addEventListener('touchend', (e) => {
+        if (e.touches.length === 0) {
+          initialPinchDist = null;
+          const now = Date.now();
+          if (isDragging) {
+            if (now - lastMoveTime < 90 && Math.abs(velocityY) > 0.12) {
+              let currentVelocity = velocityY * 16;
+              const decay = 0.93;
+
+              function stepMomentum() {
+                if (Math.abs(currentVelocity) < 0.25) {
+                  momentumAnimId = null;
+                  updateScrollToBottomButton();
+                  return;
+                }
+                accumulatedDeltaY += currentVelocity;
+                const lines = Math.trunc(accumulatedDeltaY / PIXELS_PER_LINE);
+                if (lines !== 0) {
+                  term.scrollLines(lines);
+                  accumulatedDeltaY -= lines * PIXELS_PER_LINE;
+                  updateScrollToBottomButton();
+                }
+                currentVelocity *= decay;
+                momentumAnimId = requestAnimationFrame(stepMomentum);
+              }
+
+              momentumAnimId = requestAnimationFrame(stepMomentum);
+            } else {
+              updateScrollToBottomButton();
+            }
+          } else {
+            term.focus();
+          }
+        }
+      }, { passive: false });
+
+      wrapper.addEventListener('touchcancel', () => {
+        stopMomentum();
+        isDragging = false;
+        initialPinchDist = null;
+      });
+    }
+
+    function getOrCreateTerminal(panelId) {
+      if (terminals.has(panelId)) {
+        return terminals.get(panelId);
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'terminal-panel-wrapper';
+      wrapper.id = 'panel-wrap-' + panelId;
+      terminalHost.appendChild(wrapper);
+
+      let fitAddon = null;
+      try {
+        const FitClass = window.FitAddon?.FitAddon || window.FitAddon;
+        if (FitClass) {
+          fitAddon = new FitClass();
+        }
+      } catch (err) {
+        console.warn('Could not instantiate FitAddon:', err);
+      }
+
+      const term = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'block',
+        fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace",
+        fontSize: currentFontSize,
+        lineHeight: 1.25,
+        scrollback: 3000,
+        convertEol: true,
+        theme: {
+          background: '#090a0d',
+          foreground: '#e2e8f0',
+          cursor: '#10b981',
+          cursorAccent: '#090a0d',
+          selectionBackground: 'rgba(56, 189, 248, 0.3)',
+          black: '#181a1f',
+          red: '#f43f5e',
+          green: '#10b981',
+          yellow: '#f59e0b',
+          blue: '#38bdf8',
+          magenta: '#c084fc',
+          cyan: '#2dd4bf',
+          white: '#f1f5f9',
+          brightBlack: '#71717a',
+          brightRed: '#fb7185',
+          brightGreen: '#34d399',
+          brightYellow: '#fbbf24',
+          brightBlue: '#60a5fa',
+          brightMagenta: '#d8b4fe',
+          brightCyan: '#5eead4',
+          brightWhite: '#ffffff'
+        }
+      });
+
+      if (fitAddon) {
+        term.loadAddon(fitAddon);
+      }
+
+      term.open(wrapper);
+      attachTouchScroll(wrapper, term);
+      try {
+        term.onScroll(() => updateScrollToBottomButton());
+      } catch (e) {}
+
+      term.onData((data) => {
+        sendData(data);
+      });
+
+      if (terminalBuffers[panelId]) {
+        term.write(terminalBuffers[panelId]);
+      }
+
+      const managed = { term, fitAddon, containerEl: wrapper };
+      terminals.set(panelId, managed);
+      return managed;
+    }
+
+    function showTerminal(panelId) {
+      if (!panelId) {
+        terminalHost.style.display = 'none';
+        terminalEmptyState.style.display = 'block';
+        terminalEmptyState.innerHTML = 'Sin consolas activas en este espacio de trabajo.<br><span style="color:#52525b;font-size:11px;">Crea una terminal desde el PC para interactuar.</span>';
+        updateScrollToBottomButton();
+        return;
+      }
+
+      terminalEmptyState.style.display = 'none';
+      terminalHost.style.display = 'block';
+
+      const item = getOrCreateTerminal(panelId);
+
+      for (const [id, t] of terminals.entries()) {
+        t.containerEl.style.display = id === panelId ? 'block' : 'none';
+      }
+
+      setTimeout(() => {
+        if (item && item.fitAddon) {
+          try {
+            item.fitAddon.fit();
+            item.term.scrollToBottom();
+            updateScrollToBottomButton();
+          } catch (e) {}
+        }
+      }, 50);
+    }
+
     function handleMessage(msg) {
       switch (msg.type) {
         case 'init': {
@@ -779,7 +1225,7 @@ export class RemoteGateway {
           terminalBuffers = msg.buffers || {};
           renderWorkspaces();
           renderPanels();
-          renderActiveTerminal();
+          showTerminal(activePanelId);
           break;
         }
         case 'workspace:active-changed': {
@@ -787,7 +1233,7 @@ export class RemoteGateway {
             activeWorkspaceId = msg.activeWorkspaceId;
             renderWorkspaces();
             renderPanels();
-            renderActiveTerminal();
+            showTerminal(activePanelId);
           }
           break;
         }
@@ -798,16 +1244,29 @@ export class RemoteGateway {
           if (terminalBuffers[panelId].length > 150000) {
             terminalBuffers[panelId] = terminalBuffers[panelId].slice(-100000);
           }
-          if (panelId === activePanelId) {
-            appendTerminalOutput(data);
+          const item = terminals.get(panelId);
+          if (item) {
+            item.term.write(data);
+            if (panelId === activePanelId) {
+              updateScrollToBottomButton();
+            }
+          } else if (panelId === activePanelId) {
+            showTerminal(panelId);
           }
           break;
         }
         case 'terminal:buffer': {
           const { panelId, buffer } = msg;
           terminalBuffers[panelId] = buffer || '';
-          if (panelId === activePanelId) {
-            renderActiveTerminal();
+          const item = terminals.get(panelId);
+          if (item) {
+            item.term.reset();
+            if (buffer) {
+              item.term.write(buffer);
+            }
+            if (panelId === activePanelId) {
+              updateScrollToBottomButton();
+            }
           }
           break;
         }
@@ -824,7 +1283,7 @@ export class RemoteGateway {
           activeWorkspaceId = w.id;
           renderWorkspaces();
           renderPanels();
-          renderActiveTerminal();
+          showTerminal(activePanelId);
           if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'workspace:select', workspaceId: w.id }));
           }
@@ -866,7 +1325,7 @@ export class RemoteGateway {
         btn.onclick = () => {
           activePanelId = p.id;
           renderPanels();
-          renderActiveTerminal();
+          showTerminal(activePanelId);
           if (socket && socket.readyState === WebSocket.OPEN && !terminalBuffers[p.id]) {
             socket.send(JSON.stringify({ type: 'terminal:request-buffer', panelId: p.id }));
           }
@@ -875,65 +1334,25 @@ export class RemoteGateway {
       });
     }
 
-    function ansiToHtml(text) {
-      let clean = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const colors = {
-        '30': '#181a1f', '31': '#f43f5e', '32': '#10b981', '33': '#f59e0b',
-        '34': '#38bdf8', '35': '#c084fc', '36': '#2dd4bf', '37': '#f1f5f9',
-        '90': '#71717a', '91': '#fb7185', '92': '#34d399', '93': '#fbbf24',
-        '94': '#60a5fa', '95': '#d8b4fe', '96': '#5eead4', '97': '#ffffff'
-      };
-      clean = clean.replace(/\\x1b\\[(\\d+(?:;\\d+)*)m/g, (match, codes) => {
-        const parts = codes.split(';');
-        for (const code of parts) {
-          if (code === '0') return '</span>';
-          if (colors[code]) return \`<span style="color:\${colors[code]}">\`;
-          if (code === '1') return '<span style="font-weight:bold">';
+    function adjustFontSize(delta) {
+      const newSize = Math.min(18, Math.max(9, currentFontSize + delta));
+      if (newSize === currentFontSize) return;
+      currentFontSize = newSize;
+      for (const item of terminals.values()) {
+        item.term.options.fontSize = currentFontSize;
+        if (item.fitAddon) {
+          try { item.fitAddon.fit(); } catch (e) {}
         }
-        return '';
-      });
-      return clean;
-    }
-
-    function renderActiveTerminal() {
-      if (!activePanelId) {
-        termOutput.innerHTML = '<div class="empty-state">Selecciona una consola para interactuar.</div>';
-        return;
-      }
-      const raw = terminalBuffers[activePanelId] || '';
-      if (!raw) {
-        termOutput.innerHTML = '<div class="empty-state">Consola iniciada. Esperando comandos o salida del agente...</div>';
-      } else {
-        termOutput.innerHTML = ansiToHtml(raw);
-      }
-      scrollToBottom();
-    }
-
-    function appendTerminalOutput(chunk) {
-      if (termOutput.children.length === 1 && termOutput.children[0].classList.contains('empty-state')) {
-        termOutput.innerHTML = '';
-      }
-      const span = document.createElement('span');
-      span.innerHTML = ansiToHtml(chunk);
-      termOutput.appendChild(span);
-      if (autoScroll) {
-        scrollToBottom();
       }
     }
-
-    function scrollToBottom() {
-      termOutput.scrollTop = termOutput.scrollHeight;
-    }
-
-    termOutput.addEventListener('scroll', () => {
-      const atBottom = termOutput.scrollHeight - termOutput.scrollTop - termOutput.clientHeight < 40;
-      autoScroll = atBottom;
-    });
 
     function clearTerminal() {
       if (activePanelId) {
         terminalBuffers[activePanelId] = '';
-        renderActiveTerminal();
+        const item = terminals.get(activePanelId);
+        if (item) {
+          item.term.clear();
+        }
       }
     }
 
@@ -958,12 +1377,20 @@ export class RemoteGateway {
       }));
 
       if ('vibrate' in navigator) {
-        navigator.vibrate(20);
+        try { navigator.vibrate(20); } catch (err) {}
       }
 
       promptInput.value = '';
-      promptInput.focus();
     }
+
+    window.addEventListener('resize', () => {
+      if (activePanelId && terminals.has(activePanelId)) {
+        const item = terminals.get(activePanelId);
+        if (item && item.fitAddon) {
+          try { item.fitAddon.fit(); } catch (e) {}
+        }
+      }
+    });
 
     connectWs();
   </script>

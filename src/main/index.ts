@@ -37,9 +37,11 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
-  mainWindow.webContents.on('console-message', (event: any) => {
-    if (event?.level >= 2 && event?.message) {
-      console.warn(`[RENDERER warn/err] ${event.message}`)
+  mainWindow.webContents.on('console-message', (event: any, level?: any, message?: any) => {
+    const lvl = typeof level === 'number' ? level : (event?.level ?? 0)
+    const msg = typeof message === 'string' ? message : (event?.message ?? '')
+    if (lvl >= 2 || (msg && /error|uncaught|warning|fail/i.test(msg))) {
+      console.warn(`[RENDERER console] [level:${lvl}] ${msg}`)
     }
   })
 

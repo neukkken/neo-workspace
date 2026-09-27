@@ -41,8 +41,13 @@ To execute this skill successfully, the agent must strictly follow this sequenti
    - Read the `package.json` file located at the project root.
    - Extract the current `"version"` field.
    - Calculate the next version based on the classification and overwrite the `"version"` field in `package.json` with the new formatted string.
-4. **Consolidate in Git:** Execute a single commit command combining the original changes, the version update, and the generated message.
+4. **Consolidate in Git (Local Only):** Execute a single commit command combining the original changes, the version update, and the generated message.
    *Expected Command:* `git commit -am "<prefix>: <short description of changes in imperative mood> (v<new_version>)"`
+
+## Strict Rule: Never Push Without Explicit Approval
+- **NO REMOTE PUSH BY DEFAULT**: NEVER run `git push`, do NOT push tags (`git push origin <tag>`), and do NOT trigger remote releases on GitHub or any remote repository unless the user explicitly and verbatim commands it in their prompt (e.g., "sube a github", "haz push a master", "sube la nueva version a github").
+- All commits and version bumps created by this skill must remain **LOCAL** on the machine so the user can test thoroughly before uploading.
+- Pushing to remote without explicit approval is strictly forbidden.
 
 ## Expected Output Format (Internal Agent Reasoning)
 If the agent relies on an internal JSON structured call to map these fields, it must resolve to the following structure before committing:

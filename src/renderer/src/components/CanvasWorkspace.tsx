@@ -14,7 +14,7 @@ import {
   MapPin,
   X
 } from 'lucide-react'
-import { CanvasCard, CanvasConnector, ProcessMetrics, Workspace } from '../types'
+import { CanvasCard, CanvasConnector, ProcessMetrics, Workspace, PanelConfig } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
 import { NoteCard } from './NoteCard'
@@ -60,14 +60,74 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const [connectStartId, setConnectStartId] = useState<string | null>(null)
   const [showMinimap, setShowMinimap] = useState(true)
 
-  // Synchronize any panels that exist in the workspace with cards (updates, additions, deletions)
-  useEffect(() => {
-    setCards((prev) => {
-      const activePanelIds = new Set(workspace.panels.map((p) => p.id))
-      // 1. Filter out deleted panels
-      const kept = prev.filter((c) => c.kind !== 'terminal' || activePanelIds.has(c.id))
+  // Ref to track last saved cards to prevent circular loops
+  const lastSavedCardsJsonRef = useRef<string>(JSON.stringify(cards))
 
-      // 2. Update existing terminal cards with latest title, cwd, command, autoStart
+  // Synchronize when workspace.canvasCards changes externally (e.g. from CommandPalette)
+  useEffect(() => {
+    if (workspace.canvasCards && workspace.canvasCards.length > 0) {
+      const incomingJson = JSON.stringify(workspace.canvasCards)
+      if (incomingJson !== lastSavedCardsJsonRef.current) {
+        lastSavedCardsJsonRef.current = incomingJson
+        setCards(workspace.canvasCards)
+      }
+    }
+  }, [workspace.canvasCards])
+
+  // Synchronize external changes to canvasConnectors
+  useEffect(() => {
+    if (workspace.canvasConnectors) {
+      setConnectors((prev) => {
+        if (
+          prev.length === workspace.canvasConnectors!.length &&
+          prev.every((c, idx) => c.id === workspace.canvasConnectors![idx].id)
+        ) {
+          return prev
+        }
+        return workspace.canvasConnectors!
+      })
+    }
+  }, [workspace.canvasConnectors])
+
+  // Track previous panels to detect actual modifications/additions/deletions from WorkspaceModal
+  const prevPanelsRef = useRef<PanelConfig[]>(workspace.panels)
+
+  useEffect(() => {
+    const prevPanels = prevPanelsRef.current
+    prevPanelsRef.current = workspace.panels
+
+    // Check if workspace.panels actually changed
+    const panelsUnchanged =
+      prevPanels.length === workspace.panels.length &&
+      prevPanels.every((p, idx) => {
+        const current = workspace.panels[idx]
+        return (
+          current &&
+          p.id === current.id &&
+          p.title === current.title &&
+          p.cwd === current.cwd &&
+          p.command === current.command &&
+          p.autoStart === current.autoStart
+        )
+      })
+
+    if (panelsUnchanged) return
+
+    setCards((prev) => {
+      const currentPanelIds = new Set(workspace.panels.map((p) => p.id))
+      const prevPanelIds = new Set(prevPanels.map((p) => p.id))
+
+      // 1. A panel was deleted in WorkspaceModal if it was in prevPanels but is not in currentPanels
+      // Canvas-created cards (whose id was never in prevPanels) are ALWAYS preserved!
+      const kept = prev.filter((c) => {
+        if (c.kind !== 'terminal') return true
+        if (prevPanelIds.has(c.id) && !currentPanelIds.has(c.id)) {
+          return false
+        }
+        return true
+      })
+
+      // 2. Update existing cards matching workspace.panels with latest title, cwd, command, autoStart
       const updated = kept.map((c) => {
         if (c.kind !== 'terminal') return c
         const p = workspace.panels.find((panel) => panel.id === c.id)
@@ -83,30 +143,18 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         return c
       })
 
-      // 3. Add any newly added panels
-      const missingPanels = workspace.panels.filter(
-        (p) => !updated.some((c) => c.id === p.id)
+      // 3. Newly added panels in WorkspaceModal (in currentPanels but not in prevPanelIds)
+      const newlyAddedPanels = workspace.panels.filter(
+        (p) => !prevPanelIds.has(p.id) && !updated.some((c) => c.id === p.id)
       )
 
-      if (missingPanels.length === 0) {
-        const isSame =
-          prev.length === updated.length &&
-          prev.every((oldCard, idx) => {
-            const newCard = updated[idx]
-            return (
-              oldCard.id === newCard.id &&
-              oldCard.title === newCard.title &&
-              oldCard.cwd === newCard.cwd &&
-              oldCard.command === newCard.command &&
-              oldCard.autoStart === newCard.autoStart
-            )
-          })
-        if (isSame) return prev
+      if (newlyAddedPanels.length === 0) {
+        lastSavedCardsJsonRef.current = JSON.stringify(updated)
         onSaveCanvasCards(updated, connectors)
         return updated
       }
 
-      const newCards: CanvasCard[] = missingPanels.map((p, i) => ({
+      const newCards: CanvasCard[] = newlyAddedPanels.map((p, i) => ({
         id: p.id,
         kind: 'terminal' as const,
         title: p.title,
@@ -119,7 +167,9 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         height: 400,
         zIndex: updated.length + i + 1
       }))
+
       const next = [...updated, ...newCards]
+      lastSavedCardsJsonRef.current = JSON.stringify(next)
       onSaveCanvasCards(next, connectors)
       return next
     })
@@ -148,6 +198,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     (updater: (prev: CanvasCard[]) => CanvasCard[]) => {
       setCards((prev) => {
         const next = updater(prev)
+        lastSavedCardsJsonRef.current = JSON.stringify(next)
         onSaveCanvasCards(next, connectors)
         return next
       })
@@ -169,6 +220,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   // Add new Terminal card
   const handleAddTerminal = (): void => {
     const newId = `canvas-term-${Date.now()}`
+    const baseCwd = workspace.panels[0]?.cwd || ''
     const newCard: CanvasCard = {
       id: newId,
       kind: 'terminal',
@@ -177,7 +229,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       y: Math.round(-pan.y / zoom + 100),
       width: 560,
       height: 400,
-      cwd: '',
+      cwd: baseCwd,
       command: '',
       autoStart: true,
       zIndex: cards.length + 1
