@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session } from 'electron'
 import { join, extname, basename } from 'path'
 import * as fs from 'fs'
 import * as net from 'net'
@@ -8,11 +8,13 @@ import { PtyManager, SpawnOptions } from './pty-manager'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
 import { AppUpdater } from './updater'
 import { RemoteGateway } from './remote-gateway'
+import { VSCodeManager } from './vscode-manager'
 
 let mainWindow: BrowserWindow | null = null
 const store = new StoreManager()
 const ptyManager = new PtyManager()
 const remoteGateway = new RemoteGateway(ptyManager, store)
+const vscodeManager = new VSCodeManager()
 let telemetryMonitor: TelemetryMonitor | null = null
 let appUpdater: AppUpdater | null = null
 
@@ -29,7 +31,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webviewTag: true
     }
   })
 
@@ -82,11 +85,55 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     telemetryMonitor?.stop()
     ptyManager.killAll()
+    vscodeManager.cleanupAll()
     mainWindow = null
   })
 }
 
+function setupSessionInterceptors(targetSession: Electron.Session): void {
+  // 1. Strip X-Frame-Options and Content-Security-Policy frame-ancestors to allow embedding preview pages
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!details.responseHeaders) {
+      return callback({ cancel: false })
+    }
+    const responseHeaders = { ...details.responseHeaders }
+    for (const key of Object.keys(responseHeaders)) {
+      const lower = key.toLowerCase()
+      if (lower === 'x-frame-options') {
+        delete responseHeaders[key]
+      } else if (lower === 'content-security-policy') {
+        responseHeaders[key] = responseHeaders[key].map((csp) =>
+          csp.replace(/frame-ancestors[^;]+;?/gi, '')
+        )
+      }
+    }
+    callback({ cancel: false, responseHeaders })
+  })
+
+  // 2. Clean User-Agent for modern websites requiring standard Chrome identification
+  targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const requestHeaders = { ...details.requestHeaders }
+    const ua = requestHeaders['User-Agent'] || requestHeaders['user-agent']
+    if (ua && ua.includes('Electron')) {
+      const cleanUA = ua.replace(/\s*Electron\/[0-9.]+/g, '')
+      requestHeaders['User-Agent'] = cleanUA
+    }
+    callback({ cancel: false, requestHeaders })
+  })
+}
+
 app.whenReady().then(() => {
+  // Configure session interceptors for default session, browser partition, and vscode partition
+  setupSessionInterceptors(session.defaultSession)
+  setupSessionInterceptors(session.fromPartition('persist:neowork-browser'))
+  setupSessionInterceptors(session.fromPartition('persist:neowork-vscode'))
+
+  // WebContents resource optimization
+  app.on('web-contents-created', (_event, contents) => {
+    // Enable background throttling to save CPU & battery on inactive webviews
+    contents.setBackgroundThrottling(true)
+  })
+
   appUpdater = new AppUpdater()
 
   // Store IPC
@@ -154,16 +201,123 @@ app.whenReady().then(() => {
   })
 
   // Native Clipboard IPC
-  ipcMain.handle('clipboard:write', (_event, text: string) => {
+  ipcMain.handle('clipboard:write', async (_event, text: string) => {
     if (typeof text === 'string') {
-      clipboard.writeText(text)
+      await clipboard.writeText(text)
       return true
     }
     return false
   })
 
-  ipcMain.handle('clipboard:read', () => {
-    return clipboard.readText()
+  ipcMain.handle('clipboard:read', async () => {
+    return await clipboard.readText()
+  })
+
+  // Smart Clipboard IPC: reads text, or saves clipboard images to disk and returns the file path for CLI agents
+  ipcMain.handle('clipboard:read-smart', async () => {
+    try {
+      // 1. Check if clipboard contains an image via Electron's modern clipboard.read()
+      if (typeof clipboard.read === 'function') {
+        const items = await clipboard.read()
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith('image/'))
+          if (imageType) {
+            const blob = (await item.getType(imageType)) as Blob
+            if (blob && blob.size > 0) {
+              const arrayBuffer = await blob.arrayBuffer()
+              const buffer = Buffer.from(arrayBuffer)
+              const tempDir = join(app.getPath('temp'), 'neowork-clipboard')
+              if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true })
+              }
+              const ext = imageType.includes('jpeg') ? 'jpg' : imageType.includes('webp') ? 'webp' : 'png'
+              const fileName = `agent-img-${Date.now()}.${ext}`
+              const filePath = join(tempDir, fileName)
+              fs.writeFileSync(filePath, buffer)
+              return {
+                type: 'image' as const,
+                path: filePath,
+                text: filePath,
+                sizeBytes: buffer.length
+              }
+            }
+          }
+        }
+      }
+
+      // Fallback for legacy sync readImage if available in runtime
+      if (typeof (clipboard as any).readImage === 'function') {
+        const legacyImage = (clipboard as any).readImage()
+        if (legacyImage && !legacyImage.isEmpty()) {
+          const tempDir = join(app.getPath('temp'), 'neowork-clipboard')
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true })
+          }
+          const fileName = `agent-img-${Date.now()}.png`
+          const filePath = join(tempDir, fileName)
+          const pngBuffer = legacyImage.toPNG()
+          fs.writeFileSync(filePath, pngBuffer)
+          return {
+            type: 'image' as const,
+            path: filePath,
+            text: filePath,
+            sizeBytes: pngBuffer.length
+          }
+        }
+      }
+
+      // 2. Check if clipboard text is a file:// URI pointing to an image or file
+      const text = await clipboard.readText()
+      if (text) {
+        const trimmed = text.trim()
+        if (trimmed.startsWith('file://')) {
+          try {
+            const rawPath = decodeURI(new URL(trimmed).pathname)
+            if (fs.existsSync(rawPath)) {
+              const isImg = /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(rawPath)
+              return {
+                type: isImg ? ('image' as const) : ('file' as const),
+                path: rawPath,
+                text: rawPath
+              }
+            }
+          } catch {
+            const fallbackPath = decodeURIComponent(trimmed.replace(/^file:\/\//, ''))
+            if (fs.existsSync(fallbackPath)) {
+              return {
+                type: 'file' as const,
+                path: fallbackPath,
+                text: fallbackPath
+              }
+            }
+          }
+        }
+
+        return {
+          type: 'text' as const,
+          text
+        }
+      }
+
+      return {
+        type: 'empty' as const,
+        text: ''
+      }
+    } catch (err: any) {
+      console.error('[Clipboard] read-smart error:', err)
+      try {
+        const fallback = await clipboard.readText()
+        return {
+          type: 'text' as const,
+          text: fallback || ''
+        }
+      } catch {
+        return {
+          type: 'empty' as const,
+          text: ''
+        }
+      }
+    }
   })
 
   // PTY IPC
@@ -200,6 +354,10 @@ app.whenReady().then(() => {
   ipcMain.handle('pty:killAll', () => {
     ptyManager.killAll()
     return true
+  })
+
+  ipcMain.handle('pty:get-process', (_event, panelId: string) => {
+    return ptyManager.getForegroundProcess(panelId)
   })
 
   // File System IPC for Canvas Explorer & Project Inspection
@@ -448,6 +606,32 @@ app.whenReady().then(() => {
     })
   })
 
+  // VS Code Integration IPC
+  ipcMain.handle('vscode:check-installed', async () => {
+    return vscodeManager.checkInstalled()
+  })
+
+  ipcMain.handle('vscode:start-server', async (_event, folderPath?: string) => {
+    return vscodeManager.startServer(folderPath)
+  })
+
+  ipcMain.handle('vscode:stop-server', async (_event, port?: number) => {
+    return vscodeManager.stopServer(port)
+  })
+
+  ipcMain.handle('vscode:open-desktop', async (_event, folderPath?: string) => {
+    return vscodeManager.openDesktop(folderPath)
+  })
+
+  // Built-in AdBlocker IPC (disabled)
+  ipcMain.handle('adblock:get-status', () => {
+    return false
+  })
+
+  ipcMain.handle('adblock:toggle', () => {
+    return false
+  })
+
   // Window controls
   ipcMain.on('window:minimize', () => {
     mainWindow?.minimize()
@@ -497,6 +681,7 @@ app.on('window-all-closed', () => {
   telemetryMonitor?.stop()
   remoteGateway.stop()
   ptyManager.killAll()
+  vscodeManager.cleanupAll()
   if (process.platform !== 'darwin') {
     app.exit(0)
   }

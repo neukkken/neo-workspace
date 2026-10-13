@@ -205,15 +205,32 @@ export const App: React.FC = () => {
     ): void => {
       setAppState((prev) => {
         if (!prev) return prev
-        const updatedWorkspaces = prev.workspaces.map((w) =>
-          w.id === workspaceId
-            ? {
-                ...w,
-                canvasCards: cards,
-                ...(connectors !== undefined ? { canvasConnectors: connectors } : {})
+        const updatedWorkspaces = prev.workspaces.map((w) => {
+          if (w.id !== workspaceId) return w
+
+          // Synchronize terminal cards into panels so Grid mode and WorkspaceModal always have the latest commands/paths
+          const updatedPanels = w.panels.map((p) => {
+            const matchingCard = cards.find((c) => c.kind === 'terminal' && c.id === p.id)
+            if (matchingCard) {
+              return {
+                ...p,
+                title: matchingCard.title || p.title,
+                cwd: matchingCard.cwd !== undefined ? matchingCard.cwd : p.cwd,
+                command: matchingCard.command !== undefined ? matchingCard.command : p.command,
+                autoStart: matchingCard.autoStart !== undefined ? matchingCard.autoStart : p.autoStart,
+                env: matchingCard.env || p.env
               }
-            : w
-        )
+            }
+            return p
+          })
+
+          return {
+            ...w,
+            panels: updatedPanels,
+            canvasCards: cards,
+            ...(connectors !== undefined ? { canvasConnectors: connectors } : {})
+          }
+        })
         const nextState: AppState = { ...prev, workspaces: updatedWorkspaces }
         window.neoAPI.saveStore(nextState)
         return nextState
@@ -289,14 +306,23 @@ export const App: React.FC = () => {
   }
 
   const handleStopWorkspace = async (id: string): Promise<void> => {
-    const panelsToKill =
-      activeSessionPanels[id] || appState.workspaces.find((w) => w.id === id)?.panels || []
-    if (panelsToKill.length > 0) {
-      // Kill all active terminals for this workspace's panels
+    const ws = appState.workspaces.find((w) => w.id === id)
+    const sessionPanels = activeSessionPanels[id] || []
+    const wsPanels = ws?.panels || []
+    const canvasTerminalCards = (ws?.canvasCards || []).filter((c) => c.kind === 'terminal')
+
+    const idsToKill = new Set<string>([
+      ...sessionPanels.map((p) => p.id),
+      ...wsPanels.map((p) => p.id),
+      ...canvasTerminalCards.map((c) => c.id)
+    ])
+
+    if (idsToKill.size > 0) {
+      // Kill all active terminals for this workspace's panels and canvas cards
       await Promise.all(
-        panelsToKill.map(async (p) => {
-          terminalPool.destroyTerminal(p.id)
-          return window.neoAPI.killTerminal(p.id)
+        Array.from(idsToKill).map(async (terminalId) => {
+          terminalPool.destroyTerminal(terminalId)
+          return window.neoAPI.killTerminal(terminalId)
         })
       )
     }
@@ -315,10 +341,13 @@ export const App: React.FC = () => {
       // 1. Identify previous panels for this workspace
       const previousPanels = activeSessionPanels[id] || []
       const currentPanelIds = new Set(ws.panels.map((p) => p.id))
+      const currentCanvasTerminalIds = new Set(
+        (ws.canvasCards || []).filter((c) => c.kind === 'terminal').map((c) => c.id)
+      )
 
       // 2. Kill and destroy any panels that were removed
       for (const prevPanel of previousPanels) {
-        if (!currentPanelIds.has(prevPanel.id)) {
+        if (!currentPanelIds.has(prevPanel.id) && !currentCanvasTerminalIds.has(prevPanel.id)) {
           terminalPool.destroyTerminal(prevPanel.id)
           await window.neoAPI.killTerminal(prevPanel.id)
         }
@@ -336,6 +365,23 @@ export const App: React.FC = () => {
           })
         }
       })
+
+      // 4. For any additional terminal cards in canvasCards, reconfigure and restart
+      if (ws.canvasCards) {
+        ws.canvasCards.forEach((c) => {
+          if (c.kind === 'terminal') {
+            const existing = terminalPool.getTerminal(c.id)
+            if (existing) {
+              existing.restart({
+                cwd: c.cwd || '',
+                command: c.command || '',
+                env: c.env,
+                autoStart: c.autoStart ?? true
+              })
+            }
+          }
+        })
+      }
 
       setActiveSessionPanels((prev) => ({
         ...prev,
@@ -370,41 +416,61 @@ export const App: React.FC = () => {
   }
 
   const handleSaveWorkspaceModal = (savedWorkspace: Workspace): void => {
+    // Safety sync: ensure canvasCards terminals always reflect latest panels
+    const cleanSavedWorkspace = { ...savedWorkspace }
+    if (cleanSavedWorkspace.canvasCards && cleanSavedWorkspace.panels) {
+      cleanSavedWorkspace.canvasCards = cleanSavedWorkspace.canvasCards.map((card) => {
+        if (card.kind !== 'terminal') return card
+        const matchingPanel = cleanSavedWorkspace.panels.find((p) => p.id === card.id)
+        if (matchingPanel) {
+          return {
+            ...card,
+            title: matchingPanel.title,
+            cwd: matchingPanel.cwd,
+            command: matchingPanel.command,
+            autoStart: matchingPanel.autoStart,
+            env: matchingPanel.env
+          }
+        }
+        return card
+      })
+    }
+
     let updatedWorkspaces: Workspace[]
-    const isRunning = runningWorkspaceIds.includes(savedWorkspace.id)
+    const isRunning = runningWorkspaceIds.includes(cleanSavedWorkspace.id)
 
     if (editingWorkspace) {
       updatedWorkspaces = appState.workspaces.map((w) =>
-        w.id === savedWorkspace.id ? savedWorkspace : w
+        w.id === cleanSavedWorkspace.id ? cleanSavedWorkspace : w
       )
       if (isRunning) {
         // Workspace is currently running: do NOT restart terminals or touch activeSessionPanels!
         // Running consoles will NOT be interrupted. Flag workspace as having pending config changes.
         setPendingChangesWorkspaceIds((prev) =>
-          prev.includes(savedWorkspace.id) ? prev : [...prev, savedWorkspace.id]
+          prev.includes(cleanSavedWorkspace.id) ? prev : [...prev, cleanSavedWorkspace.id]
         )
       } else {
         // Workspace is stopped: update session panels configuration directly
         setActiveSessionPanels((prev) => ({
           ...prev,
-          [savedWorkspace.id]: savedWorkspace.panels
+          [cleanSavedWorkspace.id]: cleanSavedWorkspace.panels
         }))
-        setPendingChangesWorkspaceIds((prev) => prev.filter((id) => id !== savedWorkspace.id))
+        setPendingChangesWorkspaceIds((prev) => prev.filter((id) => id !== cleanSavedWorkspace.id))
       }
     } else {
-      updatedWorkspaces = [...appState.workspaces, savedWorkspace]
+      updatedWorkspaces = [...appState.workspaces, cleanSavedWorkspace]
       // Start the newly created workspace
       setActiveSessionPanels((prev) => ({
         ...prev,
-        [savedWorkspace.id]: savedWorkspace.panels
+        [cleanSavedWorkspace.id]: cleanSavedWorkspace.panels
       }))
-      setRunningWorkspaceIds((prev) => [...prev, savedWorkspace.id])
+      setRunningWorkspaceIds((prev) => [...prev, cleanSavedWorkspace.id])
     }
 
     const updatedState: AppState = {
       ...appState,
       workspaces: updatedWorkspaces,
-      activeWorkspaceId: savedWorkspace.id
+      activeWorkspaceId: cleanSavedWorkspace.id
     }
 
     persistState(updatedState)
@@ -830,6 +896,8 @@ export const App: React.FC = () => {
             title:
               kind === 'terminal'
                 ? `TERMINAL-${currentCards.filter((c) => c.kind === 'terminal').length + 1}`
+                : kind === 'vscode'
+                ? `VSCODE::${activeWorkspace.name}`
                 : kind === 'explorer'
                 ? 'Explorador'
                 : kind === 'port-monitor'
@@ -840,9 +908,26 @@ export const App: React.FC = () => {
             x: 80 + Math.floor(Math.random() * 80),
             y: 80 + Math.floor(Math.random() * 80),
             width:
-              kind === 'explorer' ? 520 : kind === 'note' ? 360 : kind === 'port-monitor' ? 380 : 480,
-            height: kind === 'note' ? 280 : kind === 'port-monitor' ? 340 : 380,
+              kind === 'vscode'
+                ? 820
+                : kind === 'explorer'
+                ? 520
+                : kind === 'note'
+                ? 360
+                : kind === 'port-monitor'
+                ? 380
+                : 480,
+            height:
+              kind === 'vscode'
+                ? 560
+                : kind === 'note'
+                ? 280
+                : kind === 'port-monitor'
+                ? 340
+                : 380,
             cwd: kind === 'terminal' ? (baseDir || undefined) : undefined,
+            vscodeMode: kind === 'vscode' ? 'local' : undefined,
+            vscodePath: kind === 'vscode' ? (baseDir || undefined) : undefined,
             explorerPath: kind === 'explorer' ? (baseDir || undefined) : undefined,
             monitoredPorts: kind === 'port-monitor' ? [3000, 5173, 8080] : undefined,
             noteColor: kind === 'note' ? 'amber' : undefined,

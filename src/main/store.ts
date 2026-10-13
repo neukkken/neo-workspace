@@ -11,7 +11,7 @@ export interface PanelConfig {
   autoStart: boolean
 }
 
-export type NodeKind = 'terminal' | 'browser'
+export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode'
 
 export interface CanvasCard {
   id: string

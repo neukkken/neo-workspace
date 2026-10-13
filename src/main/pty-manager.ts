@@ -41,6 +41,11 @@ export class PtyManager {
     return chunks ? chunks.join('') : ''
   }
 
+  public getForegroundProcess(panelId: string): string {
+    const term = this.terminals.get(panelId)
+    return term ? term.process || '' : ''
+  }
+
   public subscribeData(callback: (panelId: string, data: string) => void): () => void {
     this.dataSubscribers.add(callback)
     return () => {

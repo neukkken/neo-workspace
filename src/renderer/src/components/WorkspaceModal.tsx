@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Plus, Trash2, FolderOpen, Terminal, Check, Sparkles } from 'lucide-react'
-import { Workspace, PanelConfig } from '../types'
+import { Workspace, PanelConfig, CanvasCard, CanvasConnector } from '../types'
 
 interface PresetTemplate {
   name: string
@@ -235,32 +235,99 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     e.preventDefault()
     if (!name.trim()) return
 
+    const updatedPanels: PanelConfig[] = panels.map((p, idx) => {
+      let envObj: Record<string, string> | undefined
+      const envStr = envInputs[idx]
+      if (envStr && envStr.trim()) {
+        envObj = {}
+        envStr.split('\n').forEach((line) => {
+          const parts = line.split('=')
+          if (parts.length >= 2) {
+            const k = parts[0].trim()
+            const v = parts.slice(1).join('=').trim()
+            if (k) envObj![k] = v
+          }
+        })
+      }
+      return {
+        ...p,
+        title: p.title.trim() || 'TERMINAL',
+        cwd: p.cwd.trim(),
+        command: p.command?.trim() || '',
+        autoStart: p.autoStart ?? true,
+        env: envObj
+      }
+    })
+
+    // Synchronize canvasCards if they exist in workspace
+    let updatedCanvasCards = workspace?.canvasCards
+    let updatedConnectors = workspace?.canvasConnectors
+
+    if (Array.isArray(updatedCanvasCards) && updatedCanvasCards.length > 0) {
+      const panelIdsSet = new Set(updatedPanels.map((p) => p.id))
+      const originalPanelIds = new Set(workspace?.panels?.map((p) => p.id) || [])
+      const removedPanelIds = new Set([...originalPanelIds].filter((id) => !panelIdsSet.has(id)))
+
+      // 1. Filter out terminal cards belonging to explicitly deleted panels
+      const keptCards = updatedCanvasCards.filter((card) => {
+        if (card.kind !== 'terminal') return true
+        return !removedPanelIds.has(card.id)
+      })
+
+      // 2. Update existing terminal cards matching updatedPanels
+      const mappedCards = keptCards.map((card) => {
+        if (card.kind !== 'terminal') return card
+        const matchingPanel = updatedPanels.find((p) => p.id === card.id)
+        if (matchingPanel) {
+          return {
+            ...card,
+            title: matchingPanel.title,
+            cwd: matchingPanel.cwd,
+            command: matchingPanel.command,
+            autoStart: matchingPanel.autoStart,
+            env: matchingPanel.env
+          }
+        }
+        return card
+      })
+
+      // 3. Add any newly created panels that aren't yet on the canvas
+      const existingCardIds = new Set(mappedCards.map((c) => c.id))
+      const newlyAddedPanels = updatedPanels.filter((p) => !existingCardIds.has(p.id))
+
+      const newCanvasCards: CanvasCard[] = newlyAddedPanels.map((p, idx) => ({
+        id: p.id,
+        kind: 'terminal' as const,
+        title: p.title,
+        cwd: p.cwd,
+        command: p.command,
+        autoStart: p.autoStart,
+        env: p.env,
+        x: 60 + ((mappedCards.length + idx) % 2) * 580,
+        y: 60 + Math.floor((mappedCards.length + idx) / 2) * 440,
+        width: 550,
+        height: 400,
+        zIndex: mappedCards.length + idx + 1
+      }))
+
+      updatedCanvasCards = [...mappedCards, ...newCanvasCards]
+
+      // Clean up connectors connected to deleted cards
+      if (updatedConnectors && removedPanelIds.size > 0) {
+        updatedConnectors = updatedConnectors.filter(
+          (conn) => !removedPanelIds.has(conn.fromId) && !removedPanelIds.has(conn.toId)
+        )
+      }
+    }
+
     const finalWorkspace: Workspace = {
       ...workspace,
       id: workspace?.id || `ws-${Date.now()}`,
       name: name.trim(),
       code: code.trim() || '01',
-      panels: panels.map((p, idx) => {
-        let envObj: Record<string, string> | undefined
-        const envStr = envInputs[idx]
-        if (envStr && envStr.trim()) {
-          envObj = {}
-          envStr.split('\n').forEach((line) => {
-            const parts = line.split('=')
-            if (parts.length >= 2) {
-              const k = parts[0].trim()
-              const v = parts.slice(1).join('=').trim()
-              if (k) envObj![k] = v
-            }
-          })
-        }
-        return {
-          ...p,
-          title: p.title.trim() || 'TERMINAL',
-          cwd: p.cwd.trim(),
-          env: envObj
-        }
-      })
+      panels: updatedPanels,
+      ...(updatedCanvasCards !== undefined ? { canvasCards: updatedCanvasCards } : {}),
+      ...(updatedConnectors !== undefined ? { canvasConnectors: updatedConnectors } : {})
     }
 
     onSave(finalWorkspace)

@@ -90,6 +90,15 @@ export interface UpdateStatusPayload {
   error?: string
 }
 
+export interface SmartClipboardResult {
+  type: 'image' | 'file' | 'text' | 'empty'
+  path?: string
+  text: string
+  width?: number
+  height?: number
+  sizeBytes?: number
+}
+
 export type NeoAPI = typeof neoAPI
 export const neoAPI = {
   getStore: (): Promise<AppState> => ipcRenderer.invoke('store:get'),
@@ -103,6 +112,9 @@ export const neoAPI = {
 
   readClipboard: (): Promise<string> =>
     ipcRenderer.invoke('clipboard:read'),
+
+  readSmartClipboard: (): Promise<SmartClipboardResult> =>
+    ipcRenderer.invoke('clipboard:read-smart'),
 
   spawnTerminal: (options: SpawnOptions): Promise<boolean> =>
     ipcRenderer.invoke('pty:spawn', options),
@@ -120,6 +132,9 @@ export const neoAPI = {
 
   killAllTerminals: (): Promise<boolean> =>
     ipcRenderer.invoke('pty:killAll'),
+
+  getPtyProcess: (panelId: string): Promise<string> =>
+    ipcRenderer.invoke('pty:get-process', panelId),
 
   onTerminalData: (panelId: string, callback: (data: string) => void): (() => void) => {
     const channel = `pty:data:${panelId}`
@@ -244,7 +259,29 @@ export const neoAPI = {
     return () => {
       ipcRenderer.removeListener('remote:workspace-selected', handler)
     }
-  }
+  },
+
+  // VS Code Integration
+  vscodeCheckInstalled: (): Promise<boolean> =>
+    ipcRenderer.invoke('vscode:check-installed'),
+
+  vscodeStartServer: (
+    folderPath?: string
+  ): Promise<{ success: boolean; url?: string; port?: number; error?: string }> =>
+    ipcRenderer.invoke('vscode:start-server', folderPath),
+
+  vscodeStopServer: (port?: number): Promise<boolean> =>
+    ipcRenderer.invoke('vscode:stop-server', port),
+
+  vscodeOpenDesktop: (folderPath?: string): Promise<boolean> =>
+    ipcRenderer.invoke('vscode:open-desktop', folderPath),
+
+  // Built-in AdBlocker
+  adblockGetStatus: (): Promise<boolean> =>
+    ipcRenderer.invoke('adblock:get-status'),
+
+  adblockToggle: (enabled?: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('adblock:toggle', enabled)
 }
 
 if (process.contextIsolated) {

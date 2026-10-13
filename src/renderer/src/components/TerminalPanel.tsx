@@ -164,7 +164,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       </div>
 
       {/* Panel Terminal Body */}
-      <div className="flex-1 w-full relative min-h-0 bg-[#090a0d]">
+      <div className="flex-1 w-full relative min-h-0 bg-[#090a0d] overflow-hidden">
         <XTermView
           ref={termRef}
           panelId={panel.id}

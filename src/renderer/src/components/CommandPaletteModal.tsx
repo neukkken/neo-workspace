@@ -15,7 +15,8 @@ import {
   Play,
   Download,
   RotateCw,
-  Smartphone
+  Smartphone,
+  Code2
 } from 'lucide-react'
 import { Workspace, AppState } from '../types'
 
@@ -40,7 +41,7 @@ interface CommandPaletteModalProps {
   onOpenShortcuts: () => void
   onOpenMobileConnect?: () => void
   onRestartActiveWorkspace: () => void
-  onAddCanvasCard?: (kind: 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor') => void
+  onAddCanvasCard?: (kind: 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode') => void
 }
 
 export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
@@ -186,6 +187,18 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: <Globe size={15} className="text-cyan-400" />,
       action: () => {
         onAddCanvasCard('browser')
+        onClose()
+      }
+    })
+
+    items.push({
+      id: 'canvas-vscode',
+      title: 'Canvas: Añadir Instancia de VS Code',
+      subtitle: 'Inserta un editor de código VS Code completo (local o web) en el lienzo',
+      category: 'Canvas',
+      icon: <Code2 size={15} className="text-blue-400" />,
+      action: () => {
+        onAddCanvasCard('vscode')
         onClose()
       }
     })

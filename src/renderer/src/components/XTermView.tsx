@@ -16,7 +16,7 @@ import {
   ChevronUp,
   X
 } from 'lucide-react'
-import { terminalPool, ManagedTerminal } from '../services/terminal-pool'
+import { terminalPool, ManagedTerminal, isAgyTerminal } from '../services/terminal-pool'
 
 export interface XTermViewHandle {
   clear: () => void
@@ -170,10 +170,43 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       closeContextMenu()
     }
 
+    const [pasteToast, setPasteToast] = useState<string | null>(null)
+    const toastTimerRef = useRef<any>(null)
+    const showPasteToast = (msg: string): void => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      setPasteToast(msg)
+      toastTimerRef.current = setTimeout(() => {
+        setPasteToast(null)
+      }, 2500)
+    }
+
     const handlePaste = async (): Promise<void> => {
-      const text = await window.neoAPI.readClipboard()
-      if (text && managedRef.current?.term) {
-        managedRef.current.term.paste(text)
+      const term = managedRef.current?.term
+      if (!term) {
+        closeContextMenu()
+        return
+      }
+
+      const [res, proc] = await Promise.all([
+        window.neoAPI.readSmartClipboard(),
+        window.neoAPI.getPtyProcess(panelId).catch(() => '')
+      ])
+
+      const isAgy =
+        proc === 'agy' ||
+        proc.endsWith('/agy') ||
+        isAgyTerminal(panelId, term)
+
+      if (res && res.type === 'image' && isAgy) {
+        // AGY native image paste: send 0x16 (Ctrl+V) so AGY attaches the photo natively via wl-paste
+        window.neoAPI.writeTerminal(panelId, '\x16')
+        showPasteToast('📷 Foto adjuntada en Antigravity (AGY)')
+      } else if (res && res.text) {
+        const textToPaste = res.path ? (res.path.includes(' ') ? `"${res.path}"` : res.path) : res.text
+        term.paste(textToPaste)
+        if (res.type === 'image') {
+          showPasteToast(`📷 Imagen pegada: ${res.path?.split('/').pop()}`)
+        }
       }
       closeContextMenu()
     }
@@ -186,6 +219,25 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
     const handleClearTerminal = (): void => {
       managedRef.current?.clear()
       closeContextMenu()
+    }
+
+    const handleDragOver = (e: React.DragEvent): void => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const handleDrop = (e: React.DragEvent): void => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0]
+        const filePath = (file as any).path || file.name
+        if (filePath && managedRef.current?.term) {
+          const textToPaste = filePath.includes(' ') ? `"${filePath}"` : filePath
+          managedRef.current.term.paste(textToPaste)
+          showPasteToast(`📁 Archivo pegado: ${file.name}`)
+        }
+      }
     }
 
     const handleContextMenu = (e: React.MouseEvent): void => {
@@ -217,13 +269,20 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       // Append persistent container to current DOM slot
       slot.appendChild(managed.container)
 
-      // Fit terminal to dimensions
+      // Fit terminal immediately to match container dimensions and avoid prompt overlap
+      requestAnimationFrame(() => {
+        managed.fit()
+        if (isActive) {
+          managed.term.focus()
+        }
+      })
+
       const timer = setTimeout(() => {
         managed.fit()
         if (isActive) {
           managed.term.focus()
         }
-      }, 50)
+      }, 40)
 
       // ResizeObserver to adapt terminal dimensions when slot resizes
       const resizeObserver = new ResizeObserver(() => {
@@ -284,14 +343,35 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       }
     }, [isActive])
 
+    // Strictly lock scroll on slot container to prevent Chromium focus shifts
+    useEffect(() => {
+      const slot = slotRef.current
+      if (!slot) return
+      const lockScroll = (): void => {
+        if (slot.scrollTop !== 0) slot.scrollTop = 0
+        if (slot.scrollLeft !== 0) slot.scrollLeft = 0
+      }
+      slot.addEventListener('scroll', lockScroll, { passive: true })
+      return () => {
+        slot.removeEventListener('scroll', lockScroll)
+      }
+    }, [])
+
     return (
       <div
         ref={slotRef}
         onClick={() => managedRef.current?.term.focus()}
         onContextMenu={handleContextMenu}
-        className="w-full h-full overflow-hidden bg-[#090a0d] relative select-text cursor-text"
-        style={{ padding: '2px 4px' }}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className="terminal-slot-container w-full h-full overflow-hidden bg-[#090a0d] relative select-text cursor-text"
       >
+        {/* Floating image/file paste toast */}
+        {pasteToast && (
+          <div className="absolute bottom-3 left-4 z-40 flex items-center space-x-1.5 bg-emerald-950/95 border border-emerald-500/70 text-emerald-300 text-xs px-2.5 py-1 rounded shadow-2xl font-mono animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none">
+            <span>{pasteToast}</span>
+          </div>
+        )}
         {/* In-Terminal Floating Search Bar */}
         {isSearching && (
           <div

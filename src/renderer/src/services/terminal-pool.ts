@@ -149,10 +149,31 @@ export const TERMINAL_THEMES: Record<TerminalThemeName, ITheme> = {
   }
 }
 
+export function isAgyTerminal(_panelId: string, term: Terminal): boolean {
+  try {
+    const buffer = term.buffer.active
+    const totalRows = term.rows || buffer.length
+    const rowsToCheck = Math.min(8, totalRows)
+    for (let r = 0; r < rowsToCheck; r++) {
+      const line = buffer.getLine(totalRows - 1 - r)?.translateToString() || ''
+      if (
+        line.includes('shortcuts') ||
+        line.includes('media attached') ||
+        line.includes('ctrl+o to expand') ||
+        line.includes('Antigravity CLI')
+      ) {
+        return true
+      }
+    }
+  } catch {}
+
+  return false
+}
+
 class TerminalPool {
   private terminals = new Map<string, ManagedTerminal>()
   private currentTheme: TerminalThemeName = 'matrix'
-  private currentFontSize = 12.5
+  private currentFontSize = 13
 
   public setTheme(themeName: TerminalThemeName): void {
     this.currentTheme = themeName
@@ -171,6 +192,24 @@ class TerminalPool {
     }
   }
 
+  public refreshAllMetrics(): void {
+    for (const managed of this.terminals.values()) {
+      try {
+        const core = (managed.term as any)._core
+        if (core && core._charSizeService) {
+          core._charSizeService.measure()
+        }
+        if (core && core._renderService) {
+          core._renderService.clear()
+        }
+        managed.fit()
+        managed.term.refresh(0, managed.term.rows - 1)
+      } catch {
+        // Container might be detached
+      }
+    }
+  }
+
   public getOrCreateTerminal(panelId: string, initialConfig: TerminalSpawnConfig): ManagedTerminal {
     let config = { ...initialConfig }
     const existing = this.terminals.get(panelId)
@@ -180,18 +219,27 @@ class TerminalPool {
     }
 
     const container = document.createElement('div')
-    container.className = 'w-full h-full select-text'
+    container.className = 'w-full h-full select-text terminal-container'
     container.style.width = '100%'
     container.style.height = '100%'
+    container.style.overflow = 'hidden'
+    container.style.boxSizing = 'border-box'
+    container.addEventListener('scroll', () => {
+      if (container.scrollTop !== 0) container.scrollTop = 0
+      if (container.scrollLeft !== 0) container.scrollLeft = 0
+    }, { passive: true })
 
     const theme = TERMINAL_THEMES[this.currentTheme] || TERMINAL_THEMES.matrix
 
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, Menlo, monospace",
+      fontFamily: "'JetBrains Mono', 'Liberation Mono', 'Noto Sans Mono', 'DejaVu Sans Mono', monospace",
       fontSize: this.currentFontSize,
-      lineHeight: 1.25,
+      lineHeight: 1.15,
+      letterSpacing: 0,
+      rescaleOverlappingGlyphs: true,
+      allowTransparency: true,
       scrollback: 5000,
       convertEol: true,
       theme
@@ -230,13 +278,29 @@ class TerminalPool {
         return true
       }
 
-      // Ctrl + V or Ctrl + Shift + V: Paste from native clipboard
+      // Ctrl + V or Ctrl + Shift + V: Smart paste
       if (isCtrlOrCmd && (event.key === 'v' || event.key === 'V')) {
         event.preventDefault()
         if (event.type === 'keydown') {
-          window.neoAPI.readClipboard().then((text) => {
-            if (text) {
-              term.paste(text)
+          Promise.all([
+            window.neoAPI.readSmartClipboard(),
+            window.neoAPI.getPtyProcess(panelId).catch(() => '')
+          ]).then(([res, proc]) => {
+            const isAgy =
+              proc === 'agy' ||
+              proc.endsWith('/agy') ||
+              isAgyTerminal(panelId, term)
+
+            if (res && res.type === 'image' && isAgy) {
+              // AGY has native Bubbletea clipboard integration: sending \x16 (Ctrl+V)
+              // triggers AGY's native wl-paste/xclip image attachment, exactly like in a normal terminal!
+              window.neoAPI.writeTerminal(panelId, '\x16')
+              return
+            }
+
+            if (res && res.text) {
+              const textToPaste = res.path ? (res.path.includes(' ') ? `"${res.path}"` : res.path) : res.text
+              term.paste(textToPaste)
             }
           })
         }
@@ -271,11 +335,93 @@ class TerminalPool {
 
     term.open(container)
 
+    if (term.element) {
+      term.element.style.boxSizing = 'border-box'
+      term.element.style.overflow = 'hidden'
+      term.element.addEventListener('scroll', () => {
+        if (term.element && term.element.scrollTop !== 0) term.element.scrollTop = 0
+        if (term.element && term.element.scrollLeft !== 0) term.element.scrollLeft = 0
+      }, { passive: true })
+    }
+
+    // Fix Canvas Zoom / Scale mouse selection bug:
+    // When inside a CSS transform (such as Canvas mode scale(zoom)), xterm calculates
+    // mouse coordinates by comparing screen clientX/clientY against getBoundingClientRect(),
+    // but divides by unscaled cell dimensions. We dynamically adjust the coordinates
+    // by the element's actual CSS scale factor so mouse selection is 100% pixel-accurate!
+    const core = (term as any)._core
+    if (core && core._mouseService) {
+      const origGetCoords = core._mouseService.getCoords.bind(core._mouseService)
+      core._mouseService.getCoords = (
+        event: { clientX: number; clientY: number },
+        element: HTMLElement,
+        colCount: number,
+        rowCount: number,
+        isSelection?: boolean
+      ) => {
+        if (!element) return origGetCoords(event, element, colCount, rowCount, isSelection)
+        const rect = element.getBoundingClientRect()
+        const offsetW = element.offsetWidth || rect.width || 1
+        const offsetH = element.offsetHeight || rect.height || 1
+        const scaleX = rect.width / offsetW
+        const scaleY = rect.height / offsetH
+
+        if (Math.abs(scaleX - 1) > 0.002 || Math.abs(scaleY - 1) > 0.002) {
+          const adjustedEvent = {
+            clientX: rect.left + (event.clientX - rect.left) / scaleX,
+            clientY: rect.top + (event.clientY - rect.top) / scaleY
+          }
+          return origGetCoords(adjustedEvent, element, colCount, rowCount, isSelection)
+        }
+
+        return origGetCoords(event, element, colCount, rowCount, isSelection)
+      }
+
+      if (core._mouseService.getMouseReportCoords) {
+        const origReportCoords = core._mouseService.getMouseReportCoords.bind(core._mouseService)
+        core._mouseService.getMouseReportCoords = (event: MouseEvent, element: HTMLElement) => {
+          if (!element) return origReportCoords(event, element)
+          const rect = element.getBoundingClientRect()
+          const offsetW = element.offsetWidth || rect.width || 1
+          const offsetH = element.offsetHeight || rect.height || 1
+          const scaleX = rect.width / offsetW
+          const scaleY = rect.height / offsetH
+
+          if (Math.abs(scaleX - 1) > 0.002 || Math.abs(scaleY - 1) > 0.002) {
+            const adjustedEvent = new MouseEvent(event.type, {
+              clientX: rect.left + (event.clientX - rect.left) / scaleX,
+              clientY: rect.top + (event.clientY - rect.top) / scaleY,
+              button: event.button,
+              buttons: event.buttons,
+              ctrlKey: event.ctrlKey,
+              shiftKey: event.shiftKey,
+              altKey: event.altKey,
+              metaKey: event.metaKey
+            })
+            return origReportCoords(adjustedEvent, element)
+          }
+
+          return origReportCoords(event, element)
+        }
+      }
+    }
+
+    let ptySpawned = false
+    const ensurePtySpawned = (): void => {
+      if (ptySpawned) return
+      ptySpawned = true
+      const c = term.cols || 80
+      const r = term.rows || 24
+      spawnPty(c, r)
+    }
+
     const fit = (): void => {
       try {
         if (container.clientWidth > 40 && container.clientHeight > 40) {
           fitAddon.fit()
-          if (term.cols > 0 && term.rows > 0) {
+          if (!ptySpawned) {
+            ensurePtySpawned()
+          } else if (term.cols > 0 && term.rows > 0) {
             window.neoAPI.resizeTerminal(panelId, term.cols, term.rows)
           }
         }
@@ -328,10 +474,10 @@ class TerminalPool {
       term.writeln(`\r\n\x1b[33m[Process exited with code ${code}]\x1b[0m\r\n`)
     })
 
-    // Spawn process after small tick for sizing
-    const cols = term.cols || 80
-    const rows = term.rows || 24
-    spawnPty(cols, rows)
+    // Spawn process after small tick for sizing if fit() has not already spawned it
+    setTimeout(() => {
+      ensurePtySpawned()
+    }, 25)
 
     const clear = (): void => {
       term.clear()
@@ -454,3 +600,31 @@ class TerminalPool {
 }
 
 export const terminalPool = new TerminalPool()
+
+// Listen to web fonts ready/loadingdone to fix font metrics desync bugs
+if (typeof document !== 'undefined' && 'fonts' in document) {
+  document.fonts.ready.then(() => {
+    terminalPool.refreshAllMetrics()
+  })
+  document.fonts.addEventListener('loadingdone', () => {
+    terminalPool.refreshAllMetrics()
+  })
+}
+
+// Listen to display resolution / DPI scale changes to fix blurry / misaligned terminal characters
+if (typeof window !== 'undefined') {
+  const setupDprMonitor = (): void => {
+    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+    const handleDprChange = (): void => {
+      terminalPool.refreshAllMetrics()
+      setupDprMonitor()
+    }
+    mq.addEventListener('change', handleDprChange, { once: true })
+  }
+  setupDprMonitor()
+
+  window.addEventListener('resize', () => {
+    terminalPool.refreshAllMetrics()
+  })
+}
+

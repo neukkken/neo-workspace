@@ -108,7 +108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'nord', label: 'Nordic Frost', bg: '#242933', accent: '#88c0d0' }
   ]
 
-  const fontSizes = [11, 12.5, 14, 16]
+  const fontSizes = [11, 12, 13, 14, 16]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">

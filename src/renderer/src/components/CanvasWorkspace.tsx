@@ -12,11 +12,13 @@ import {
   Activity,
   GitBranch,
   MapPin,
-  X
+  X,
+  Code2
 } from 'lucide-react'
 import { CanvasCard, CanvasConnector, ProcessMetrics, Workspace, PanelConfig } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
+import { VSCodeCard } from './VSCodeCard'
 import { NoteCard } from './NoteCard'
 import { FileExplorerCard } from './FileExplorerCard'
 import { PortMonitorCard } from './PortMonitorCard'
@@ -36,7 +38,22 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   // Initialize cards from workspace panels or canvasCards
   const [cards, setCards] = useState<CanvasCard[]>(() => {
     if (Array.isArray(workspace.canvasCards)) {
-      return workspace.canvasCards
+      // Reconcile terminal cards with latest workspace.panels to ensure startup commands/paths are always accurate
+      return workspace.canvasCards.map((card) => {
+        if (card.kind !== 'terminal') return card
+        const matchingPanel = workspace.panels?.find((p) => p.id === card.id)
+        if (matchingPanel) {
+          return {
+            ...card,
+            title: matchingPanel.title,
+            cwd: matchingPanel.cwd,
+            command: matchingPanel.command,
+            autoStart: matchingPanel.autoStart,
+            env: matchingPanel.env
+          }
+        }
+        return card
+      })
     }
     // Generate initial canvas cards from existing panels only on first creation
     return workspace.panels.map((p, idx) => ({
@@ -46,6 +63,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       cwd: p.cwd,
       command: p.command,
       autoStart: p.autoStart,
+      env: p.env,
       x: 60 + (idx % 2) * 580,
       y: 60 + Math.floor(idx / 2) * 440,
       width: 550,
@@ -71,14 +89,29 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   // Synchronize when workspace.canvasCards changes externally (e.g. from CommandPalette)
   useEffect(() => {
     if (workspace.canvasCards) {
-      const incomingJson = JSON.stringify(workspace.canvasCards)
+      const reconciledCards = workspace.canvasCards.map((card) => {
+        if (card.kind !== 'terminal') return card
+        const matchingPanel = workspace.panels?.find((p) => p.id === card.id)
+        if (matchingPanel) {
+          return {
+            ...card,
+            title: matchingPanel.title,
+            cwd: matchingPanel.cwd,
+            command: matchingPanel.command,
+            autoStart: matchingPanel.autoStart,
+            env: matchingPanel.env
+          }
+        }
+        return card
+      })
+      const incomingJson = JSON.stringify(reconciledCards)
       if (incomingJson !== lastSavedCardsJsonRef.current) {
         lastSavedCardsJsonRef.current = incomingJson
-        cardsRef.current = workspace.canvasCards
-        setCards(workspace.canvasCards)
+        cardsRef.current = reconciledCards
+        setCards(reconciledCards)
       }
     }
-  }, [workspace.canvasCards])
+  }, [workspace.canvasCards, workspace.panels])
 
   // Synchronize external changes to canvasConnectors
   useEffect(() => {
@@ -144,7 +177,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             title: p.title,
             cwd: p.cwd,
             command: p.command,
-            autoStart: p.autoStart
+            autoStart: p.autoStart,
+            env: p.env
           }
         }
         return c
@@ -168,6 +202,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         cwd: p.cwd,
         command: p.command,
         autoStart: p.autoStart,
+        env: p.env,
         x: 60 + ((updated.length + i) % 2) * 580,
         y: 60 + Math.floor((updated.length + i) / 2) * 440,
         width: 550,
@@ -259,6 +294,26 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       y: Math.round(-pan.y / zoom + 120),
       width: 580,
       height: 480,
+      zIndex: cards.length + 1
+    }
+    updateCardsAndNotify((prev) => [...prev, newCard])
+    setFocusedCardId(newId)
+  }
+
+  // Add new VS Code card
+  const handleAddVSCode = (): void => {
+    const newId = `canvas-vscode-${Date.now()}`
+    const baseDir = workspace.panels[0]?.cwd || ''
+    const newCard: CanvasCard = {
+      id: newId,
+      kind: 'vscode',
+      title: `VSCODE::${workspace.name || 'EDITOR'}`,
+      vscodeMode: 'local',
+      vscodePath: baseDir,
+      x: Math.round(-pan.x / zoom + 160),
+      y: Math.round(-pan.y / zoom + 80),
+      width: 820,
+      height: 560,
       zIndex: cards.length + 1
     }
     updateCardsAndNotify((prev) => [...prev, newCard])
@@ -384,6 +439,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const handleDeleteCard = (id: string): void => {
     terminalPool.destroyTerminal(id)
 
+    const targetCard = cardsRef.current.find((c) => c.id === id)
+    if (targetCard && targetCard.kind === 'vscode' && targetCard.vscodePort) {
+      window.neoAPI.vscodeStopServer(targetCard.vscodePort).catch(() => {})
+    }
+
     // Atomically filter both cards and attached connectors in a single synchronous operation
     const nextCards = cardsRef.current.filter((c) => c.id !== id)
     const nextConnectors = connectorsRef.current.filter((conn) => conn.fromId !== id && conn.toId !== id)
@@ -463,6 +523,14 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       }))
     }
   }
+
+  // Refresh terminal metrics when zoom level changes to keep text sharp and aligned
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      terminalPool.refreshAllMetrics()
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [zoom])
 
   // Drag Card start
   const handleDragStart = (e: React.MouseEvent, id: string): void => {
@@ -703,6 +771,14 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         </button>
 
         <button
+          onClick={handleAddVSCode}
+          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 transition-colors font-medium cursor-pointer"
+        >
+          <Code2 size={13} />
+          <span>+ VS Code</span>
+        </button>
+
+        <button
           onClick={handleAddNote}
           className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-colors font-medium cursor-pointer"
         >
@@ -815,7 +891,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         {/* World Transform Layer */}
         <div
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate3d(${Math.round(pan.x)}px, ${Math.round(pan.y)}px, 0) scale(${zoom})`,
             transformOrigin: '0 0',
             position: 'absolute',
             top: 0,
@@ -995,6 +1071,22 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                 )
               }
 
+              if (card.kind === 'vscode') {
+                return (
+                  <VSCodeCard
+                    key={card.id}
+                    card={card}
+                    workspacePath={workspace.panels[0]?.cwd || ''}
+                    isFocused={isFocused}
+                    onFocus={() => bringToFront(card.id)}
+                    onUpdate={(updates) => handleUpdateCard(card.id, updates)}
+                    onDelete={handleDeleteCard}
+                    onDragStart={handleDragStart}
+                    onResizeStart={handleResizeStart}
+                  />
+                )
+              }
+
               return (
                 <TerminalCanvasCard
                   key={card.id}
@@ -1094,6 +1186,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
                 let color = 'bg-emerald-500'
                 if (c.kind === 'browser') color = 'bg-cyan-500'
+                if (c.kind === 'vscode') color = 'bg-blue-500'
                 if (c.kind === 'note') color = 'bg-amber-500'
                 if (c.kind === 'explorer') color = 'bg-indigo-500'
                 if (c.kind === 'port-monitor') color = 'bg-rose-500'

@@ -1,15 +1,35 @@
 @import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
 
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', 'Liberation Mono', 'Noto Sans Mono', 'DejaVu Sans Mono', monospace;
 }
 
 body {
   font-family: var(--font-sans);
   background-color: #090a0d;
   color: #e2e8f0;
+}
+
+/* Fix xterm character glyph rendering & prevent letter overlapping / kerning shifts */
+.terminal-container,
+.xterm,
+.xterm-viewport,
+.xterm-screen,
+.xterm-rows {
+  font-variant-ligatures: none !important;
+  font-feature-settings: "liga" 0, "calt" 0 !important;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.xterm-rows span {
+  font-variant-ligatures: none !important;
+  font-feature-settings: "liga" 0, "calt" 0 !important;
 }
 
 /* Custom modern scrollbars */
@@ -31,15 +51,14 @@ body {
   background: #3f3f46;
 }
 
-/* Ensure xterm fills container nicely */
-.xterm {
-  height: 100%;
-  width: 100%;
-  padding: 6px 8px;
-}
-
+/* Ensure xterm viewport blends seamlessly with theme */
 .xterm-viewport {
   background-color: transparent !important;
+}
+
+.terminal-slot-container {
+  overflow: clip !important;
+  box-sizing: border-box;
 }
 
 /* Drag region for electron frameless window */

@@ -65,6 +65,14 @@ export interface UpdateStatusPayload {
     progress?: UpdateProgress;
     error?: string;
 }
+export interface SmartClipboardResult {
+    type: 'image' | 'file' | 'text' | 'empty';
+    path?: string;
+    text: string;
+    width?: number;
+    height?: number;
+    sizeBytes?: number;
+}
 export type NeoAPI = typeof neoAPI;
 export declare const neoAPI: {
     getStore: () => Promise<AppState>;
@@ -72,11 +80,13 @@ export declare const neoAPI: {
     selectDirectory: (defaultPath?: string) => Promise<string | null>;
     writeClipboard: (text: string) => Promise<boolean>;
     readClipboard: () => Promise<string>;
+    readSmartClipboard: () => Promise<SmartClipboardResult>;
     spawnTerminal: (options: SpawnOptions) => Promise<boolean>;
     writeTerminal: (panelId: string, data: string) => void;
     resizeTerminal: (panelId: string, cols: number, rows: number) => void;
     killTerminal: (panelId: string) => Promise<boolean>;
     killAllTerminals: () => Promise<boolean>;
+    getPtyProcess: (panelId: string) => Promise<string>;
     onTerminalData: (panelId: string, callback: (data: string) => void) => (() => void);
     onTerminalExit: (panelId: string, callback: (exitInfo: {
         code: number;
@@ -92,4 +102,10 @@ export declare const neoAPI: {
     closeWindow: () => void;
     isWindowMaximized: () => Promise<boolean>;
     getAppVersion: () => Promise<string>;
+    vscodeCheckInstalled: () => Promise<boolean>;
+    vscodeStartServer: (folderPath?: string) => Promise<{ success: boolean; url?: string; port?: number; error?: string }>;
+    vscodeStopServer: (port?: number) => Promise<boolean>;
+    vscodeOpenDesktop: (folderPath?: string) => Promise<boolean>;
+    adblockGetStatus: () => Promise<boolean>;
+    adblockToggle: (enabled?: boolean) => Promise<boolean>;
 };

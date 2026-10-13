@@ -1,5 +1,5 @@
 import React from 'react'
-import { Edit, RotateCcw, Activity, Play, Square, LayoutGrid, Layers } from 'lucide-react'
+import { Edit, RotateCcw, Activity, Play, Square, LayoutGrid, Layers, Code2 } from 'lucide-react'
 import { Workspace, ProcessMetrics } from '../types'
 
 interface WorkspaceHeaderProps {
@@ -30,6 +30,13 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   onStopWorkspace
 }) => {
   const currentPanels = activePanels || workspace.panels
+
+  const handleOpenVSCode = async (): Promise<void> => {
+    const targetFolder = currentPanels[0]?.cwd || ''
+    if (window.neoAPI?.vscodeOpenDesktop) {
+      await window.neoAPI.vscodeOpenDesktop(targetFolder)
+    }
+  }
 
   // Calculate total CPU & RAM for this workspace's active panels
   const totalCpu = isRunning
@@ -168,6 +175,17 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
             </span>
           </button>
         )}
+
+        {/* VS Code desktop shortcut */}
+
+        <button
+          onClick={handleOpenVSCode}
+          className="flex items-center space-x-1 text-xs font-mono text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 px-2.5 py-1 rounded transition-colors"
+          title="Abrir carpeta del workspace en VS Code"
+        >
+          <Code2 size={11} />
+          <span className="hidden sm:inline">VS Code</span>
+        </button>
 
         <button
           onClick={onEditWorkspace}

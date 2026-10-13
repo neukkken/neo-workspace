@@ -7,7 +7,7 @@ export interface PanelConfig {
   env?: Record<string, string>
 }
 
-export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor'
+export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode'
 
 export type NoteColor = 'emerald' | 'amber' | 'cyan' | 'purple' | 'zinc'
 
@@ -34,6 +34,11 @@ export interface CanvasCard {
   explorerPath?: string
   // For port-monitor kind:
   monitoredPorts?: number[]
+  // For vscode kind:
+  vscodeMode?: 'local' | 'web' | 'custom'
+  vscodeUrl?: string
+  vscodePort?: number
+  vscodePath?: string
 }
 
 export interface CanvasConnector {
