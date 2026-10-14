@@ -8,6 +8,7 @@ import { cleanUrl, openExternalUrl } from '../utils/url'
 export interface TerminalSpawnConfig {
   cwd: string
   command?: string
+  commands?: string[]
   autoStart?: boolean
   env?: Record<string, string>
 }
@@ -458,6 +459,7 @@ class TerminalPool {
         panelId,
         cwd: config.cwd,
         command: config.autoStart ? (config.command || '') : '',
+        commands: config.autoStart ? config.commands : undefined,
         env: config.env,
         cols,
         rows

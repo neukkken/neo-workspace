@@ -109,7 +109,10 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       setCode(workspace?.code || '01')
       const initialPanels =
         workspace?.panels && workspace.panels.length > 0
-          ? workspace.panels.map((p) => ({ ...p }))
+          ? workspace.panels.map((p) => ({
+              ...p,
+              command: p.command || (Array.isArray(p.commands) && p.commands.length > 0 ? p.commands.join('\n') : '')
+            }))
           : [
               {
                 id: `panel-${Date.now()}-1`,
@@ -191,12 +194,20 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     const wsToSave = {
       name: name.trim() || 'My Workspace',
       code: code.trim() || '01',
-      panels: panels.map((p) => ({
-        title: p.title,
-        cwd: '.',
-        command: p.command,
-        autoStart: p.autoStart
-      }))
+      panels: panels.map((p) => {
+        const rawCmd = p.command || ''
+        const cmdList = rawCmd
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
+        return {
+          title: p.title,
+          cwd: '.',
+          command: rawCmd.trim(),
+          commands: cmdList.length > 1 ? cmdList : undefined,
+          autoStart: p.autoStart
+        }
+      })
     }
     const success = await window.neoAPI.writeNeoworkConfig(targetDir, wsToSave)
     if (success) {
@@ -216,13 +227,19 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       if (config.code) setCode(config.code)
       if (Array.isArray(config.panels)) {
         setPanels(
-          config.panels.map((p: any, i: number) => ({
-            id: `panel-${Date.now()}-${i + 1}`,
-            title: p.title || `PANEL-${i + 1}`,
-            cwd: selectedDir,
-            command: p.command || '',
-            autoStart: p.autoStart ?? true
-          }))
+          config.panels.map((p: any, i: number) => {
+            const rawCmd = Array.isArray(p.commands) && p.commands.length > 0
+              ? p.commands.join('\n')
+              : p.command || ''
+            return {
+              id: `panel-${Date.now()}-${i + 1}`,
+              title: p.title || `PANEL-${i + 1}`,
+              cwd: selectedDir,
+              command: rawCmd,
+              commands: Array.isArray(p.commands) ? p.commands : undefined,
+              autoStart: p.autoStart ?? true
+            }
+          })
         )
       }
       alert('¡Configuración .neowork.json cargada con éxito!')
@@ -249,11 +266,18 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           }
         })
       }
+      const rawCmd = p.command || ''
+      const cmdList = rawCmd
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
+
       return {
         ...p,
         title: p.title.trim() || 'TERMINAL',
         cwd: p.cwd.trim(),
-        command: p.command?.trim() || '',
+        command: rawCmd.trim(),
+        commands: cmdList.length > 1 ? cmdList : undefined,
         autoStart: p.autoStart ?? true,
         env: envObj
       }
@@ -284,6 +308,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             title: matchingPanel.title,
             cwd: matchingPanel.cwd,
             command: matchingPanel.command,
+            commands: matchingPanel.commands,
             autoStart: matchingPanel.autoStart,
             env: matchingPanel.env
           }
@@ -301,6 +326,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         title: p.title,
         cwd: p.cwd,
         command: p.command,
+        commands: p.commands,
         autoStart: p.autoStart,
         env: p.env,
         x: 60 + ((mappedCards.length + idx) % 2) * 580,
@@ -469,58 +495,84 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     />
                   </div>
 
-                  {/* Startup Command */}
+                  {/* Directory Selection */}
                   <div className="space-y-1">
-                    <label className="text-[10px] font-mono text-zinc-500">AUTO-RUN COMMAND</label>
-                    <input
-                      type="text"
-                      value={p.command}
-                      onChange={(e) => handleUpdatePanel(idx, 'command', e.target.value)}
-                      placeholder="e.g. npm run dev"
-                      className="w-full bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-emerald-400 placeholder:text-zinc-600"
-                    />
-                    {panelSuggestions[idx] && panelSuggestions[idx].length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1 items-center">
-                        <span className="text-[9px] font-mono text-zinc-500">Sugerencias:</span>
-                        {panelSuggestions[idx].slice(0, 5).map((s) => (
-                          <button
-                            key={s.command}
-                            type="button"
-                            onClick={() => handleUpdatePanel(idx, 'command', s.command)}
-                            className="px-1.5 py-0.2 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono transition-colors cursor-pointer"
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <label className="text-[10px] font-mono text-zinc-500">WORKING DIRECTORY (PATH)</label>
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="text"
+                        value={p.cwd}
+                        onChange={(e) => {
+                          handleUpdatePanel(idx, 'cwd', e.target.value)
+                          inspectFolder(idx, e.target.value)
+                        }}
+                        placeholder="/home/user/project (vacío para home)"
+                        className="flex-1 bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleBrowseFolder(idx)}
+                        className="flex items-center space-x-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors shrink-0"
+                      >
+                        <FolderOpen size={12} className="text-amber-400" />
+                        <span>Browse</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Directory Selection */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-zinc-500">WORKING DIRECTORY (PATH)</label>
-                  <div className="flex items-center space-x-1.5">
-                    <input
-                      type="text"
-                      value={p.cwd}
-                      onChange={(e) => {
-                        handleUpdatePanel(idx, 'cwd', e.target.value)
-                        inspectFolder(idx, e.target.value)
-                      }}
-                      placeholder="/home/user/project or C:\dev\project (leave empty for home)"
-                      className="flex-1 bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleBrowseFolder(idx)}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors shrink-0"
-                    >
-                      <FolderOpen size={12} className="text-amber-400" />
-                      <span>Browse</span>
-                    </button>
-                  </div>
-                </div>
+                {/* Startup Command Sequence */}
+                {(() => {
+                  const cmdSteps = (p.command || '')
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
+                  return (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono text-zinc-500 flex items-center space-x-1.5">
+                          <span>SECUENCIA DE COMANDOS (AUTO-RUN)</span>
+                          {cmdSteps.length > 1 && (
+                            <span className="px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-[9px] font-mono font-medium">
+                              {cmdSteps.length} pasos en secuencia
+                            </span>
+                          )}
+                        </label>
+                        <span className="text-[9px] font-mono text-zinc-500">
+                          1 comando por línea (# comentarios)
+                        </span>
+                      </div>
+                      <textarea
+                        value={p.command}
+                        onChange={(e) => handleUpdatePanel(idx, 'command', e.target.value)}
+                        placeholder={`# Comandos secuenciales al abrir el panel:\nsource .venv/bin/activate\nnpm run dev`}
+                        rows={3}
+                        className="w-full bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1.5 text-xs font-mono text-emerald-400 placeholder:text-zinc-600 leading-relaxed resize-y min-h-[64px]"
+                        spellCheck={false}
+                      />
+                      {panelSuggestions[idx] && panelSuggestions[idx].length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1 items-center">
+                          <span className="text-[9px] font-mono text-zinc-500">Sugerencias:</span>
+                          {panelSuggestions[idx].slice(0, 5).map((s) => (
+                            <button
+                              key={s.command}
+                              type="button"
+                              onClick={() => {
+                                const cur = (p.command || '').trim()
+                                const next = cur ? `${cur}\n${s.command}` : s.command
+                                handleUpdatePanel(idx, 'command', next)
+                              }}
+                              className="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono transition-colors cursor-pointer"
+                              title="Click para añadir a la secuencia"
+                            >
+                              + {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Auto start toggle */}
                 <div className="flex items-center justify-between pt-1">

@@ -171,6 +171,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           panelId={panel.id}
           cwd={panel.cwd}
           command={panel.command}
+          commands={panel.commands}
           env={panel.env}
           autoStart={panel.autoStart}
           isActive={isActive}

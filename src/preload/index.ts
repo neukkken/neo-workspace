@@ -4,6 +4,7 @@ export interface SpawnOptions {
   panelId: string
   cwd: string
   command?: string
+  commands?: string[]
   env?: Record<string, string>
   cols?: number
   rows?: number
@@ -14,7 +15,9 @@ export interface PanelConfig {
   title: string
   cwd: string
   command: string
+  commands?: string[]
   autoStart: boolean
+  env?: Record<string, string>
 }
 
 export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'

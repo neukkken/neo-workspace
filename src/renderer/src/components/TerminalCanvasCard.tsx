@@ -47,22 +47,28 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false)
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
 
+  const getInitialCmd = (): string => {
+    if (card.command) return card.command
+    if (Array.isArray(card.commands) && card.commands.length > 0) return card.commands.join('\n')
+    return ''
+  }
+
   // Quick config modal state
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [configTitle, setConfigTitle] = useState(card.title || '')
   const [configCwd, setConfigCwd] = useState(card.cwd || '')
-  const [configCommand, setConfigCommand] = useState(card.command || '')
+  const [configCommand, setConfigCommand] = useState(getInitialCmd())
 
   useEffect(() => {
     setConfigTitle(card.title || '')
     setConfigCwd(card.cwd || '')
-    setConfigCommand(card.command || '')
-  }, [card.title, card.cwd, card.command])
+    setConfigCommand(getInitialCmd())
+  }, [card.title, card.cwd, card.command, card.commands])
 
   const handleOpenConfig = (): void => {
     setConfigTitle(card.title || '')
     setConfigCwd(card.cwd || '')
-    setConfigCommand(card.command || '')
+    setConfigCommand(getInitialCmd())
     setIsConfigOpen(true)
   }
 
@@ -77,23 +83,30 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
     const trimmedTitle = configTitle.trim() || 'TERMINAL'
     const trimmedCwd = configCwd.trim()
     const trimmedCmd = configCommand.trim()
+    const cmdList = trimmedCmd
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
 
     onUpdate({
       title: trimmedTitle,
       cwd: trimmedCwd,
-      command: trimmedCmd
+      command: trimmedCmd,
+      commands: cmdList.length > 1 ? cmdList : undefined
     })
 
     const existing = terminalPool.getTerminal(card.id)
     if (existing) {
       existing.updateConfig({
         cwd: trimmedCwd,
-        command: trimmedCmd
+        command: trimmedCmd,
+        commands: cmdList.length > 1 ? cmdList : undefined
       })
       if (andRestart) {
         existing.restart({
           cwd: trimmedCwd,
           command: trimmedCmd,
+          commands: cmdList.length > 1 ? cmdList : undefined,
           env: card.env,
           autoStart: card.autoStart ?? true
         })
@@ -308,6 +321,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           panelId={card.id}
           cwd={card.cwd || ''}
           command={card.command || ''}
+          commands={card.commands}
           env={card.env}
           autoStart={card.autoStart ?? true}
           isActive={isFocused}
@@ -372,16 +386,36 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">
-                  COMANDO DE INICIO (AUTO-RUN)
-                </label>
-                <input
-                  type="text"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                    SECUENCIA DE COMANDOS (AUTO-RUN)
+                  </label>
+                  {(() => {
+                    const steps = (configCommand || '')
+                      .split('\n')
+                      .map((l) => l.trim())
+                      .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
+                    if (steps.length > 1) {
+                      return (
+                        <span className="px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-[9px] font-mono font-medium">
+                          {steps.length} pasos en secuencia
+                        </span>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+                <textarea
                   value={configCommand}
                   onChange={(e) => setConfigCommand(e.target.value)}
-                  placeholder="e.g. npm run dev"
-                  className="w-full bg-[#12151b] border border-zinc-700/80 rounded px-2.5 py-1.5 text-emerald-400 text-xs font-mono focus:border-emerald-500/80 focus:outline-none placeholder:text-zinc-600"
+                  placeholder={`# Secuencia de comandos:\nsource .venv/bin/activate\nnpm run dev`}
+                  rows={3}
+                  className="w-full bg-[#12151b] border border-zinc-700/80 rounded px-2.5 py-1.5 text-emerald-400 text-xs font-mono focus:border-emerald-500/80 focus:outline-none placeholder:text-zinc-600 leading-relaxed resize-y min-h-[64px]"
+                  spellCheck={false}
                 />
+                <span className="text-[9px] text-zinc-500 block mt-0.5">
+                  1 comando por línea (# para comentarios)
+                </span>
               </div>
             </div>
 

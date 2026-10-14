@@ -3,6 +3,7 @@ export interface PanelConfig {
   title: string
   cwd: string
   command: string
+  commands?: string[]
   autoStart: boolean
   env?: Record<string, string>
 }
@@ -23,6 +24,7 @@ export interface CanvasCard {
   // For terminal kind:
   cwd?: string
   command?: string
+  commands?: string[]
   autoStart?: boolean
   env?: Record<string, string>
   // For browser kind:

@@ -31,6 +31,7 @@ interface XTermViewProps {
   panelId: string
   cwd: string
   command: string
+  commands?: string[]
   env?: Record<string, string>
   autoStart: boolean
   isActive?: boolean
@@ -44,7 +45,7 @@ interface ContextMenuState {
 }
 
 export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
-  ({ panelId, cwd, command, env, autoStart, isActive = true }, ref) => {
+  ({ panelId, cwd, command, commands, env, autoStart, isActive = true }, ref) => {
     const slotRef = useRef<HTMLDivElement>(null)
     const managedRef = useRef<ManagedTerminal | null>(null)
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -274,6 +275,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       const managed = terminalPool.getOrCreateTerminal(panelId, {
         cwd,
         command,
+        commands,
         env,
         autoStart
       })

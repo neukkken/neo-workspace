@@ -48,6 +48,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             title: matchingPanel.title,
             cwd: matchingPanel.cwd,
             command: matchingPanel.command,
+            commands: matchingPanel.commands,
             autoStart: matchingPanel.autoStart,
             env: matchingPanel.env
           }
@@ -62,6 +63,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       title: p.title,
       cwd: p.cwd,
       command: p.command,
+      commands: p.commands,
       autoStart: p.autoStart,
       env: p.env,
       x: 60 + (idx % 2) * 580,
@@ -98,6 +100,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             title: matchingPanel.title,
             cwd: matchingPanel.cwd,
             command: matchingPanel.command,
+            commands: matchingPanel.commands,
             autoStart: matchingPanel.autoStart,
             env: matchingPanel.env
           }
@@ -147,6 +150,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           p.title === current.title &&
           p.cwd === current.cwd &&
           p.command === current.command &&
+          JSON.stringify(p.commands) === JSON.stringify(current.commands) &&
           p.autoStart === current.autoStart
         )
       })
@@ -177,6 +181,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             title: p.title,
             cwd: p.cwd,
             command: p.command,
+            commands: p.commands,
             autoStart: p.autoStart,
             env: p.env
           }
@@ -201,6 +206,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         title: p.title,
         cwd: p.cwd,
         command: p.command,
+        commands: p.commands,
         autoStart: p.autoStart,
         env: p.env,
         x: 60 + ((updated.length + i) % 2) * 580,

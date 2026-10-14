@@ -6,6 +6,7 @@ export interface SpawnOptions {
   panelId: string
   cwd: string
   command?: string
+  commands?: string[]
   env?: Record<string, string>
   cols?: number
   rows?: number
@@ -116,13 +117,36 @@ export class PtyManager {
         }, 80)
       }
 
-      const cmd = options.command?.trim()
-      if (cmd && cmd.length > 0) {
+      // Extract command sequence (supports commands array, or multiline command string)
+      let commandList: string[] = []
+      if (Array.isArray(options.commands) && options.commands.length > 0) {
+        commandList = options.commands
+      } else if (options.command) {
+        commandList = options.command.split(/\r?\n/)
+      }
+
+      // Filter empty lines and comment lines (starting with # or //)
+      commandList = commandList
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0 && !c.startsWith('#') && !c.startsWith('//'))
+
+      if (commandList.length > 0) {
         setTimeout(() => {
-          if (this.terminals.has(options.panelId)) {
-            ptyProcess.write(`${cmd}\n`)
+          if (!this.terminals.has(options.panelId)) return
+
+          if (commandList.length === 1) {
+            ptyProcess.write(`${commandList[0]}\n`)
+          } else {
+            onData(`\r\n\x1b[36m[NeoWork]: Ejecutando secuencia de inicio (${commandList.length} pasos)...\x1b[0m\r\n`)
+            commandList.forEach((commandItem, index) => {
+              setTimeout(() => {
+                if (this.terminals.has(options.panelId)) {
+                  ptyProcess.write(`${commandItem}\n`)
+                }
+              }, index * 450)
+            })
           }
-        }, 400)
+        }, 450)
       }
 
       return true
