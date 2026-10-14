@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
 import { TerminalThemeName } from '../types'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 export interface TerminalSpawnConfig {
   cwd: string
@@ -236,12 +237,16 @@ class TerminalPool {
       cursorStyle: 'block',
       fontFamily: "'JetBrains Mono', 'Liberation Mono', 'Noto Sans Mono', 'DejaVu Sans Mono', monospace",
       fontSize: this.currentFontSize,
-      lineHeight: 1.15,
+      lineHeight: 1.0,
       letterSpacing: 0,
       rescaleOverlappingGlyphs: true,
       allowTransparency: true,
       scrollback: 5000,
-      convertEol: true,
+      // IMPORTANT: When connected to node-pty, convertEol MUST be false.
+      // node-pty handles ONLCR (\n -> \r\n) for normal shells. If convertEol is true,
+      // raw-mode interactive TUIs (like Bubbletea / Lipgloss / AGY / vim) have their \n
+      // forced to column 0, causing text and link overwriting across columns.
+      convertEol: false,
       theme
     })
 
@@ -324,9 +329,14 @@ class TerminalPool {
     term.loadAddon(fitAddon)
 
     // Load Web Links Addon (opens URLs on click)
-    const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      window.open(uri, '_blank')
-    })
+    const webLinksAddon = new WebLinksAddon(
+      (_event, uri) => {
+        openExternalUrl(uri)
+      },
+      {
+        urlRegex: /(https?:\/\/[^\s"'!*(){}|\\^<>`]+|(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):\d+[^\s"'!*(){}|\\^<>`]*)/i
+      }
+    )
     term.loadAddon(webLinksAddon)
 
     // Load Search Addon
@@ -407,11 +417,24 @@ class TerminalPool {
     }
 
     let ptySpawned = false
+    let lastCols = 0
+    let lastRows = 0
+
+    const notifyPtyResize = (cols: number, rows: number): void => {
+      if (!ptySpawned || cols <= 0 || rows <= 0) return
+      if (cols === lastCols && rows === lastRows) return
+      lastCols = cols
+      lastRows = rows
+      window.neoAPI.resizeTerminal(panelId, cols, rows)
+    }
+
     const ensurePtySpawned = (): void => {
       if (ptySpawned) return
       ptySpawned = true
       const c = term.cols || 80
       const r = term.rows || 24
+      lastCols = c
+      lastRows = r
       spawnPty(c, r)
     }
 
@@ -422,7 +445,7 @@ class TerminalPool {
           if (!ptySpawned) {
             ensurePtySpawned()
           } else if (term.cols > 0 && term.rows > 0) {
-            window.neoAPI.resizeTerminal(panelId, term.cols, term.rows)
+            notifyPtyResize(term.cols, term.rows)
           }
         }
       } catch {
@@ -441,12 +464,17 @@ class TerminalPool {
       })
     }
 
+    // Directly subscribe to term.onResize to guarantee node-pty is always kept in sync
+    const onResizeDisposable = term.onResize(({ cols, rows }) => {
+      notifyPtyResize(cols, rows)
+    })
+
     // Subscribe to IPC data and exit
     const onDataDisposable = term.onData((data) => {
       window.neoAPI.writeTerminal(panelId, data)
     })
 
-    const urlRegex = /(https?:\/\/(?:localhost|127\.0\.0\.1):\d+(?:\/[^\s\x1b\x07]*)?)/i
+    const urlRegex = /((?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(?::\d+)(?:\/[^\s\x1b\x07"'`<>()[\]{}]*)?)/i
     let lastUrl: string | undefined
     const urlListeners = new Set<(url: string) => void>()
 
@@ -461,12 +489,15 @@ class TerminalPool {
     const unsubscribeData = window.neoAPI.onTerminalData(panelId, (data) => {
       term.write(data)
       const match = data.match(urlRegex)
-      if (match && match[1] !== lastUrl) {
-        lastUrl = match[1]
-        if (managed) {
-          managed.lastDetectedUrl = lastUrl
+      if (match) {
+        const cleaned = cleanUrl(match[1])
+        if (cleaned && cleaned !== lastUrl) {
+          lastUrl = cleaned
+          if (managed) {
+            managed.lastDetectedUrl = lastUrl
+          }
+          urlListeners.forEach((cb) => cb(lastUrl!))
         }
-        urlListeners.forEach((cb) => cb(lastUrl!))
       }
     })
 
@@ -531,6 +562,7 @@ class TerminalPool {
 
     const cleanup = (): void => {
       onDataDisposable.dispose()
+      onResizeDisposable.dispose()
       unsubscribeData()
       unsubscribeExit()
       urlListeners.clear()

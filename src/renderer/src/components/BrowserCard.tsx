@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react'
 import { CanvasCard } from '../types'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 interface BrowserCardProps {
   card: CanvasCard
@@ -87,29 +88,29 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
   // Smart URL formatter: handles search queries, local ports, and direct URLs
   const formatUrl = (raw: string): string => {
-    const trimmed = raw.trim()
-    if (!trimmed) return 'https://www.google.com'
+    const cleaned = cleanUrl(raw)
+    if (!cleaned) return 'https://www.google.com'
 
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return cleaned
     }
 
     if (
-      trimmed.startsWith('localhost:') ||
-      trimmed.startsWith('127.0.0.1:') ||
-      trimmed.startsWith(':')
+      cleaned.startsWith('localhost:') ||
+      cleaned.startsWith('127.0.0.1:') ||
+      cleaned.startsWith(':')
     ) {
-      const portPart = trimmed.startsWith(':') ? `localhost${trimmed}` : trimmed
+      const portPart = cleaned.startsWith(':') ? `localhost${cleaned}` : cleaned
       return `http://${portPart}`
     }
 
     // Check if it's a domain name (e.g. google.com, github.com, vite.dev)
-    if (!trimmed.includes(' ') && trimmed.includes('.') && !trimmed.endsWith('.')) {
-      return `https://${trimmed}`
+    if (!cleaned.includes(' ') && cleaned.includes('.') && !cleaned.endsWith('.')) {
+      return `https://${cleaned}`
     }
 
     // Search query fallback using Google
-    return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`
+    return `https://www.google.com/search?q=${encodeURIComponent(cleaned)}`
   }
 
   // Navigate active tab to target URL
@@ -241,9 +242,19 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
   const handleOpenExternal = (): void => {
     if (activeTab.url) {
-      window.open(activeTab.url, '_blank')
+      openExternalUrl(activeTab.url)
     }
   }
+
+  // Sync card.url when updated externally (e.g. from canvas badges or other nodes)
+  useEffect(() => {
+    if (card.url) {
+      const formatted = formatUrl(card.url)
+      if (formatted && formatted !== activeTab.url) {
+        navigateTo(formatted)
+      }
+    }
+  }, [card.url, navigateTo, activeTab.url])
 
   // Listen to webview events for title, navigation, back/forward history and loading
   useEffect(() => {

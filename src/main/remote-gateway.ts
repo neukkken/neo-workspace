@@ -1139,7 +1139,7 @@ export class RemoteGateway {
         fontSize: currentFontSize,
         lineHeight: 1.25,
         scrollback: 3000,
-        convertEol: true,
+        convertEol: false,
         theme: {
           background: '#090a0d',
           foreground: '#e2e8f0',

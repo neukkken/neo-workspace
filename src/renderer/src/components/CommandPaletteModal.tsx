@@ -15,7 +15,6 @@ import {
   Play,
   Download,
   RotateCw,
-  Smartphone,
   Code2
 } from 'lucide-react'
 import { Workspace, AppState } from '../types'
@@ -39,7 +38,6 @@ interface CommandPaletteModalProps {
   onToggleSidebar: () => void
   onOpenSettings: () => void
   onOpenShortcuts: () => void
-  onOpenMobileConnect?: () => void
   onRestartActiveWorkspace: () => void
   onAddCanvasCard?: (kind: 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode') => void
 }
@@ -54,7 +52,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   onToggleSidebar,
   onOpenSettings,
   onOpenShortcuts,
-  onOpenMobileConnect,
   onRestartActiveWorkspace,
   onAddCanvasCard
 }) => {
@@ -151,19 +148,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     }
   })
 
-  if (onOpenMobileConnect) {
-    items.push({
-      id: 'act-mobile-connect',
-      title: 'Conectar Teléfono Móvil (Remote Gateway)',
-      subtitle: 'Ver workspaces y tirar prompts a tus agentes desde el móvil por QR',
-      category: 'Acciones',
-      icon: <Smartphone size={15} className="text-emerald-400" />,
-      action: () => {
-        onOpenMobileConnect()
-        onClose()
-      }
-    })
-  }
 
   // 3. Canvas Tools
   if (onAddCanvasCard) {

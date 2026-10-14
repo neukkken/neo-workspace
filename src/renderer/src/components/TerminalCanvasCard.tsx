@@ -18,6 +18,7 @@ import {
 import { CanvasCard, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
 import { terminalPool } from '../services/terminal-pool'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 interface TerminalCanvasCardProps {
   card: CanvasCard
@@ -187,17 +188,18 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           {detectedUrl && (
             <button
               onClick={() => {
+                const target = cleanUrl(detectedUrl)
                 if (onOpenInBrowser) {
-                  onOpenInBrowser(detectedUrl)
+                  onOpenInBrowser(target)
                 } else {
-                  window.open(detectedUrl, '_blank')
+                  openExternalUrl(target)
                 }
               }}
               className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono transition-colors cursor-pointer animate-in fade-in"
-              title={`Abrir ${detectedUrl}`}
+              title={`Abrir ${cleanUrl(detectedUrl)}`}
             >
               <Globe size={10} className="text-cyan-400 shrink-0" />
-              <span className="truncate max-w-[120px]">{detectedUrl.replace('http://', '')}</span>
+              <span className="truncate max-w-[120px]">{cleanUrl(detectedUrl).replace(/^https?:\/\//, '')}</span>
             </button>
           )}
         </div>

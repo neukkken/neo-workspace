@@ -6,6 +6,7 @@ import React, {
   useState,
   useCallback
 } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Copy,
   Clipboard,
@@ -14,9 +15,11 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react'
 import { terminalPool, ManagedTerminal, isAgyTerminal } from '../services/terminal-pool'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 export interface XTermViewHandle {
   clear: () => void
@@ -37,6 +40,7 @@ interface ContextMenuState {
   x: number
   y: number
   hasSelection: boolean
+  selectedUrl?: string
 }
 
 export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
@@ -244,11 +248,22 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       e.preventDefault()
       e.stopPropagation()
 
-      const hasSelection = managedRef.current?.term.hasSelection() ?? false
+      const term = managedRef.current?.term
+      const hasSelection = term?.hasSelection() ?? false
+      let selectedUrl: string | undefined
+      if (hasSelection) {
+        const sel = term?.getSelection()?.trim() || ''
+        const cleaned = cleanUrl(sel)
+        if (cleaned && (cleaned.startsWith('http://') || cleaned.startsWith('https://'))) {
+          selectedUrl = cleaned
+        }
+      }
+
       setContextMenu({
         x: e.clientX,
         y: e.clientY,
-        hasSelection
+        hasSelection,
+        selectedUrl
       })
     }
 
@@ -270,6 +285,13 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
       slot.appendChild(managed.container)
 
       // Fit terminal immediately to match container dimensions and avoid prompt overlap
+      if (slot.clientWidth > 40 && slot.clientHeight > 40) {
+        managed.fit()
+        if (isActive) {
+          managed.term.focus()
+        }
+      }
+
       requestAnimationFrame(() => {
         managed.fit()
         if (isActive) {
@@ -435,83 +457,109 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
           </div>
         )}
 
-        {/* Floating Context Menu */}
-        {contextMenu && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'fixed',
-              top: `${Math.min(contextMenu.y, window.innerHeight - 200)}px`,
-              left: `${Math.min(contextMenu.x, window.innerWidth - 220)}px`,
-              zIndex: 9999
-            }}
-            className="w-52 bg-[#121418] border border-zinc-700/80 rounded-md shadow-2xl py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
-          >
-            <button
-              onClick={handleCopy}
-              disabled={!contextMenu.hasSelection}
-              className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors ${
-                contextMenu.hasSelection
-                  ? 'hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer'
-                  : 'text-zinc-600 cursor-not-allowed'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <Copy size={13} className={contextMenu.hasSelection ? 'text-emerald-400' : 'text-zinc-600'} />
-                <span>Copiar</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">Ctrl+Shift+C</span>
-            </button>
-
-            <button
-              onClick={handlePaste}
-              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer transition-colors"
-            >
-              <div className="flex items-center space-x-2">
-                <Clipboard size={13} className="text-zinc-400" />
-                <span>Pegar</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">Ctrl+Shift+V</span>
-            </button>
-
-            <button
-              onClick={() => {
-                closeContextMenu()
-                handleOpenSearch()
+        {/* Floating Context Menu with React Portal for pixel-perfect positioning */}
+        {contextMenu &&
+          createPortal(
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
               }}
-              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer transition-colors"
+              style={{
+                position: 'fixed',
+                top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - (contextMenu.selectedUrl ? 230 : 190)))}px`,
+                left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 216))}px`,
+                zIndex: 99999
+              }}
+              className="w-52 bg-[#121418] border border-zinc-700/80 rounded-md shadow-2xl py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
             >
-              <div className="flex items-center space-x-2">
-                <Search size={13} className="text-zinc-400" />
-                <span>Buscar</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">Ctrl+F</span>
-            </button>
+              {contextMenu.selectedUrl && (
+                <>
+                  <button
+                    onClick={() => {
+                      if (contextMenu.selectedUrl) {
+                        openExternalUrl(contextMenu.selectedUrl)
+                      }
+                      closeContextMenu()
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-cyan-500/15 text-cyan-300 hover:text-cyan-200 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <ExternalLink size={13} className="text-cyan-400 shrink-0" />
+                      <span className="truncate">Abrir enlace</span>
+                    </div>
+                  </button>
+                  <div className="h-px bg-zinc-800 my-1" />
+                </>
+              )}
 
-            <div className="h-px bg-zinc-800 my-1" />
+              <button
+                onClick={handleCopy}
+                disabled={!contextMenu.hasSelection}
+                className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors ${
+                  contextMenu.hasSelection
+                    ? 'hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer'
+                    : 'text-zinc-600 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Copy size={13} className={contextMenu.hasSelection ? 'text-emerald-400' : 'text-zinc-600'} />
+                  <span>Copiar</span>
+                </div>
+                <span className="text-[10px] text-zinc-500">Ctrl+Shift+C</span>
+              </button>
 
-            <button
-              onClick={handleSelectAll}
-              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-            >
-              <div className="flex items-center space-x-2">
-                <CheckSquare size={13} className="text-zinc-400" />
-                <span>Seleccionar Todo</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">Ctrl+Shift+A</span>
-            </button>
+              <button
+                onClick={handlePaste}
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <Clipboard size={13} className="text-zinc-400" />
+                  <span>Pegar</span>
+                </div>
+                <span className="text-[10px] text-zinc-500">Ctrl+Shift+V</span>
+              </button>
 
-            <button
-              onClick={handleClearTerminal}
-              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-            >
-              <div className="flex items-center space-x-2">
-                <Eraser size={13} className="text-zinc-400" />
-                <span>Limpiar Consola</span>
-              </div>
-            </button>
-          </div>
-        )}
+              <button
+                onClick={() => {
+                  closeContextMenu()
+                  handleOpenSearch()
+                }}
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white cursor-pointer transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <Search size={13} className="text-zinc-400" />
+                  <span>Buscar</span>
+                </div>
+                <span className="text-[10px] text-zinc-500">Ctrl+F</span>
+              </button>
+
+              <div className="h-px bg-zinc-800 my-1" />
+
+              <button
+                onClick={handleSelectAll}
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <CheckSquare size={13} className="text-zinc-400" />
+                  <span>Seleccionar Todo</span>
+                </div>
+                <span className="text-[10px] text-zinc-500">Ctrl+Shift+A</span>
+              </button>
+
+              <button
+                onClick={handleClearTerminal}
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <Eraser size={13} className="text-zinc-400" />
+                  <span>Limpiar Consola</span>
+                </div>
+              </button>
+            </div>,
+            document.body
+          )}
       </div>
     )
   }

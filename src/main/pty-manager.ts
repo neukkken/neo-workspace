@@ -143,6 +143,7 @@ export class PtyManager {
   public resize(panelId: string, cols: number, rows: number): void {
     const term = this.terminals.get(panelId)
     if (term && cols > 0 && rows > 0) {
+      if (term.cols === cols && term.rows === rows) return
       try {
         term.resize(cols, rows)
       } catch (err) {

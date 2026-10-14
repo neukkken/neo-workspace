@@ -12,6 +12,7 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { CanvasCard } from '../types'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 interface PortMonitorCardProps {
   card: CanvasCard
@@ -236,14 +237,15 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
                 {isOpen && (
                   <button
                     onClick={() => {
+                      const target = cleanUrl(url)
                       if (onOpenInBrowser) {
-                        onOpenInBrowser(url)
+                        onOpenInBrowser(target)
                       } else {
-                        window.open(url, '_blank')
+                        openExternalUrl(target)
                       }
                     }}
                     className="flex items-center space-x-1 px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] transition-colors cursor-pointer"
-                    title={`Abrir ${url}`}
+                    title={`Abrir ${cleanUrl(url)}`}
                   >
                     <Globe size={10} />
                     <span>Abrir</span>

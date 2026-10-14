@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Plus,
   Edit2,
@@ -8,7 +9,9 @@ import {
   Square,
   Copy,
   AlertTriangle,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Workspace, SidebarPosition } from '../types'
 
@@ -96,6 +99,59 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
     }
   }
 
+  // Horizontal scroll state & controls for Top/Bottom layout
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }, [])
+
+  useEffect(() => {
+    if (!isHorizontal) return
+    updateScrollState()
+    const el = scrollContainerRef.current
+    if (!el) return
+
+    const handleScroll = (): void => updateScrollState()
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', updateScrollState)
+
+    const raf = requestAnimationFrame(updateScrollState)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', updateScrollState)
+    }
+  }, [isHorizontal, workspaces.length, updateScrollState])
+
+  // Auto-scroll active workspace tab into view when active workspace changes
+  useEffect(() => {
+    if (!isHorizontal || !scrollContainerRef.current) return
+    const activeEl = scrollContainerRef.current.querySelector(
+      `[data-workspace-id="${activeWorkspaceId}"]`
+    ) as HTMLElement | null
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+    }
+  }, [activeWorkspaceId, isHorizontal])
+
+  const handleScrollBy = (offset: number): void => {
+    scrollContainerRef.current?.scrollBy({ left: offset, behavior: 'smooth' })
+  }
+
+  const handleHorizontalWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY
+      updateScrollState()
+    }
+  }
+
   // HORIZONTAL LAYOUT (Top or Bottom bar)
   if (isHorizontal) {
     const borderClass = position === 'top' ? 'border-b' : 'border-t'
@@ -116,85 +172,119 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
             </span>
           </div>
 
-          {/* Center: Workspaces Horizontal Scroll */}
-          <div className="flex-1 flex items-center space-x-1.5 overflow-x-auto py-1 no-scrollbar">
-            {workspaces.map((ws, idx) => {
-              const isActive = ws.id === activeWorkspaceId
-              const isRunning = runningWorkspaceIds.includes(ws.id)
-              const codeFormatted = ws.code
-                ? ws.code.padStart(2, '0')
-                : (idx + 1).toString().padStart(2, '0')
+          {/* Center: Workspaces Horizontal Scroll Container */}
+          <div className="flex-1 min-w-0 flex items-center relative overflow-hidden py-0.5">
+            {/* Scroll Left Button */}
+            {canScrollLeft && (
+              <button
+                type="button"
+                onClick={() => handleScrollBy(-180)}
+                className="absolute left-0 z-20 h-7 w-6 bg-[#0a0c0e]/95 hover:bg-zinc-800 border-r border-zinc-800/80 rounded-r flex items-center justify-center text-zinc-400 hover:text-emerald-400 transition-colors shadow-lg cursor-pointer"
+                title="Desplazar a la izquierda"
+              >
+                <ChevronLeft size={13} />
+              </button>
+            )}
 
-              return (
-                <div
-                  key={ws.id}
-                  onClick={() => onSelectWorkspace(ws.id)}
-                  onContextMenu={(e) => handleTabContextMenu(e, ws)}
-                  className={`relative flex items-center space-x-2 px-2.5 py-1 rounded cursor-pointer transition-all duration-150 text-xs font-mono shrink-0 ${
-                    isActive
-                      ? 'bg-[#15181d] text-zinc-100 border border-zinc-700/80 shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
-                  }`}
-                  title={`${ws.name} (Clic derecho para opciones)`}
-                >
-                  {/* Active Indicator Accent on bottom */}
-                  {isActive && (
-                    <div className="absolute left-2 right-2 bottom-0 h-0.5 bg-emerald-400 rounded-full" />
-                  )}
+            {/* Scrollable Tabs */}
+            <div
+              ref={scrollContainerRef}
+              onWheel={handleHorizontalWheel}
+              className={`flex-1 min-w-0 flex items-center space-x-1.5 overflow-x-auto py-1 launchpad-scrollbar ${
+                canScrollLeft ? 'pl-6' : ''
+              } ${canScrollRight ? 'pr-6' : ''}`}
+            >
+              {workspaces.map((ws, idx) => {
+                const isActive = ws.id === activeWorkspaceId
+                const isRunning = runningWorkspaceIds.includes(ws.id)
+                const codeFormatted = ws.code
+                  ? ws.code.padStart(2, '0')
+                  : (idx + 1).toString().padStart(2, '0')
 
-                  {/* Status LED */}
-                  <div className="relative flex items-center justify-center shrink-0">
+                return (
+                  <div
+                    key={ws.id}
+                    data-workspace-id={ws.id}
+                    onClick={() => onSelectWorkspace(ws.id)}
+                    onContextMenu={(e) => handleTabContextMenu(e, ws)}
+                    className={`relative flex items-center space-x-2 px-2.5 py-1 rounded cursor-pointer transition-all duration-150 text-xs font-mono shrink-0 ${
+                      isActive
+                        ? 'bg-[#15181d] text-zinc-100 border border-zinc-700/80 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                    }`}
+                    title={`${ws.name} (Clic derecho para opciones)`}
+                  >
+                    {/* Active Indicator Accent on bottom */}
+                    {isActive && (
+                      <div className="absolute left-2 right-2 bottom-0 h-0.5 bg-emerald-400 rounded-full" />
+                    )}
+
+                    {/* Status LED */}
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                          isRunning
+                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
+                            : 'bg-zinc-700/80 border border-zinc-600/50'
+                        }`}
+                        title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
+                      />
+                      {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                        <span
+                          title="Cambios guardados pendientes de aplicar al reiniciar"
+                          className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
+                        />
+                      )}
+                    </div>
+
                     <span
-                      className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
-                        isRunning
-                          ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
-                          : 'bg-zinc-700/80 border border-zinc-600/50'
+                      className={`truncate max-w-[120px] font-medium ${
+                        isActive ? 'text-zinc-100' : 'text-zinc-300'
                       }`}
-                      title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
-                    />
+                    >
+                      {ws.name}
+                    </span>
+
                     {pendingChangesWorkspaceIds?.includes(ws.id) && (
                       <span
                         title="Cambios guardados pendientes de aplicar al reiniciar"
-                        className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
-                      />
+                        className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
+                      >
+                        ⚙
+                      </span>
                     )}
-                  </div>
 
-                  <span
-                    className={`truncate max-w-[120px] font-medium ${
-                      isActive ? 'text-zinc-100' : 'text-zinc-300'
-                    }`}
-                  >
-                    {ws.name}
-                  </span>
-
-                  {pendingChangesWorkspaceIds?.includes(ws.id) && (
                     <span
-                      title="Cambios guardados pendientes de aplicar al reiniciar"
-                      className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
+                      className={`text-[10px] font-mono ${
+                        isActive
+                          ? 'text-emerald-400 font-semibold'
+                          : isRunning
+                          ? 'text-emerald-400/70'
+                          : 'text-zinc-500'
+                      }`}
                     >
-                      ⚙
+                      [{codeFormatted}]
                     </span>
-                  )}
+                  </div>
+                )
+              })}
+              {workspaces.length === 0 && (
+                <span className="text-[11px] font-mono text-zinc-500 italic px-2">
+                  No hay workspaces creados
+                </span>
+              )}
+            </div>
 
-                  <span
-                    className={`text-[10px] font-mono ${
-                      isActive
-                        ? 'text-emerald-400 font-semibold'
-                        : isRunning
-                        ? 'text-emerald-400/70'
-                        : 'text-zinc-500'
-                    }`}
-                  >
-                    [{codeFormatted}]
-                  </span>
-                </div>
-              )
-            })}
-            {workspaces.length === 0 && (
-              <span className="text-[11px] font-mono text-zinc-500 italic px-2">
-                No hay workspaces creados
-              </span>
+            {/* Scroll Right Button */}
+            {canScrollRight && (
+              <button
+                type="button"
+                onClick={() => handleScrollBy(180)}
+                className="absolute right-0 z-20 h-7 w-6 bg-[#0a0c0e]/95 hover:bg-zinc-800 border-l border-zinc-800/80 rounded-l flex items-center justify-center text-zinc-400 hover:text-emerald-400 transition-colors shadow-lg cursor-pointer"
+                title="Desplazar a la derecha"
+              >
+                <ChevronRight size={13} />
+              </button>
             )}
           </div>
 
@@ -380,18 +470,22 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
     const isRunning = runningWorkspaceIds.includes(ws.id)
 
     // Ensure menu stays within window boundaries
-    const top = Math.min(contextMenu.y, window.innerHeight - 180)
-    const left = Math.min(contextMenu.x, window.innerWidth - 200)
+    const top = Math.max(8, Math.min(contextMenu.y, window.innerHeight - 190))
+    const left = Math.max(8, Math.min(contextMenu.x, window.innerWidth - 200))
 
-    return (
+    return createPortal(
       <div
         style={{
           position: 'fixed',
           top: `${top}px`,
           left: `${left}px`,
-          zIndex: 9999
+          zIndex: 99999
         }}
         onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
         className="w-48 bg-[#12151c] border border-zinc-700/80 rounded-md shadow-2xl py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
       >
         <div className="px-3 py-1.5 border-b border-zinc-800 text-[10px] text-zinc-500 font-semibold truncate uppercase">
@@ -451,7 +545,8 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
           <Trash2 size={12} className="text-rose-400" />
           <span>Eliminar Workspace...</span>
         </button>
-      </div>
+      </div>,
+      document.body
     )
   }
 

@@ -211,6 +211,9 @@ export const neoAPI = {
   showItemInFolder: (targetPath: string): Promise<boolean> =>
     ipcRenderer.invoke('shell:show-item-in-folder', targetPath),
 
+  openExternal: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke('shell:open-external', url),
+
   inspectProject: (
     dirPath: string
   ): Promise<{

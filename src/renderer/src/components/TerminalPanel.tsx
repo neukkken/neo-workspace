@@ -3,6 +3,7 @@ import { RotateCw, Eraser, Maximize2, Minimize2, Copy, Check, Folder, Search, Do
 import { PanelConfig, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
 import { terminalPool } from '../services/terminal-pool'
+import { cleanUrl, openExternalUrl } from '../utils/url'
 
 interface TerminalPanelProps {
   panel: PanelConfig
@@ -99,12 +100,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           {/* Localhost / URL Auto-Detection Badge */}
           {detectedUrl && (
             <button
-              onClick={() => window.open(detectedUrl, '_blank')}
+              onClick={() => openExternalUrl(detectedUrl)}
               className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono transition-colors cursor-pointer animate-in fade-in"
-              title={`Abrir ${detectedUrl} en navegador`}
+              title={`Abrir ${cleanUrl(detectedUrl)} en navegador`}
             >
               <Globe size={10} className="text-cyan-400 shrink-0" />
-              <span className="truncate max-w-[140px]">{detectedUrl.replace('http://', '')}</span>
+              <span className="truncate max-w-[140px]">{cleanUrl(detectedUrl).replace(/^https?:\/\//, '')}</span>
             </button>
           )}
         </div>

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Power
 } from 'lucide-react'
+import { openExternalUrl } from '../utils/url'
 
 interface NetworkInterface {
   name: string
@@ -234,7 +235,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
                     {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
                   </button>
                   <button
-                    onClick={() => window.open(currentUrl, '_blank')}
+                    onClick={() => openExternalUrl(currentUrl)}
                     className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors shrink-0"
                     title="Abrir en navegador de escritorio"
                   >

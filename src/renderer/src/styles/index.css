@@ -20,16 +20,15 @@ body {
 .xterm,
 .xterm-viewport,
 .xterm-screen,
-.xterm-rows {
-  font-variant-ligatures: none !important;
-  font-feature-settings: "liga" 0, "calt" 0 !important;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
+.xterm-rows,
 .xterm-rows span {
   font-variant-ligatures: none !important;
-  font-feature-settings: "liga" 0, "calt" 0 !important;
+  font-feature-settings: "liga" 0, "calt" 0, "kern" 0 !important;
+  font-kerning: none !important;
+  text-rendering: geometricPrecision !important;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
 }
 
 /* Custom modern scrollbars */
@@ -77,4 +76,28 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Launchpad horizontal scrollbar */
+.launchpad-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+
+.launchpad-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.launchpad-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 9999px;
+}
+
+.launchpad-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+
+.launchpad-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
 }

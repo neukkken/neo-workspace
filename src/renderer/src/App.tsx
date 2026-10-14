@@ -10,7 +10,6 @@ import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { CommandPaletteModal } from './components/CommandPaletteModal'
-import { MobileConnectModal } from './components/MobileConnectModal'
 import { UpdateNotificationToast } from './components/UpdateNotificationToast'
 import {
   Workspace,
@@ -40,7 +39,6 @@ export const App: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const [isMobileConnectModalOpen, setIsMobileConnectModalOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
 
@@ -125,7 +123,6 @@ export const App: React.FC = () => {
         setIsShortcutsModalOpen(false)
         setIsSettingsModalOpen(false)
         setIsWorkspaceModalOpen(false)
-        setIsMobileConnectModalOpen(false)
         return
       }
 
@@ -776,7 +773,6 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenMobileConnect={() => setIsMobileConnectModalOpen(true)}
       />
 
       {/* TOP POSITION */}
@@ -843,11 +839,6 @@ export const App: React.FC = () => {
         onClose={() => setIsShortcutsModalOpen(false)}
       />
 
-      <MobileConnectModal
-        isOpen={isMobileConnectModalOpen}
-        onClose={() => setIsMobileConnectModalOpen(false)}
-      />
-
       <CommandPaletteModal
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
@@ -872,10 +863,6 @@ export const App: React.FC = () => {
         }}
         onOpenShortcuts={() => {
           setIsShortcutsModalOpen(true)
-          setIsCommandPaletteOpen(false)
-        }}
-        onOpenMobileConnect={() => {
-          setIsMobileConnectModalOpen(true)
           setIsCommandPaletteOpen(false)
         }}
         onRestartActiveWorkspace={() => {

@@ -18,6 +18,44 @@ const vscodeManager = new VSCodeManager()
 let telemetryMonitor: TelemetryMonitor | null = null
 let appUpdater: AppUpdater | null = null
 
+function cleanUrl(raw: string): string {
+  if (!raw) return ''
+  let cleaned = String(raw).trim()
+
+  // 1. Strip raw ANSI escape codes
+  cleaned = cleaned.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+
+  // 2. Strip percent-encoded ANSI escape codes (e.g. %1B[39m)
+  cleaned = cleaned.replace(/%1[Bb](?:\[[0-9;]*[a-zA-Z])?/g, '')
+
+  // 3. Strip non-printable ASCII and control characters
+  cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '')
+
+  // 4. Strip surrounding quotes, parens, brackets
+  cleaned = cleaned.replace(/^['"`(<{\[]+|['"`>)}\]]+$/g, '')
+
+  // 5. Strip trailing sentence punctuation: . , ; : ! ?
+  cleaned = cleaned.replace(/[.,;:!?]+$/, '')
+
+  // 6. Normalize 0.0.0.0 to localhost
+  cleaned = cleaned.replace(
+    /^(https?:\/\/)0\.0\.0\.0(?::(\d+))?/i,
+    (_, proto, port) => `${proto}localhost:${port || '80'}`
+  )
+  cleaned = cleaned.replace(/^0\.0\.0\.0(?::(\d+))?/i, (_, port) => `http://localhost:${port || '80'}`)
+
+  // 7. Normalize localhost/127.0.0.1 without scheme
+  if (/^(localhost|127\.0\.0\.1|\[::1\]):\d+/i.test(cleaned)) {
+    cleaned = `http://${cleaned}`
+  } else if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(cleaned)) {
+    if (cleaned.includes('.') && !cleaned.includes(' ')) {
+      cleaned = `https://${cleaned}`
+    }
+  }
+
+  return cleaned
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -57,7 +95,12 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    const cleaned = cleanUrl(details.url)
+    if (cleaned) {
+      shell.openExternal(cleaned).catch((err) => {
+        console.warn('[OPEN EXTERNAL FAILED]', err)
+      })
+    }
     return { action: 'deny' }
   })
 
@@ -183,8 +226,8 @@ app.whenReady().then(() => {
     }
   })
 
-  // Start remote gateway
-  remoteGateway.start()
+  // Remote gateway start disabled by user request
+  // remoteGateway.start()
 
   // Directory picker dialog
   ipcMain.handle('dialog:select-directory', async (_event, defaultPath?: string) => {
@@ -493,6 +536,18 @@ app.whenReady().then(() => {
       }
       return false
     } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle('shell:open-external', async (_event, targetUrl: string) => {
+    try {
+      const cleaned = cleanUrl(targetUrl)
+      if (!cleaned) return false
+      await shell.openExternal(cleaned)
+      return true
+    } catch (err: any) {
+      console.warn('[SHELL OPEN EXTERNAL ERROR]', err)
       return false
     }
   })

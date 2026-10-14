@@ -108,4 +108,5 @@ export declare const neoAPI: {
     vscodeOpenDesktop: (folderPath?: string) => Promise<boolean>;
     adblockGetStatus: () => Promise<boolean>;
     adblockToggle: (enabled?: boolean) => Promise<boolean>;
+    openExternal: (url: string) => Promise<boolean>;
 };
