@@ -37,7 +37,11 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "NeoWork"
+    "shortcutName": "NeoWork",
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}.${ext}"
   },
   "linux": {
     "target": [
