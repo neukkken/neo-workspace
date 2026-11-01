@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, Plus, Trash2, FolderOpen, Terminal, Check, Sparkles } from 'lucide-react'
-import { Workspace, PanelConfig, CanvasCard, CanvasConnector } from '../types'
+import { Workspace, PanelConfig, CanvasConnector } from '../types'
+import { openingView, panelCards } from '../utils/cards'
 
 interface PresetTemplate {
   name: string
@@ -320,23 +321,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       const existingCardIds = new Set(mappedCards.map((c) => c.id))
       const newlyAddedPanels = updatedPanels.filter((p) => !existingCardIds.has(p.id))
 
-      const newCanvasCards: CanvasCard[] = newlyAddedPanels.map((p, idx) => ({
-        id: p.id,
-        kind: 'terminal' as const,
-        title: p.title,
-        cwd: p.cwd,
-        command: p.command,
-        commands: p.commands,
-        autoStart: p.autoStart,
-        env: p.env,
-        x: 60 + ((mappedCards.length + idx) % 2) * 580,
-        y: 60 + Math.floor((mappedCards.length + idx) / 2) * 440,
-        width: 550,
-        height: 400,
-        zIndex: mappedCards.length + idx + 1
-      }))
-
-      updatedCanvasCards = [...mappedCards, ...newCanvasCards]
+      updatedCanvasCards = [...mappedCards, ...panelCards(newlyAddedPanels, mappedCards, openingView())]
 
       // Clean up connectors connected to deleted cards
       if (updatedConnectors && removedPanelIds.size > 0) {
@@ -361,16 +346,16 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none">
-      <div className="bg-[#0f1115] border border-zinc-700/80 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-void border border-zinc-700/80 rounded-button w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#14171d] border-b border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-sm font-mono font-semibold text-zinc-100">
-            <Terminal size={15} className="text-emerald-400" />
+        <div className="px-5 py-3.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-sm font-medium text-zinc-100">
+            <Terminal size={15} className="text-zinc-100" />
             <span>{isEditing ? 'EDIT WORKSPACE' : 'CREATE NEW WORKSPACE'}</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
           >
             <X size={15} />
           </button>
@@ -380,10 +365,10 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Running workspace notice banner */}
           {isEditing && isRunning && (
-            <div className="p-3 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200/90 text-xs font-mono flex items-start space-x-2.5">
-              <span className="text-amber-400 font-bold shrink-0 mt-0.5">💡</span>
+            <div className="p-3 rounded-button border border-white/15 bg-white/5 text-signal-soft text-xs flex items-start space-x-2.5">
+              <span className="text-signal-soft font-medium shrink-0 mt-0.5">💡</span>
               <div className="leading-relaxed">
-                <span className="font-semibold text-amber-300">Workspace en ejecución:</span>{' '}
+                <span className="font-medium text-signal-soft">Workspace en ejecución:</span>{' '}
                 Los cambios se guardarán sin reiniciar ni cerrar tus terminales activas para no interrumpir tu trabajo. Se aplicarán la próxima vez que reinicies el workspace.
               </div>
             </div>
@@ -391,9 +376,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
           {/* Template Presets Picker (New Workspaces Only) */}
           {!isEditing && (
-            <div className="space-y-1.5 p-3 rounded-lg bg-[#0a0c0f] border border-zinc-800/90">
-              <label className="text-[11px] font-mono text-zinc-400 flex items-center space-x-1.5 font-medium">
-                <Sparkles size={12} className="text-amber-400" />
+            <div className="space-y-1.5 p-3 rounded-button bg-void border border-zinc-800/90">
+              <label className="text-[11px] text-zinc-400 flex items-center space-x-1.5 font-medium">
+                <Sparkles size={12} className="text-zinc-400" />
                 <span>PLANTILLAS PREDEFINIDAS (OPCIONAL)</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
@@ -402,9 +387,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     key={key}
                     type="button"
                     onClick={() => handleApplyPreset(tpl)}
-                    className="text-left p-2 rounded bg-zinc-900/80 border border-zinc-800/80 hover:border-emerald-500/60 hover:bg-zinc-800/90 transition-all text-xs group cursor-pointer"
+                    className="text-left p-2 rounded-control bg-zinc-900/80 border border-zinc-800/80 hover:border-white/25 hover:bg-zinc-800/90 transition-all text-xs group cursor-pointer"
                   >
-                    <div className="font-semibold text-zinc-200 group-hover:text-emerald-400 font-mono text-[11px] truncate">
+                    <div className="font-medium text-zinc-200 group-hover:text-zinc-100 text-[11px] truncate">
                       {tpl.name}
                     </div>
                     <div className="text-[10px] text-zinc-500 truncate mt-0.5">
@@ -419,39 +404,39 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           {/* Workspace General Info */}
           <div className="grid grid-cols-4 gap-3">
             <div className="col-span-3 space-y-1">
-              <label className="text-[11px] font-mono font-medium text-zinc-400">WORKSPACE NAME</label>
+              <label className="text-[11px] font-medium text-zinc-400">WORKSPACE NAME</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. EFAStack, BackendAPI"
-                className="w-full bg-[#0a0c0e] border border-zinc-800 focus:border-emerald-500 focus:outline-none rounded px-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 transition-colors"
+                className="w-full bg-void border border-zinc-800 focus:border-white/40 focus:outline-none rounded-control px-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 transition-colors"
               />
             </div>
             <div className="col-span-1 space-y-1">
-              <label className="text-[11px] font-mono font-medium text-zinc-400">CODE / TAG</label>
+              <label className="text-[11px] font-medium text-zinc-400">CODE / TAG</label>
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="01"
-                className="w-full bg-[#0a0c0e] border border-zinc-800 focus:border-emerald-500 focus:outline-none rounded px-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 transition-colors"
+                className="w-full bg-void border border-zinc-800 focus:border-white/40 focus:outline-none rounded-control px-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 transition-colors"
               />
             </div>
           </div>
 
           {/* Panels Header */}
           <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
-            <div className="text-[11px] font-mono font-medium text-zinc-400 tracking-wider">
+            <div className="text-[11px] text-zinc-400 stamp">
               TERMINAL PANELS ({panels.length})
             </div>
             <button
               type="button"
               onClick={handleAddPanel}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 hover:text-white text-xs font-mono transition-colors"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-control bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 hover:text-white text-xs transition-colors"
             >
-              <Plus size={12} className="text-emerald-400" />
+              <Plus size={12} className="text-zinc-100" />
               <span>Add Panel</span>
             </button>
           </div>
@@ -461,12 +446,12 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             {panels.map((p, idx) => (
               <div
                 key={p.id || idx}
-                className="bg-[#0b0d10] border border-zinc-800 rounded-md p-3 space-y-2.5 relative group"
+                className="bg-void border border-zinc-800 rounded-button p-3 space-y-2.5 relative group"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-[11px] font-mono font-semibold text-zinc-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-signal" />
+                    <span className="text-[11px] font-medium text-zinc-300">
                       PANEL #{idx + 1}
                     </span>
                   </div>
@@ -474,7 +459,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemovePanel(idx)}
-                      className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="p-1 rounded-control text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                       title="Remove panel"
                     >
                       <Trash2 size={12} />
@@ -485,19 +470,19 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {/* Panel Title */}
                   <div className="space-y-1">
-                    <label className="text-[10px] font-mono text-zinc-500">TITLE</label>
+                    <label className="text-[10px] text-zinc-500">TITLE</label>
                     <input
                       type="text"
                       value={p.title}
                       onChange={(e) => handleUpdatePanel(idx, 'title', e.target.value)}
                       placeholder="e.g. FRONTEND-DEV"
-                      className="w-full bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-200"
+                      className="w-full bg-white/[0.04] border border-zinc-800/90 focus:border-zinc-700 rounded-control px-2.5 py-1 text-xs font-mono text-zinc-200"
                     />
                   </div>
 
                   {/* Directory Selection */}
                   <div className="space-y-1">
-                    <label className="text-[10px] font-mono text-zinc-500">WORKING DIRECTORY (PATH)</label>
+                    <label className="text-[10px] text-zinc-500">WORKING DIRECTORY (PATH)</label>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="text"
@@ -507,14 +492,14 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                           inspectFolder(idx, e.target.value)
                         }}
                         placeholder="/home/user/project (vacío para home)"
-                        className="flex-1 bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
+                        className="flex-1 bg-white/[0.04] border border-zinc-800/90 focus:border-zinc-700 rounded-control px-2.5 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
                       />
                       <button
                         type="button"
                         onClick={() => handleBrowseFolder(idx)}
-                        className="flex items-center space-x-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors shrink-0"
+                        className="flex items-center space-x-1 px-2.5 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors shrink-0"
                       >
-                        <FolderOpen size={12} className="text-amber-400" />
+                        <FolderOpen size={12} className="text-zinc-400" />
                         <span>Browse</span>
                       </button>
                     </div>
@@ -530,15 +515,15 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   return (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-mono text-zinc-500 flex items-center space-x-1.5">
+                        <label className="text-[10px] text-zinc-500 flex items-center space-x-1.5">
                           <span>SECUENCIA DE COMANDOS (AUTO-RUN)</span>
                           {cmdSteps.length > 1 && (
-                            <span className="px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-[9px] font-mono font-medium">
+                            <span className="px-1.5 py-0.2 rounded-control bg-white/5 text-zinc-300 border border-white/15 text-[9px] font-medium">
                               {cmdSteps.length} pasos en secuencia
                             </span>
                           )}
                         </label>
-                        <span className="text-[9px] font-mono text-zinc-500">
+                        <span className="text-[9px] text-zinc-500">
                           1 comando por línea (# comentarios)
                         </span>
                       </div>
@@ -547,12 +532,12 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         onChange={(e) => handleUpdatePanel(idx, 'command', e.target.value)}
                         placeholder={`# Comandos secuenciales al abrir el panel:\nsource .venv/bin/activate\nnpm run dev`}
                         rows={3}
-                        className="w-full bg-[#12151a] border border-zinc-800/90 focus:border-zinc-700 rounded px-2.5 py-1.5 text-xs font-mono text-emerald-400 placeholder:text-zinc-600 leading-relaxed resize-y min-h-[64px]"
+                        className="w-full bg-white/[0.04] border border-zinc-800/90 focus:border-zinc-700 rounded-control px-2.5 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 leading-relaxed resize-y min-h-[64px]"
                         spellCheck={false}
                       />
                       {panelSuggestions[idx] && panelSuggestions[idx].length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1 items-center">
-                          <span className="text-[9px] font-mono text-zinc-500">Sugerencias:</span>
+                          <span className="text-[9px] text-zinc-500">Sugerencias:</span>
                           {panelSuggestions[idx].slice(0, 5).map((s) => (
                             <button
                               key={s.command}
@@ -562,7 +547,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                                 const next = cur ? `${cur}\n${s.command}` : s.command
                                 handleUpdatePanel(idx, 'command', next)
                               }}
-                              className="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono transition-colors cursor-pointer"
+                              className="px-1.5 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-100 border border-white/15 text-[10px] transition-colors cursor-pointer"
                               title="Click para añadir a la secuencia"
                             >
                               + {s.label}
@@ -576,12 +561,12 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
                 {/* Auto start toggle */}
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center space-x-2 text-[11px] font-mono text-zinc-400 cursor-pointer">
+                  <label className="flex items-center space-x-2 text-[11px] text-zinc-400 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={p.autoStart}
                       onChange={(e) => handleUpdatePanel(idx, 'autoStart', e.target.checked)}
-                      className="rounded border-zinc-700 text-emerald-500 focus:ring-0 bg-zinc-900"
+                      className="rounded-control border-zinc-700 text-zinc-100 focus:ring-0 bg-zinc-900"
                     />
                     <span>Execute command automatically on workspace load</span>
                   </label>
@@ -589,7 +574,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowEnvMap((prev) => ({ ...prev, [idx]: !prev[idx] }))}
-                    className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
                   >
                     {showEnvMap[idx] ? 'Ocultar ENV ▲' : '+ Variables ENV ▼'}
                   </button>
@@ -598,7 +583,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 {/* Environment variables textarea */}
                 {showEnvMap[idx] && (
                   <div className="pt-1.5">
-                    <label className="text-[10px] font-mono text-zinc-500 block mb-1">
+                    <label className="text-[10px] text-zinc-500 block mb-1">
                       VARIABLES DE ENTORNO (KEY=VALUE, un par por línea)
                     </label>
                     <textarea
@@ -606,7 +591,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       value={envInputs[idx] || ''}
                       onChange={(e) => setEnvInputs((prev) => ({ ...prev, [idx]: e.target.value }))}
                       placeholder="PORT=3000&#10;NODE_ENV=development"
-                      className="w-full bg-[#12151a] border border-zinc-800 rounded p-1.5 text-[11px] font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
+                      className="w-full bg-white/[0.04] border border-zinc-800 rounded-control p-1.5 text-[11px] font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
                     />
                   </div>
                 )}
@@ -620,7 +605,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               <button
                 type="button"
                 onClick={handleImportNeoworkJson}
-                className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+                className="px-2.5 py-1 rounded-control bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs transition-colors"
                 title="Cargar configuración desde archivo .neowork.json"
               >
                 Cargar .neowork.json
@@ -628,7 +613,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportNeoworkJson}
-                className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+                className="px-2.5 py-1 rounded-control bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs transition-colors"
                 title="Guardar archivo .neowork.json en la carpeta del proyecto para Git"
               >
                 Guardar en repo (.neowork.json)
@@ -639,13 +624,13 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-1.5 rounded border border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-colors"
+                className="px-3.5 py-1.5 rounded-control border border-zinc-700/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs font-mono transition-colors cursor-pointer"
+                className="flex items-center space-x-1.5 px-4 py-1.5 rounded-control bg-signal hover:bg-signal/85 text-zinc-950 font-medium text-xs transition-colors cursor-pointer"
               >
                 <Check size={13} strokeWidth={2.5} />
                 <span>Save Workspace</span>

@@ -4,8 +4,6 @@ import {
   RotateCw,
   ExternalLink,
   Trash2,
-  Maximize2,
-  Minimize2,
   FolderOpen,
   Play,
   Square,
@@ -48,7 +46,6 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
   const [serverPort, setServerPort] = useState<number | null>(card.vscodePort || null)
   const [customUrl, setCustomUrl] = useState<string>(card.vscodeUrl || 'http://localhost:8080')
   const [isStarting, setIsStarting] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isCodeInstalled, setIsCodeInstalled] = useState<boolean | null>(null)
   const [key, setKey] = useState(0)
@@ -140,25 +137,14 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
 
   const activeUrl = getActiveUrl()
 
-  const cardStyle: React.CSSProperties = isExpanded
-    ? {
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
-        bottom: 10,
-        width: 'calc(100% - 20px)',
-        height: 'calc(100% - 20px)',
-        zIndex: 999
-      }
-    : {
-        position: 'absolute',
-        left: `${card.x}px`,
-        top: `${card.y}px`,
-        width: `${card.width}px`,
-        height: `${card.height}px`,
-        zIndex: isFocused ? 50 : card.zIndex || 10
-      }
+  const cardStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `${card.x}px`,
+    top: `${card.y}px`,
+    width: `${card.width}px`,
+    height: `${card.height}px`,
+    zIndex: isFocused ? 50 : card.zIndex || 10
+  }
 
   return (
     <div
@@ -170,27 +156,27 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
           e.preventDefault()
         }
       }}
-      className={`canvas-card pointer-events-auto flex flex-col bg-[#111318] rounded-lg border shadow-2xl overflow-hidden select-none transition-shadow ${
+      className={`canvas-card pointer-events-auto flex flex-col island overflow-hidden select-none transition-shadow ${
         isFocused
-          ? 'border-blue-500/90 shadow-[0_0_25px_rgba(59,130,246,0.2)] ring-1 ring-blue-500/50'
+          ? 'border-white/40 shadow-[0_0_32px_-6px_rgb(var(--signal-rgb)/0.55)]'
           : 'border-zinc-800/90 hover:border-zinc-700/80'
       }`}
     >
       {/* Header Bar */}
       <div
         onMouseDown={(e) => onDragStart(e, card.id)}
-        className="h-9 px-2.5 bg-[#181a20] border-b border-zinc-800 flex items-center justify-between cursor-move select-none shrink-0"
+        className="h-9 px-2.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between cursor-move select-none shrink-0"
       >
         {/* Left: VS Code Badge & Title */}
         <div className="flex items-center space-x-2 truncate">
-          <div className="w-5 h-5 rounded flex items-center justify-center bg-blue-500/20 text-blue-400 shrink-0">
-            <Code2 size={13} className="text-blue-400" />
+          <div className="w-5 h-5 rounded-control flex items-center justify-center bg-white/10 text-zinc-300 shrink-0">
+            <Code2 size={13} className="text-zinc-300" />
           </div>
-          <span className="font-mono text-[11px] font-semibold tracking-wide text-zinc-100 uppercase truncate">
+          <span className="text-[11px] stamp text-zinc-100 truncate">
             {card.title || 'VSCODE'}
           </span>
           {serverPort && mode === 'local' && (
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+            <span className="text-[10px] text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.2 rounded-control">
               :{serverPort}
             </span>
           )}
@@ -198,7 +184,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
 
         {/* Center: Mode Selector Pills */}
         <div
-          className="flex items-center space-x-1 bg-zinc-900/90 border border-zinc-800/80 p-0.5 rounded text-[10px] font-mono"
+          className="flex items-center space-x-1 bg-zinc-900/90 border border-zinc-800/80 p-0.5 rounded-control text-[10px]"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
@@ -208,9 +194,9 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
               setMode('local')
               onUpdate({ vscodeMode: 'local' })
             }}
-            className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 rounded-control transition-colors cursor-pointer ${
               mode === 'local'
-                ? 'bg-blue-600 text-white font-medium shadow-xs'
+                ? 'bg-zinc-100 text-white font-medium '
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="VS Code Local (code serve-web con tus archivos)"
@@ -223,9 +209,9 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
               setMode('web')
               onUpdate({ vscodeMode: 'web' })
             }}
-            className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 rounded-control transition-colors cursor-pointer ${
               mode === 'web'
-                ? 'bg-blue-600 text-white font-medium shadow-xs'
+                ? 'bg-zinc-100 text-white font-medium '
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="VS Code Web oficial (vscode.dev)"
@@ -238,9 +224,9 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
               setMode('custom')
               onUpdate({ vscodeMode: 'custom' })
             }}
-            className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+            className={`px-2 py-0.5 rounded-control transition-colors cursor-pointer ${
               mode === 'custom'
-                ? 'bg-blue-600 text-white font-medium shadow-xs'
+                ? 'bg-zinc-100 text-white font-medium '
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
             title="Servidor Personalizado / code-server"
@@ -259,7 +245,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
             <button
               type="button"
               onClick={handleOpenDesktop}
-              className="hidden sm:flex items-center space-x-1 px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[10px] font-mono transition-colors cursor-pointer"
+              className="hidden sm:flex items-center space-x-1 px-1.5 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[10px] transition-colors cursor-pointer"
               title="Abrir en VS Code de escritorio (code .)"
             >
               <ExternalLink size={10} />
@@ -270,7 +256,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
           <button
             type="button"
             onClick={handleReload}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Recargar VS Code"
           >
             <RotateCw size={11} />
@@ -279,19 +265,10 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
           <button
             type="button"
             onClick={handleOpenDevTools}
-            className="p-1 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Abrir DevTools de la instancia"
           >
             <Terminal size={11} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title={isExpanded ? 'Restaurar tamaño' : 'Maximizar tarjeta'}
-          >
-            {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>
 
           <button
@@ -300,7 +277,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
               handleStopLocalServer()
               onDelete(card.id)
             }}
-            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
+            className="p-1.5 rounded-control text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar instancia de VS Code"
           >
             <Trash2 size={13} />
@@ -311,10 +288,10 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
       {/* Subheader / Status Bar */}
       {mode === 'custom' && (
         <div
-          className="h-8 px-2 bg-[#0d0e12] border-b border-zinc-800 flex items-center space-x-2 shrink-0"
+          className="h-8 px-2 bg-white/[0.04] border-b border-zinc-800 flex items-center space-x-2 shrink-0"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <span className="text-[10px] font-mono text-zinc-500 shrink-0">SERVER URL:</span>
+          <span className="text-[10px] text-zinc-500 shrink-0">SERVER URL:</span>
           <input
             type="text"
             value={customUrl}
@@ -323,12 +300,12 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
               onUpdate({ vscodeUrl: e.target.value })
             }}
             placeholder="http://localhost:8080"
-            className="flex-1 bg-[#14161d] border border-zinc-800 focus:border-blue-500 rounded px-2 py-0.5 text-xs font-mono text-zinc-200 focus:outline-none"
+            className="flex-1 bg-white/[0.04] border border-zinc-800 focus:border-white/40 rounded-control px-2 py-0.5 text-xs font-mono text-zinc-200 focus:outline-none"
           />
           <button
             type="button"
             onClick={handleReload}
-            className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs cursor-pointer"
+            className="px-2 py-0.5 rounded-control bg-zinc-100 hover:bg-zinc-100 text-white text-xs cursor-pointer"
           >
             Conectar
           </button>
@@ -336,32 +313,32 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 w-full relative min-h-0 bg-[#1e1e1e] overflow-hidden flex flex-col">
+      <div className="flex-1 w-full relative min-h-0 bg-white/[0.04] overflow-hidden flex flex-col">
         {mode === 'local' && !serverUrl ? (
           // Local Server Setup Prompt
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none bg-[#111317]">
-            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mb-4 shadow-xl">
-              <Code2 size={32} className="text-blue-400" />
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none bg-white/[0.04]">
+            <div className="w-16 h-16 rounded-card bg-white/5 border border-white/15 flex items-center justify-center mb-4">
+              <Code2 size={32} className="text-zinc-300" />
             </div>
 
-            <h3 className="font-mono text-sm font-semibold text-zinc-100 uppercase tracking-wider mb-1">
+            <h3 className="text-sm text-zinc-100 stamp mb-1">
               INSTANCIA DE VS CODE
             </h3>
 
-            <p className="font-mono text-xs text-zinc-400 max-w-md mb-2 leading-relaxed">
+            <p className="text-xs text-zinc-400 max-w-md mb-2 leading-relaxed">
               Ejecuta el editor oficial de Visual Studio Code directamente dentro de Neowork con tus
               archivos, extensiones y terminal integrados.
             </p>
 
             {currentPath && (
-              <div className="flex items-center space-x-1.5 font-mono text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1 rounded max-w-lg truncate mb-5">
-                <FolderOpen size={12} className="text-amber-400 shrink-0" />
+              <div className="flex items-center space-x-1.5 text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1 rounded-control max-w-lg truncate mb-5">
+                <FolderOpen size={12} className="text-zinc-400 shrink-0" />
                 <span className="truncate">{currentPath}</span>
               </div>
             )}
 
             {errorMessage && (
-              <div className="mb-4 p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 font-mono text-xs flex items-center space-x-2 max-w-md text-left">
+              <div className="mb-4 p-2.5 rounded-control bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2 max-w-md text-left">
                 <AlertCircle size={14} className="shrink-0 text-rose-400" />
                 <span>{errorMessage}</span>
               </div>
@@ -372,7 +349,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
                 type="button"
                 onClick={handleStartLocalServer}
                 disabled={isStarting}
-                className="flex items-center space-x-2 px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-mono font-semibold text-xs transition-colors shadow-lg shadow-blue-500/20 cursor-pointer"
+                className="flex items-center space-x-2 px-5 py-2 rounded-button bg-zinc-100 hover:bg-zinc-100 disabled:opacity-50 text-white font-medium text-xs transition-colors cursor-pointer"
               >
                 {isStarting ? (
                   <>
@@ -393,9 +370,9 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
                   setMode('web')
                   onUpdate({ vscodeMode: 'web' })
                 }}
-                className="flex items-center space-x-1.5 px-4 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs transition-colors cursor-pointer"
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-button bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors cursor-pointer"
               >
-                <Globe size={13} className="text-cyan-400" />
+                <Globe size={13} className="text-zinc-300" />
                 <span>Usar VS Code Web (vscode.dev)</span>
               </button>
 
@@ -403,7 +380,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenDesktop}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 font-mono text-xs transition-colors cursor-pointer"
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-button bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs transition-colors cursor-pointer"
                 >
                   <ExternalLink size={12} />
                   <span>Abrir en Escritorio</span>
@@ -412,7 +389,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
             </div>
 
             {isCodeInstalled === false && (
-              <p className="font-mono text-[11px] text-amber-400/90 mt-4 max-w-sm leading-normal">
+              <p className="text-[11px] text-signal-soft mt-4 max-w-sm leading-normal">
                 Nota: No se detectó el comando <code>code</code> en la terminal. Puedes usar la versión
                 web oficial de <strong>vscode.dev</strong> con un solo clic arriba.
               </p>
@@ -420,7 +397,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
           </div>
         ) : (
           // Active Webview / Iframe Area
-          <div className="w-full h-full relative flex-1 min-h-0 bg-[#1e1e1e]">
+          <div className="w-full h-full relative flex-1 min-h-0 bg-white/[0.04]">
             <webview
               ref={webviewRef}
               key={`${key}-${activeUrl}`}
@@ -436,17 +413,15 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
       </div>
 
       {/* Resize Handle (Bottom Right) */}
-      {!isExpanded && (
-        <div
-          onMouseDown={(e) => onResizeStart(e, card.id)}
-          className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-blue-400"
-          title="Redimensionar nodo"
-        >
-          <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-            <polygon points="6 0, 6 6, 0 6" />
-          </svg>
-        </div>
-      )}
+      <div
+        onMouseDown={(e) => onResizeStart(e, card.id)}
+        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
+        title="Redimensionar nodo"
+      >
+        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
+          <polygon points="6 0, 6 6, 0 6" />
+        </svg>
+      </div>
     </div>
   )
 }

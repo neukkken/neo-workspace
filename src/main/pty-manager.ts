@@ -1,10 +1,12 @@
 import * as pty from 'node-pty'
 import { existsSync } from 'fs'
 import { homedir } from 'os'
+import { ShellInfo } from './shells'
 
 export interface SpawnOptions {
   panelId: string
   cwd: string
+  shell?: string
   command?: string
   commands?: string[]
   env?: Record<string, string>
@@ -54,15 +56,9 @@ export class PtyManager {
     }
   }
 
-  private getShell(): string {
-    if (process.platform === 'win32') {
-      return process.env.COMSPEC || 'powershell.exe'
-    }
-    return process.env.SHELL || '/bin/bash'
-  }
-
   public spawn(
     options: SpawnOptions,
+    shell: ShellInfo,
     onData: (data: string) => void,
     onExit: (code: number, signal?: number) => void
   ): boolean {
@@ -76,12 +72,11 @@ export class PtyManager {
       dirExists = false
     }
 
-    const shell = this.getShell()
     const cols = options.cols && options.cols > 0 ? options.cols : 80
     const rows = options.rows && options.rows > 0 ? options.rows : 24
 
     try {
-      const ptyProcess = pty.spawn(shell, [], {
+      const ptyProcess = pty.spawn(shell.path, shell.args, {
         name: 'xterm-256color',
         cols,
         rows,
@@ -107,6 +102,8 @@ export class PtyManager {
       })
 
       ptyProcess.onExit(({ exitCode, signal }) => {
+        // A killed or replaced process must not take the panel's current one down with it
+        if (this.terminals.get(options.panelId) !== ptyProcess) return
         this.terminals.delete(options.panelId)
         onExit(exitCode, signal)
       })
@@ -114,6 +111,12 @@ export class PtyManager {
       if (!dirExists && options.cwd) {
         setTimeout(() => {
           onData(`\r\n\x1b[33m[NeoWork]: Configured path '${options.cwd}' not found. Defaulted to '${workingDir}'.\x1b[0m\r\n`)
+        }, 80)
+      }
+
+      if (options.shell && options.shell !== shell.id) {
+        setTimeout(() => {
+          onData(`\r\n\x1b[33m[NeoWork]: Motor '${options.shell}' no disponible. Usando ${shell.label}.\x1b[0m\r\n`)
         }, 80)
       }
 
@@ -134,14 +137,15 @@ export class PtyManager {
         setTimeout(() => {
           if (!this.terminals.has(options.panelId)) return
 
+          // \r is Enter in every shell; through ConPTY \n isn't, and PowerShell won't run the line
           if (commandList.length === 1) {
-            ptyProcess.write(`${commandList[0]}\n`)
+            ptyProcess.write(`${commandList[0]}\r`)
           } else {
             onData(`\r\n\x1b[36m[NeoWork]: Ejecutando secuencia de inicio (${commandList.length} pasos)...\x1b[0m\r\n`)
             commandList.forEach((commandItem, index) => {
               setTimeout(() => {
                 if (this.terminals.has(options.panelId)) {
-                  ptyProcess.write(`${commandItem}\n`)
+                  ptyProcess.write(`${commandItem}\r`)
                 }
               }, index * 450)
             })

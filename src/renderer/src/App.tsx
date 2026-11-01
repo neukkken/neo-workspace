@@ -1,17 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { Play, Power } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Launchpad } from './components/Launchpad'
 import { WorkspaceHeader } from './components/WorkspaceHeader'
-import { TerminalGrid } from './components/TerminalGrid'
 import { CanvasWorkspace } from './components/CanvasWorkspace'
-import { StatusBar } from './components/StatusBar'
 import { WorkspaceModal } from './components/WorkspaceModal'
 import { SettingsModal } from './components/SettingsModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { CommandPaletteModal } from './components/CommandPaletteModal'
 import { UpdateNotificationToast } from './components/UpdateNotificationToast'
+import { AgentToasts } from './components/AgentToasts'
 import {
+  AgentStatus,
   Workspace,
   AppState,
   TelemetryPayload,
@@ -19,11 +19,14 @@ import {
   PanelConfig,
   CanvasCard,
   CanvasConnector,
+  NodeKind,
   UpdateStatusPayload,
   TerminalThemeName,
   WorkspaceLayoutMode
 } from './types'
 import { terminalPool } from './services/terminal-pool'
+import { createCard, openingView } from './utils/cards'
+import { applyPalette, DEFAULT_WALLPAPER, readWallpaperPalette, wallpaperUrl } from './wallpapers'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -41,12 +44,25 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({})
+  const [attentionWorkspaceIds, setAttentionWorkspaceIds] = useState<string[]>([])
+  const [agentToasts, setAgentToasts] = useState<AgentStatus[]>([])
 
   const appStateRef = useRef<AppState | null>(null)
   appStateRef.current = appState
 
   const runningWorkspaceIdsRef = useRef<string[]>([])
   runningWorkspaceIdsRef.current = runningWorkspaceIds
+
+  const addCanvasCardRef = useRef<((kind: NodeKind) => void) | null>(null)
+
+  // Listeners registered once on mount go through this: the first render returns before the handlers exist
+  const handlersRef = useRef<{
+    selectWorkspace: (id: string) => void
+    newWorkspace: () => void
+    saveAll: () => Promise<void>
+    restartWorkspace: (id: string) => Promise<void>
+  } | null>(null)
 
   // 1. Load initial workspaces from store once on mount
   useEffect(() => {
@@ -94,12 +110,42 @@ export const App: React.FC = () => {
       setUpdateStatus(status)
     })
     const unsubRemoteWs = window.neoAPI.onRemoteWorkspaceSelect?.((wsId) => {
-      handleSelectWorkspace(wsId)
+      handlersRef.current?.selectWorkspace(wsId)
     })
     return () => {
       unsubscribe()
       unsubRemoteWs?.()
     }
+  }, [])
+
+  // Agent runs across every workspace; finished ones elsewhere ask for attention
+  useEffect(() => {
+    const unsubscribeStatus = window.neoAPI.onAgentStatus((status) => {
+      setAgentStatuses((prev) => {
+        const { [status.panelId]: _previous, ...rest } = prev
+        return status.state === 'stopped' ? rest : { ...rest, [status.panelId]: status }
+      })
+      setAgentToasts((prev) => {
+        const others = prev.filter((t) => t.panelId !== status.panelId)
+        return status.notify ? [...others, status].slice(-4) : others
+      })
+      if (status.notify) {
+        setAttentionWorkspaceIds((prev) =>
+          prev.includes(status.workspaceId) ? prev : [...prev, status.workspaceId]
+        )
+      }
+    })
+    const unsubscribeOpen = window.neoAPI.onAgentOpen((workspaceId) => {
+      handlersRef.current?.selectWorkspace(workspaceId)
+    })
+    return () => {
+      unsubscribeStatus()
+      unsubscribeOpen()
+    }
+  }, [])
+
+  const dismissAgentToast = useCallback((panelId: string): void => {
+    setAgentToasts((prev) => prev.filter((t) => t.panelId !== panelId))
   }, [])
 
   // 3. Global Keyboard Shortcuts Listener
@@ -138,7 +184,7 @@ export const App: React.FC = () => {
       // Ctrl + N: Create new workspace
       if (isCtrlOrCmd && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
         e.preventDefault()
-        handleNewWorkspace()
+        handlersRef.current?.newWorkspace()
         return
       }
 
@@ -152,27 +198,18 @@ export const App: React.FC = () => {
       // Ctrl + S: Save all workspaces
       if (isCtrlOrCmd && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault()
-        handleSaveAll()
+        handlersRef.current?.saveAll()
         return
       }
 
       const current = appStateRef.current
       if (!current) return
 
-      // Ctrl + Shift + F: Toggle Grid vs Canvas
-      if (isCtrlOrCmd && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
-        e.preventDefault()
-        if (current.activeWorkspaceId) {
-          handleToggleLayoutMode(current.activeWorkspaceId)
-        }
-        return
-      }
-
       // Ctrl + Shift + R: Restart active workspace
       if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault()
         if (current.activeWorkspaceId) {
-          handleRestartWorkspace(current.activeWorkspaceId)
+          handlersRef.current?.restartWorkspace(current.activeWorkspaceId)
         }
         return
       }
@@ -182,7 +219,7 @@ export const App: React.FC = () => {
         const index = parseInt(e.key, 10) - 1
         if (current.workspaces[index]) {
           e.preventDefault()
-          handleSelectWorkspace(current.workspaces[index].id)
+          handlersRef.current?.selectWorkspace(current.workspaces[index].id)
         }
         return
       }
@@ -236,11 +273,33 @@ export const App: React.FC = () => {
     []
   )
 
+  // The whole palette follows the selected wallpaper
+  const isLoaded = appState !== null
+  const selectedWallpaper = appState?.settings?.wallpaper
+  useEffect(() => {
+    if (!isLoaded) return
+    let cancelled = false
+    readWallpaperPalette(selectedWallpaper)
+      .catch(() => null)
+      .then((palette) => {
+        if (cancelled) return
+        applyPalette(palette)
+        terminalPool.setWallpaperColors(palette?.terminal ?? null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isLoaded, selectedWallpaper])
+
+  useEffect(() => {
+    if (isLoaded) window.neoAPI.setRunningWorkspaces(runningWorkspaceIds)
+  }, [isLoaded, runningWorkspaceIds])
+
   if (!appState) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#090a0d] text-zinc-400 font-mono text-xs">
+      <div className="flex h-screen w-screen items-center justify-center bg-void text-zinc-400 text-xs">
         <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span className="w-2 h-2 rounded-full bg-signal animate-ping"></span>
           <span>INITIALIZING NEO-WORKSPACE ORCHESTRATOR...</span>
         </div>
       </div>
@@ -251,6 +310,11 @@ export const App: React.FC = () => {
     appState.workspaces.find((w) => w.id === appState.activeWorkspaceId) || appState.workspaces[0]
 
   const sidebarPosition: SidebarPosition = appState.settings?.sidebarPosition || 'left'
+  const currentWallpaper = appState.settings?.wallpaper ?? DEFAULT_WALLPAPER
+  const backgroundUrl = wallpaperUrl(currentWallpaper)
+  const wallpaperLook = appState.settings?.wallpaperAppearance?.[currentWallpaper]
+  const islandOpacity = wallpaperLook?.islandOpacity ?? appState.settings?.islandOpacity ?? 0.7
+  const islandBlur = wallpaperLook?.islandBlur ?? appState.settings?.islandBlur ?? 10
 
   const persistState = async (newState: AppState): Promise<void> => {
     setAppState(newState)
@@ -269,6 +333,8 @@ export const App: React.FC = () => {
   }
 
   const handleSelectWorkspace = (id: string): void => {
+    setAttentionWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
+    setAgentToasts((prev) => prev.filter((t) => t.workspaceId !== id))
     if (id === appState.activeWorkspaceId) return
 
     const updated: AppState = { ...appState, activeWorkspaceId: id }
@@ -392,16 +458,6 @@ export const App: React.FC = () => {
     }))
   }
 
-  const handleToggleLayoutMode = (workspaceId: string): void => {
-    const ws = appState.workspaces.find((w) => w.id === workspaceId)
-    if (!ws) return
-    const nextMode: WorkspaceLayoutMode = ws.layoutMode === 'canvas' ? 'grid' : 'canvas'
-    const updatedWorkspaces: Workspace[] = appState.workspaces.map((w) =>
-      w.id === workspaceId ? { ...w, layoutMode: nextMode } : w
-    )
-    persistState({ ...appState, workspaces: updatedWorkspaces })
-  }
-
   const handleNewWorkspace = (): void => {
     setEditingWorkspace(null)
     setIsWorkspaceModalOpen(true)
@@ -515,6 +571,13 @@ export const App: React.FC = () => {
     }
   }
 
+  handlersRef.current = {
+    selectWorkspace: handleSelectWorkspace,
+    newWorkspace: handleNewWorkspace,
+    saveAll: handleSaveAll,
+    restartWorkspace: handleRestartWorkspace
+  }
+
   const handleResetDefaults = async (): Promise<void> => {
     terminalPool.destroyAll()
     await window.neoAPI.killAllTerminals()
@@ -547,70 +610,44 @@ export const App: React.FC = () => {
     : false
 
   // Calculate count of active terminal processes across ALL running workspaces
-  const totalRunningPanelsCount = runningWorkspaceIds.reduce((sum, wsId) => {
-    const panels =
-      activeSessionPanels[wsId] || appState.workspaces.find((w) => w.id === wsId)?.panels || []
-    return sum + panels.length
-  }, 0)
-
   // Main workspace view containing header, idle message and terminal grid
   const mainWorkspaceContent = (
-    <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0b0d10] overflow-hidden relative">
+    <main className="flex-1 flex flex-col min-w-0 min-h-0 gap-1.5 relative">
       {!activeWorkspace ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 shadow-xl">
-            <span className="text-2xl font-mono text-emerald-400 font-bold">&gt;_</span>
-          </div>
-          <h2 className="font-mono text-base font-semibold text-zinc-100 uppercase tracking-wider mb-1">
-            BIENVENIDO A NEOWORK
-          </h2>
-          <p className="font-mono text-xs text-zinc-400 max-w-md mb-6 leading-relaxed">
-            No tienes ningún workspace configurado aún. Crea tu primer entorno de trabajo con tus terminales, rutas de proyecto y comandos de inicio.
+        <div className="flex-1 flex items-center justify-center p-8 select-none">
+          <div className="island flex flex-col items-center text-center p-10 max-w-xl">
+          <span className="stamp text-[10px] text-zinc-400 mb-4">NWS</span>
+          <h2 className="display-serif text-6xl text-zinc-100 mb-4">Tu nuevo espacio</h2>
+          <p className="text-sm font-light text-zinc-400 max-w-md mb-8 leading-relaxed">
+            Crea tu primer entorno de trabajo con tus terminales, rutas de proyecto y comandos de inicio.
           </p>
           <button
             onClick={handleNewWorkspace}
-            className="flex items-center space-x-2 px-6 py-2.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/20"
+            className="flex items-center space-x-2 px-6 py-2.5 rounded-button bg-signal hover:bg-signal/85 text-zinc-950 font-medium text-xs transition-colors"
           >
-            <span>+ CREAR PRIMER WORKSPACE</span>
+            <span>Crear primer workspace</span>
           </button>
+          </div>
         </div>
       ) : (
         <>
-          {/* Header for the currently active workspace */}
-          <WorkspaceHeader
-            workspace={activeWorkspace}
-            activePanels={currentSessionPanels}
-            panelsMetrics={telemetry?.panels || {}}
-            isRunning={isCurrentWorkspaceRunning}
-            hasPendingChanges={hasPendingChanges}
-            layoutMode={activeWorkspace.layoutMode || 'grid'}
-            onToggleLayoutMode={() => handleToggleLayoutMode(activeWorkspace.id)}
-            onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
-            onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
-            onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
-            onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
-          />
-
           {/* If the current workspace is stopped, show idle prompt */}
           {!isCurrentWorkspaceRunning && (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
-              <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
-                <Power size={24} className="text-zinc-500" />
-              </div>
-              <h3 className="font-mono text-sm font-semibold text-zinc-200 uppercase tracking-wide">
-                WORKSPACE DETENIDO // {activeWorkspace.name}
-              </h3>
-              <p className="font-mono text-xs text-zinc-500 max-w-sm mt-1 mb-5">
-                Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando
-                en segundo plano. Haz clic para iniciarlas.
+            <div className="flex-1 flex items-center justify-center p-6 select-none">
+              <div className="island flex flex-col items-center text-center p-10 max-w-xl">
+              <span className="stamp text-[10px] text-zinc-400 mb-4">Workspace detenido</span>
+              <h3 className="display-serif text-5xl text-zinc-100 mb-4">{activeWorkspace.name}</h3>
+              <p className="text-sm font-light text-zinc-400 max-w-sm mb-8 leading-relaxed">
+                Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando.
               </p>
               <button
                 onClick={() => handleStartWorkspace(activeWorkspace.id)}
-                className="flex items-center space-x-2 px-5 py-2 rounded-md bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-semibold text-xs transition-colors shadow-lg shadow-emerald-500/10"
+                className="flex items-center space-x-2 px-5 py-2 rounded-button bg-signal hover:bg-signal/85 text-zinc-950 font-medium text-xs transition-colors"
               >
                 <Play size={14} fill="currentColor" />
-                <span>INICIAR TERMINALES DEL WORKSPACE</span>
+                <span>Iniciar terminales</span>
               </button>
+              </div>
             </div>
           )}
 
@@ -620,8 +657,6 @@ export const App: React.FC = () => {
             .map((ws) => {
               const isSelected = ws.id === activeWorkspace.id
               const restartKey = workspaceRestartKeys[ws.id] || 0
-              const panelsToRender = activeSessionPanels[ws.id] || ws.panels
-              const isCanvas = ws.layoutMode === 'canvas'
 
               return (
                 <div
@@ -630,21 +665,15 @@ export const App: React.FC = () => {
                     isSelected ? 'flex flex-col' : 'hidden'
                   }`}
                 >
-                  {isCanvas ? (
-                    <CanvasWorkspace
-                      key={`${ws.id}-${restartKey}-canvas`}
-                      workspace={ws}
-                      panelsMetrics={telemetry?.panels || {}}
-                      onSaveCanvasCards={(cards, connectors) => handleSaveCanvasCards(ws.id, cards, connectors)}
-                    />
-                  ) : (
-                    <TerminalGrid
-                      key={`${ws.id}-${restartKey}`}
-                      panels={panelsToRender}
-                      panelsMetrics={telemetry?.panels || {}}
-                      isActive={isSelected}
-                    />
-                  )}
+                  <CanvasWorkspace
+                    key={`${ws.id}-${restartKey}-canvas`}
+                    workspace={ws}
+                    panelsMetrics={telemetry?.panels || {}}
+                    agentStatuses={agentStatuses}
+                    isVisible={isSelected}
+                    addCardRef={isSelected ? addCanvasCardRef : undefined}
+                    onSaveCanvasCards={(cards, connectors) => handleSaveCanvasCards(ws.id, cards, connectors)}
+                  />
                 </div>
               )
             })}
@@ -724,6 +753,39 @@ export const App: React.FC = () => {
     persistState(nextState)
   }
 
+  const handleWallpaperChange = (wallpaper: string): void => {
+    const settings = { ...appState.settings, sidebarPosition, wallpaper }
+    persistState({ ...appState, settings })
+  }
+
+  const handleWallpaperRemoved = (wallpaper: string): void => {
+    const { [wallpaper]: _removed, ...wallpaperAppearance } = appState.settings?.wallpaperAppearance ?? {}
+    const settings = { ...appState.settings, sidebarPosition, wallpaperAppearance }
+    if (settings.wallpaper === wallpaper) delete settings.wallpaper
+    persistState({ ...appState, settings })
+  }
+
+  const handleAppearanceChange = (patch: {
+    islandScale?: number
+    islandOpacity?: number
+    islandBlur?: number
+    railHeight?: number
+  }): void => {
+    // Glass is remembered per wallpaper; size applies everywhere
+    const { islandOpacity, islandBlur, ...shared } = patch
+    const glass = { ...(islandOpacity !== undefined && { islandOpacity }), ...(islandBlur !== undefined && { islandBlur }) }
+    const settings = {
+      ...appState.settings,
+      sidebarPosition,
+      ...shared,
+      wallpaperAppearance: {
+        ...appState.settings?.wallpaperAppearance,
+        [currentWallpaper]: { ...appState.settings?.wallpaperAppearance?.[currentWallpaper], ...glass }
+      }
+    }
+    persistState({ ...appState, settings })
+  }
+
   const handleFontSizeChange = (size: number): void => {
     if (!appState) return
     terminalPool.setFontSize(size)
@@ -736,13 +798,35 @@ export const App: React.FC = () => {
     persistState(nextState)
   }
 
+  const handleDefaultShellChange = (defaultShell: string): void => {
+    persistState({ ...appState, settings: { ...appState.settings, sidebarPosition, defaultShell } })
+  }
+
+  const workspaceActions = activeWorkspace && (
+    <WorkspaceHeader
+      workspace={activeWorkspace}
+      activePanels={currentSessionPanels}
+      isRunning={isCurrentWorkspaceRunning}
+      hasPendingChanges={hasPendingChanges}
+      onEditWorkspace={() => handleEditWorkspace(activeWorkspace)}
+      onRestartAll={() => handleRestartWorkspace(activeWorkspace.id)}
+      onStartWorkspace={() => handleStartWorkspace(activeWorkspace.id)}
+      onStopWorkspace={() => handleStopWorkspace(activeWorkspace.id)}
+    />
+  )
+
   const launchpadComponent = (
     <Launchpad
       workspaces={appState.workspaces}
       activeWorkspaceId={appState.activeWorkspaceId}
       runningWorkspaceIds={runningWorkspaceIds}
       pendingChangesWorkspaceIds={pendingChangesWorkspaceIds}
+      attentionWorkspaceIds={attentionWorkspaceIds}
+      workingWorkspaceIds={Object.values(agentStatuses)
+        .filter((s) => s.state === 'working')
+        .map((s) => s.workspaceId)}
       position={sidebarPosition}
+      railHeight={appState.settings?.railHeight ?? 200}
       onSelectWorkspace={handleSelectWorkspace}
       onNewWorkspace={handleNewWorkspace}
       onEditWorkspace={handleEditWorkspace}
@@ -765,43 +849,44 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#090a0d] text-zinc-200">
-      {/* Top Frameless TitleBar */}
+    <div
+      className="flex flex-col h-screen w-screen overflow-clip bg-void bg-cover bg-center text-zinc-200 gap-1.5 p-1.5"
+      style={
+        {
+          ...(backgroundUrl ? { backgroundImage: `url("${backgroundUrl}")` } : {}),
+          '--island-alpha': islandOpacity,
+          '--island-blur': `${islandBlur}px`,
+          '--island-scale': appState.settings?.islandScale ?? 1
+        } as React.CSSProperties
+      }
+    >
+      {/* Top islands: branding + palette on the left, workspace actions + tools on the right */}
       <TitleBar
         systemMetrics={telemetry?.system}
-        activeWorkspaceName={activeWorkspace?.name}
+        workspaceActions={workspaceActions}
+        workspaceFolders={(activeWorkspace?.panels || []).map((p) => p.cwd).filter((cwd): cwd is string => !!cwd)}
+        updateAvailable={updateStatus?.state === 'available' || updateStatus?.state === 'downloaded'}
+        onSave={handleSaveAll}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
-      {/* TOP POSITION */}
       {isSidebarVisible && sidebarPosition === 'top' && launchpadComponent}
 
-      {/* CENTRAL AREA */}
-      {sidebarPosition === 'top' || sidebarPosition === 'bottom' ? (
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-          {mainWorkspaceContent}
-        </div>
-      ) : (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+      {sidebarPosition === 'left' || sidebarPosition === 'right' ? (
+        <div className="flex flex-1 min-h-0 gap-1.5">
           {isSidebarVisible && sidebarPosition === 'left' && launchpadComponent}
           {mainWorkspaceContent}
           {isSidebarVisible && sidebarPosition === 'right' && launchpadComponent}
         </div>
+      ) : (
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col gap-1.5">
+          {mainWorkspaceContent}
+        </div>
       )}
 
-      {/* BOTTOM POSITION */}
       {isSidebarVisible && sidebarPosition === 'bottom' && launchpadComponent}
-
-      {/* Footer Status Bar */}
-      <StatusBar
-        onSave={handleSaveAll}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
-        activePanelsCount={totalRunningPanelsCount}
-        updateAvailable={updateStatus?.state === 'available' || updateStatus?.state === 'downloaded'}
-      />
 
       {/* Modals */}
       <WorkspaceModal
@@ -820,12 +905,22 @@ export const App: React.FC = () => {
         isOpen={isSettingsModalOpen}
         sidebarPosition={sidebarPosition}
         updateStatus={updateStatus}
-        terminalTheme={appState.settings?.terminalTheme || 'matrix'}
+        terminalTheme={appState.settings?.terminalTheme || 'midnight'}
         terminalFontSize={appState.settings?.terminalFontSize || 12.5}
         onClose={() => setIsSettingsModalOpen(false)}
         onPositionChange={handleUpdateSidebarPosition}
         onThemeChange={handleThemeChange}
         onFontSizeChange={handleFontSizeChange}
+        defaultShell={appState.settings?.defaultShell}
+        onDefaultShellChange={handleDefaultShellChange}
+        wallpaper={currentWallpaper}
+        onWallpaperChange={handleWallpaperChange}
+        onWallpaperRemoved={handleWallpaperRemoved}
+        islandScale={appState.settings?.islandScale ?? 1}
+        islandOpacity={islandOpacity}
+        islandBlur={islandBlur}
+        railHeight={appState.settings?.railHeight ?? 200}
+        onAppearanceChange={handleAppearanceChange}
         onExportWorkspaces={handleExportWorkspaces}
         onImportWorkspaces={handleImportWorkspaces}
         onResetDefaults={handleResetDefaults}
@@ -851,11 +946,6 @@ export const App: React.FC = () => {
           handleNewWorkspace()
           setIsCommandPaletteOpen(false)
         }}
-        onToggleLayoutMode={() => {
-          if (activeWorkspace) {
-            handleToggleLayoutMode(activeWorkspace.id)
-          }
-        }}
         onToggleSidebar={() => setIsSidebarVisible((prev) => !prev)}
         onOpenSettings={() => {
           setIsSettingsModalOpen(true)
@@ -872,58 +962,19 @@ export const App: React.FC = () => {
         }}
         onAddCanvasCard={(kind) => {
           if (!activeWorkspace) return
-          if (activeWorkspace.layoutMode !== 'canvas') {
-            handleToggleLayoutMode(activeWorkspace.id)
+          if (addCanvasCardRef.current) {
+            addCanvasCardRef.current(kind)
+          } else {
+            // A stopped workspace has no canvas mounted
+            const currentCards = activeWorkspace.canvasCards || []
+            const newCard = createCard(kind, activeWorkspace, currentCards, openingView())
+            handleSaveCanvasCards(activeWorkspace.id, [...currentCards, newCard], activeWorkspace.canvasConnectors)
           }
-          const baseDir = activeWorkspace.panels[0]?.cwd || ''
-          const currentCards = activeWorkspace.canvasCards || []
-          const newCard: CanvasCard = {
-            id: `canvas-${kind}-${Date.now()}`,
-            kind: kind,
-            title:
-              kind === 'terminal'
-                ? `TERMINAL-${currentCards.filter((c) => c.kind === 'terminal').length + 1}`
-                : kind === 'vscode'
-                ? `VSCODE::${activeWorkspace.name}`
-                : kind === 'explorer'
-                ? 'Explorador'
-                : kind === 'port-monitor'
-                ? 'Monitor de Puertos'
-                : kind === 'note'
-                ? 'Bloc de Notas'
-                : 'Navegador Web',
-            x: 80 + Math.floor(Math.random() * 80),
-            y: 80 + Math.floor(Math.random() * 80),
-            width:
-              kind === 'vscode'
-                ? 820
-                : kind === 'explorer'
-                ? 520
-                : kind === 'note'
-                ? 360
-                : kind === 'port-monitor'
-                ? 380
-                : 480,
-            height:
-              kind === 'vscode'
-                ? 560
-                : kind === 'note'
-                ? 280
-                : kind === 'port-monitor'
-                ? 340
-                : 380,
-            cwd: kind === 'terminal' ? (baseDir || undefined) : undefined,
-            vscodeMode: kind === 'vscode' ? 'local' : undefined,
-            vscodePath: kind === 'vscode' ? (baseDir || undefined) : undefined,
-            explorerPath: kind === 'explorer' ? (baseDir || undefined) : undefined,
-            monitoredPorts: kind === 'port-monitor' ? [3000, 5173, 8080] : undefined,
-            noteColor: kind === 'note' ? 'amber' : undefined,
-            noteContent: kind === 'note' ? '### Nueva Nota\n- [ ] Tarea inicial' : undefined
-          }
-          handleSaveCanvasCards(activeWorkspace.id, [...currentCards, newCard], activeWorkspace.canvasConnectors)
           setIsCommandPaletteOpen(false)
         }}
       />
+
+      <AgentToasts toasts={agentToasts} onOpen={handleSelectWorkspace} onDismiss={dismissAgentToast} />
 
       {/* Floating Update Notification Toast */}
       <UpdateNotificationToast

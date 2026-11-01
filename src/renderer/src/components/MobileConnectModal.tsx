@@ -106,18 +106,18 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-[#0e1117] border border-zinc-800 rounded-xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="bg-void border border-zinc-800 rounded-card w-full max-w-lg flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 bg-[#12161f] border-b border-zinc-800 flex items-center justify-between">
+        <div className="px-5 py-4 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <div className="w-8 h-8 rounded-button bg-white/5 border border-white/15 flex items-center justify-center text-zinc-100">
               <Smartphone size={17} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <h2 className="text-sm font-medium text-zinc-100 flex items-center gap-2">
                 <span>NeoWork Mobile Gateway</span>
                 {status?.enabled && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/5 text-zinc-100 border border-white/15">
                     ONLINE
                   </span>
                 )}
@@ -129,20 +129,20 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            className="p-1 rounded-button text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto font-mono text-xs">
+        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
           {/* Toggle Switch */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-[#090b0f] border border-zinc-800/80">
+          <div className="flex items-center justify-between p-3 rounded-button bg-void border border-zinc-800/80">
             <div className="flex items-center space-x-3">
               <div
                 className={`w-3 h-3 rounded-full ${
-                  status?.enabled ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-zinc-600'
+                  status?.enabled ? 'bg-signal shadow-[0_0_8px_rgb(var(--signal-rgb))]' : 'bg-zinc-600'
                 }`}
               />
               <div>
@@ -157,10 +157,10 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
             <button
               onClick={handleToggle}
               disabled={loading}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold text-[11px] transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-button font-medium text-[11px] transition-all cursor-pointer ${
                 status?.enabled
                   ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30'
-                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-white/10 hover:bg-white/10 text-zinc-100 border border-white/15'
               }`}
             >
               <Power size={12} />
@@ -172,36 +172,36 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
             <>
               {/* Network Selector Tabs if Tailscale is present */}
               {status.tailscaleUrl && (
-                <div className="flex rounded-lg bg-zinc-900/80 p-1 border border-zinc-800 text-[11px]">
+                <div className="flex rounded-button bg-zinc-900/80 p-1 border border-zinc-800 text-[11px]">
                   <button
                     onClick={() => setSelectedType('lan')}
-                    className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1.5 transition-colors cursor-pointer ${
+                    className={`flex-1 py-1.5 rounded-button flex items-center justify-center space-x-1.5 transition-colors cursor-pointer ${
                       selectedType === 'lan'
-                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow'
+                        ? 'bg-zinc-800 text-zinc-100 font-medium '
                         : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                   >
-                    <Wifi size={12} className="text-emerald-400" />
+                    <Wifi size={12} className="text-zinc-100" />
                     <span>Red Local (WiFi)</span>
                   </button>
                   <button
                     onClick={() => setSelectedType('tailscale')}
-                    className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1.5 transition-colors cursor-pointer ${
+                    className={`flex-1 py-1.5 rounded-button flex items-center justify-center space-x-1.5 transition-colors cursor-pointer ${
                       selectedType === 'tailscale'
-                        ? 'bg-zinc-800 text-zinc-100 font-semibold shadow'
+                        ? 'bg-zinc-800 text-zinc-100 font-medium '
                         : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                   >
-                    <Globe size={12} className="text-cyan-400" />
+                    <Globe size={12} className="text-zinc-300" />
                     <span>Tailscale (4G / 5G)</span>
                   </button>
                 </div>
               )}
 
               {/* QR Code Center Box */}
-              <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-[#07080b] border border-zinc-800/80 space-y-3">
+              <div className="flex flex-col items-center justify-center p-4 rounded-card bg-void border border-zinc-800/80 space-y-3">
                 {status.qrCodeDataUrl ? (
-                  <div className="p-2.5 bg-white rounded-lg shadow-lg">
+                  <div className="p-2.5 bg-white rounded-button">
                     <img
                       src={status.qrCodeDataUrl}
                       alt="Código QR de conexión"
@@ -209,7 +209,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
                     />
                   </div>
                 ) : (
-                  <div className="w-48 h-48 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600">
+                  <div className="w-48 h-48 rounded-button bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600">
                     Generando QR...
                   </div>
                 )}
@@ -220,23 +220,23 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
 
               {/* URL & Copy Row */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">
+                <label className="text-[10px] text-zinc-400 stamp">
                   URL de Acceso Directo:
                 </label>
-                <div className="flex items-center space-x-2 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-                  <span className="text-[11px] text-emerald-400 truncate flex-1 select-all font-mono">
+                <div className="flex items-center space-x-2 bg-zinc-950 p-2 rounded-button border border-zinc-800">
+                  <span className="text-[11px] text-zinc-100 truncate flex-1 select-all">
                     {currentUrl}
                   </span>
                   <button
                     onClick={handleCopyUrl}
-                    className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors shrink-0"
+                    className="p-1.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors shrink-0"
                     title="Copiar URL al portapapeles"
                   >
-                    {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                    {copied ? <Check size={13} className="text-zinc-100" /> : <Copy size={13} />}
                   </button>
                   <button
                     onClick={() => openExternalUrl(currentUrl)}
-                    className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors shrink-0"
+                    className="p-1.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors shrink-0"
                     title="Abrir en navegador de escritorio"
                   >
                     <ExternalLink size={13} />
@@ -245,16 +245,16 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
               </div>
 
               {/* Token & Security Controls */}
-              <div className="flex items-center justify-between text-[11px] p-2.5 rounded-lg bg-zinc-900/50 border border-zinc-800/60">
+              <div className="flex items-center justify-between text-[11px] p-2.5 rounded-button bg-zinc-900/50 border border-zinc-800/60">
                 <div className="flex items-center space-x-2 text-zinc-400">
-                  <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
+                  <ShieldCheck size={13} className="text-zinc-100 shrink-0" />
                   <span>Token:</span>
-                  <span className="text-zinc-200 font-mono tracking-wider">{status.token}</span>
+                  <span className="text-zinc-200 stamp">{status.token}</span>
                 </div>
                 <button
                   onClick={handleRegenerateToken}
                   disabled={loading}
-                  className="flex items-center space-x-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  className="flex items-center space-x-1 px-2 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
                   title="Regenerar token para desconectar sesiones anteriores"
                 >
                   <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
@@ -263,8 +263,8 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
               </div>
 
               {/* Tips & Instructions */}
-              <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-zinc-300 space-y-1.5">
-                <p className="font-semibold text-emerald-400 flex items-center gap-1.5">
+              <div className="p-3 rounded-button bg-white/5 border border-white/15 text-[11px] text-zinc-300 space-y-1.5">
+                <p className="font-medium text-zinc-100 flex items-center gap-1.5">
                   <span>💡 Consejos de uso:</span>
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-zinc-400 text-[10.5px]">
@@ -283,7 +283,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
           ) : (
             <div className="p-8 text-center text-zinc-500 space-y-2">
               <Smartphone size={36} className="mx-auto text-zinc-600 mb-2" />
-              <p className="text-zinc-300 font-semibold text-sm">El servidor remoto está apagado</p>
+              <p className="text-zinc-300 font-medium text-sm">El servidor remoto está apagado</p>
               <p className="text-[11px]">
                 Haz clic en "Iniciar" para activar la conexión móvil y generar el código QR.
               </p>

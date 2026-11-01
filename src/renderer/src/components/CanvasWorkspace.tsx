@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo } from 'react'
 import {
   Terminal,
   Globe,
@@ -11,28 +11,51 @@ import {
   FolderOpen,
   Activity,
   GitBranch,
+  GitCompare,
   MapPin,
   X,
   Code2
 } from 'lucide-react'
-import { CanvasCard, CanvasConnector, ProcessMetrics, Workspace, PanelConfig } from '../types'
+import { AgentStatus, CanvasCard, CanvasConnector, NodeKind, ProcessMetrics, Workspace, PanelConfig } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
 import { VSCodeCard } from './VSCodeCard'
-import { NoteCard } from './NoteCard'
+import { NoteCard, NoteTerminal } from './NoteCard'
 import { FileExplorerCard } from './FileExplorerCard'
 import { PortMonitorCard } from './PortMonitorCard'
+import { GitCard } from './GitCard'
+import { Tooltip } from './Tooltip'
 import { terminalPool } from '../services/terminal-pool'
+import { createCard, openingView, panelCards } from '../utils/cards'
+import {
+  alignmentGuides,
+  Box,
+  findSpot,
+  GRID,
+  SNAP_DISTANCE,
+  snapPosition,
+  snapSize,
+  travelToShow
+} from '../utils/canvasGrid'
+
+// Screen pixels the bottom toolbar takes from the canvas
+const TOOLBAR_CLEARANCE = 72
 
 interface CanvasWorkspaceProps {
   workspace: Workspace
   panelsMetrics: Record<string, ProcessMetrics>
+  agentStatuses: Record<string, AgentStatus>
+  isVisible: boolean
+  addCardRef?: React.Ref<(kind: NodeKind) => void>
   onSaveCanvasCards: (cards: CanvasCard[], connectors?: CanvasConnector[]) => void
 }
 
 export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   workspace,
   panelsMetrics,
+  agentStatuses,
+  isVisible,
+  addCardRef,
   onSaveCanvasCards
 }) => {
   // Initialize cards from workspace panels or canvasCards
@@ -57,21 +80,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       })
     }
     // Generate initial canvas cards from existing panels only on first creation
-    return workspace.panels.map((p, idx) => ({
-      id: p.id,
-      kind: 'terminal',
-      title: p.title,
-      cwd: p.cwd,
-      command: p.command,
-      commands: p.commands,
-      autoStart: p.autoStart,
-      env: p.env,
-      x: 60 + (idx % 2) * 580,
-      y: 60 + Math.floor(idx / 2) * 440,
-      width: 550,
-      height: 400,
-      zIndex: idx + 1
-    }))
+    return panelCards(workspace.panels, [], openingView())
   })
 
   // Visual connectors state
@@ -200,23 +209,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         return updated
       }
 
-      const newCards: CanvasCard[] = newlyAddedPanels.map((p, i) => ({
-        id: p.id,
-        kind: 'terminal' as const,
-        title: p.title,
-        cwd: p.cwd,
-        command: p.command,
-        commands: p.commands,
-        autoStart: p.autoStart,
-        env: p.env,
-        x: 60 + ((updated.length + i) % 2) * 580,
-        y: 60 + Math.floor((updated.length + i) / 2) * 440,
-        width: 550,
-        height: 400,
-        zIndex: updated.length + i + 1
-      }))
-
-      const next = [...updated, ...newCards]
+      const next = [...updated, ...panelCards(newlyAddedPanels, updated, visibleArea())]
       lastSavedCardsJsonRef.current = JSON.stringify(next)
       onSaveCanvasCards(next, connectors)
       return next
@@ -240,6 +233,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const resizeStartRef = useRef({ mouseX: 0, mouseY: 0, cardW: 0, cardH: 0 })
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
 
   // Sync to parent on card change
   const updateCardsAndNotify = useCallback(
@@ -267,118 +261,40 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     [onSaveCanvasCards]
   )
 
-  // Add new Terminal card
-  const handleAddTerminal = (): void => {
-    const newId = `canvas-term-${Date.now()}`
-    const baseCwd = workspace.panels[0]?.cwd || ''
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'terminal',
-      title: `TERMINAL-${cards.filter((c) => c.kind === 'terminal').length + 1}`,
-      x: Math.round(-pan.x / zoom + 120),
-      y: Math.round(-pan.y / zoom + 100),
-      width: 560,
-      height: 400,
-      cwd: baseCwd,
-      command: '',
-      autoStart: true,
-      zIndex: cards.length + 1
-    }
+  // The canvas the user can see, in world coordinates
+  const visibleArea = (at = pan, scale = zoom): Box => ({
+    x: -at.x / scale + GRID,
+    y: -at.y / scale + GRID,
+    width: (containerRef.current?.clientWidth || window.innerWidth) / scale - 2 * GRID,
+    height: ((containerRef.current?.clientHeight || window.innerHeight) - TOOLBAR_CLEARANCE) / scale - GRID
+  })
+
+  const addCard = (kind: NodeKind, overrides?: Partial<CanvasCard>): void => {
+    const view = visibleArea()
+    const newCard = createCard(kind, workspace, cards, view, overrides)
     updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
+    setFocusedCardId(newCard.id)
+    const { x, y } = travelToShow(newCard, view)
+    setPan((prev) => ({ x: prev.x - x * zoom, y: prev.y - y * zoom }))
   }
 
-  // Add new Browser card
-  const handleAddBrowser = (url = 'http://localhost:5173'): void => {
-    const newId = `canvas-browser-${Date.now()}`
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'browser',
-      title: 'LOCAL-PREVIEW',
-      url,
-      x: Math.round(-pan.x / zoom + 200),
-      y: Math.round(-pan.y / zoom + 120),
-      width: 580,
-      height: 480,
-      zIndex: cards.length + 1
-    }
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
-  }
+  useImperativeHandle(addCardRef, () => addCard)
 
-  // Add new VS Code card
-  const handleAddVSCode = (): void => {
-    const newId = `canvas-vscode-${Date.now()}`
-    const baseDir = workspace.panels[0]?.cwd || ''
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'vscode',
-      title: `VSCODE::${workspace.name || 'EDITOR'}`,
-      vscodeMode: 'local',
-      vscodePath: baseDir,
-      x: Math.round(-pan.x / zoom + 160),
-      y: Math.round(-pan.y / zoom + 80),
-      width: 820,
-      height: 560,
-      zIndex: cards.length + 1
-    }
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
-  }
+  const handleAddBrowser = (url: string): void => addCard('browser', { url })
 
-  // Add new Note card
-  const handleAddNote = (): void => {
-    const newId = `canvas-note-${Date.now()}`
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'note',
-      title: 'NOTAS / TAREAS',
-      noteColor: 'emerald',
-      noteContent: '### Sprint Notes & TODOs\n- [x] Configure backend endpoints\n- [ ] Verify test tokens\n- [ ] Check migration script',
-      x: Math.round(-pan.x / zoom + 160),
-      y: Math.round(-pan.y / zoom + 120),
-      width: 380,
-      height: 320,
-      zIndex: cards.length + 1
-    }
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
-  }
+  // The repos a git card lists are the ones this workspace's terminals work in
+  const terminalFolders = cards.flatMap((c) => (c.kind === 'terminal' && c.cwd ? [c.cwd] : []))
+  const lastAgentFinishedAt = Object.values(agentStatuses)
+    .filter((s) => s.workspaceId === workspace.id && s.state === 'done')
+    .reduce((latest, s) => Math.max(latest, s.at), 0)
 
-  // Add new File Explorer card
-  const handleAddExplorer = (): void => {
-    const newId = `canvas-explorer-${Date.now()}`
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'explorer',
-      title: 'EXPLORADOR ARCHIVOS',
-      explorerPath: workspace.panels[0]?.cwd || '',
-      x: Math.round(-pan.x / zoom + 180),
-      y: Math.round(-pan.y / zoom + 100),
-      width: 480,
-      height: 420,
-      zIndex: cards.length + 1
-    }
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
-  }
+  const findConnector = (a: string, b: string): CanvasConnector | undefined =>
+    connectorsRef.current.find((c) => (c.fromId === a && c.toId === b) || (c.fromId === b && c.toId === a))
 
-  // Add new Port Monitor card
-  const handleAddPortMonitor = (): void => {
-    const newId = `canvas-ports-${Date.now()}`
-    const newCard: CanvasCard = {
-      id: newId,
-      kind: 'port-monitor',
-      title: 'MONITOR DE PUERTOS',
-      monitoredPorts: [3000, 5173, 8000, 8080],
-      x: Math.round(-pan.x / zoom + 220),
-      y: Math.round(-pan.y / zoom + 140),
-      width: 380,
-      height: 360,
-      zIndex: cards.length + 1
-    }
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newId)
+  const connectCards = (fromId: string, toId: string): void => {
+    if (findConnector(fromId, toId)) return
+    const newConnector: CanvasConnector = { id: `conn-${Date.now()}`, fromId, toId, color: '#828384' }
+    updateConnectorsAndNotify((prev) => [...prev, newConnector])
   }
 
   // Handle connection creation or disconnection toggle
@@ -388,31 +304,28 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       setConnectStartId(cardId)
     } else {
       if (connectStartId !== cardId) {
-        // Check if connector already exists between connectStartId and cardId in either direction
-        const existing = connectors.find(
-          (c) =>
-            (c.fromId === connectStartId && c.toId === cardId) ||
-            (c.fromId === cardId && c.toId === connectStartId)
-        )
-
+        const existing = findConnector(connectStartId, cardId)
         if (existing) {
           // Already connected: toggle OFF (Disconnect!)
           handleDeleteConnector(existing.id)
         } else {
-          // Not connected: create new connection
-          const newConnector: CanvasConnector = {
-            id: `conn-${Date.now()}`,
-            fromId: connectStartId,
-            toId: cardId,
-            color: '#10b981'
-          }
-          updateConnectorsAndNotify((prev) => [...prev, newConnector])
+          connectCards(connectStartId, cardId)
         }
       }
       setConnectStartId(null)
       setIsConnectMode(false)
     }
   }
+
+  const terminalsForNote = (noteId: string): NoteTerminal[] =>
+    cards
+      .filter((c) => c.kind === 'terminal')
+      .map((c) => ({
+        id: c.id,
+        title: c.title || 'Terminal',
+        state: agentStatuses[c.id]?.state,
+        linked: !!findConnector(noteId, c.id)
+      }))
 
   const handleDeleteConnector = (connId: string): void => {
     const nextConnectors = connectorsRef.current.filter((c) => c.id !== connId)
@@ -424,19 +337,15 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   // Auto-arrange all cards in clean grid layout
   const handleAutoArrange = (): void => {
     if (cards.length === 0) return
-    const cols = cards.length > 4 ? 3 : 2
-    const colWidth = 570
-    const rowHeight = 430
-    const startX = 60
-    const startY = 60
+    const view = visibleArea({ x: 0, y: 0 }, 1)
 
     updateCardsAndNotify((prev) =>
-      prev.map((c, i) => ({
-        ...c,
-        x: startX + (i % cols) * colWidth,
-        y: startY + Math.floor(i / cols) * rowHeight,
-        zIndex: i + 1
-      }))
+      prev.reduce<CanvasCard[]>((placed, c) => {
+        // Cards from before the grid have sizes that fall between its dots
+        const width = Math.ceil(c.width / GRID) * GRID
+        const height = Math.ceil(c.height / GRID) * GRID
+        return [...placed, { ...c, ...findSpot(width, height, placed, view), width, height, zIndex: placed.length + 1 }]
+      }, [])
     )
     setPan({ x: 0, y: 0 })
     setZoom(1)
@@ -485,7 +394,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   // Mouse pan handlers
   const handleCanvasMouseDown = (e: React.MouseEvent): void => {
-    if (e.button === 1 || (e.button === 0 && e.target === containerRef.current)) {
+    if (e.button === 1 || (e.button === 0 && e.target === surfaceRef.current)) {
       setFocusedCardId(null)
       setIsPanning(true)
       panStartRef.current = {
@@ -683,31 +592,27 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       } else if (draggingCardId) {
         const dx = (e.clientX - dragStartRef.current.mouseX) / zoom
         const dy = (e.clientY - dragStartRef.current.mouseY) / zoom
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === draggingCardId
-              ? {
-                  ...c,
-                  x: Math.round(dragStartRef.current.cardX + dx),
-                  y: Math.round(dragStartRef.current.cardY + dy)
-                }
-              : c
+        const x = Math.round(dragStartRef.current.cardX + dx)
+        const y = Math.round(dragStartRef.current.cardY + dy)
+        setCards((prev) => {
+          const others = prev.filter((c) => c.id !== draggingCardId)
+          return prev.map((c) =>
+            c.id === draggingCardId ? { ...c, ...snapPosition({ ...c, x, y }, others, SNAP_DISTANCE / zoom) } : c
           )
-        )
+        })
       } else if (resizingCardId) {
         const dw = (e.clientX - resizeStartRef.current.mouseX) / zoom
         const dh = (e.clientY - resizeStartRef.current.mouseY) / zoom
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === resizingCardId
-              ? {
-                  ...c,
-                  width: Math.max(320, Math.round(resizeStartRef.current.cardW + dw)),
-                  height: Math.max(220, Math.round(resizeStartRef.current.cardH + dh))
-                }
-              : c
-          )
-        )
+        const width = Math.round(resizeStartRef.current.cardW + dw)
+        const height = Math.round(resizeStartRef.current.cardH + dh)
+        setCards((prev) => {
+          const others = prev.filter((c) => c.id !== resizingCardId)
+          return prev.map((c) => {
+            if (c.id !== resizingCardId) return c
+            const snapped = snapSize({ ...c, width, height }, others, SNAP_DISTANCE / zoom)
+            return { ...c, width: Math.max(320, snapped.width), height: Math.max(220, snapped.height) }
+          })
+        })
       }
     }
 
@@ -753,131 +658,119 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     setZoom(1)
   }
 
+  const heldCard = cards.find((c) => c.id === (draggingCardId ?? resizingCardId))
+
   return (
-    <div className="flex-1 relative h-full w-full min-h-0 overflow-hidden bg-[#07080a] select-none">
-      {/* Floating Toolbar on Top */}
+    <div className="flex-1 relative h-full w-full min-h-0 select-none">
+      {/* Floating Toolbar: the one violet fill is the primary action */}
       <div
         onWheel={(e) => e.stopPropagation()}
-        className="canvas-toolbar absolute top-3 left-3 z-40 flex items-center space-x-1.5 bg-[#0e1116]/95 backdrop-blur-md border border-zinc-800 p-1 rounded-lg shadow-xl font-mono text-xs"
+        style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
+        className="canvas-toolbar absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center space-x-1 island rounded-full px-2 py-1.5 text-xs whitespace-nowrap"
       >
-        <button
-          onClick={handleAddTerminal}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <Terminal size={13} />
-          <span>+ Console</span>
-        </button>
+        <Tooltip label="Nueva consola" side="top">
+          <button onClick={() => addCard('terminal')} className="p-1.5 rounded-full bg-signal hover:bg-signal/85 text-zinc-950 transition-colors cursor-pointer">
+            <Terminal size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={() => handleAddBrowser()}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <Globe size={13} />
-          <span>+ Browser</span>
-        </button>
+        <Tooltip label="Nuevo navegador" side="top">
+          <button onClick={() => addCard('browser')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <Globe size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleAddVSCode}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <Code2 size={13} />
-          <span>+ VS Code</span>
-        </button>
+        <Tooltip label="Nuevo VS Code" side="top">
+          <button onClick={() => addCard('vscode')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <Code2 size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleAddNote}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <FileText size={13} />
-          <span>+ Note</span>
-        </button>
+        <Tooltip label="Nueva nota" side="top">
+          <button onClick={() => addCard('note')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <FileText size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleAddExplorer}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <FolderOpen size={13} />
-          <span>+ Explorer</span>
-        </button>
+        <Tooltip label="Nuevo explorador" side="top">
+          <button onClick={() => addCard('explorer')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <FolderOpen size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleAddPortMonitor}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-colors font-medium cursor-pointer"
-        >
-          <Activity size={13} />
-          <span>+ Ports</span>
-        </button>
+        <Tooltip label="Nuevo monitor de puertos" side="top">
+          <button onClick={() => addCard('port-monitor')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <Activity size={14} />
+          </button>
+        </Tooltip>
+
+        <Tooltip label="Cambios de la sesión (git)" side="top">
+          <button onClick={() => addCard('git')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
+            <GitCompare size={14} />
+          </button>
+        </Tooltip>
 
         <div className="h-4 w-px bg-zinc-800 mx-1" />
 
-        {/* Link / Connector Mode Toggle */}
-        <button
-          onClick={() => {
-            setIsConnectMode(!isConnectMode)
-            setConnectStartId(null)
-          }}
-          className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-md text-xs font-mono transition-colors cursor-pointer ${
+        <Tooltip
+          label={
             isConnectMode
-              ? 'bg-emerald-500 text-zinc-950 font-bold shadow-lg shadow-emerald-500/20'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-          }`}
-          title="Modo Conectar / Desconectar: Haz clic en dos tarjetas para enlazarlas o desenlazarlas"
-        >
-          <GitBranch size={13} />
-          <span>
-            {isConnectMode
               ? connectStartId
-                ? 'Elige destino (conectar o desconectar)'
-                : 'Elige origen'
-              : 'Conectar'}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setShowMinimap(!showMinimap)}
-          className={`p-1.5 rounded text-xs font-mono transition-colors cursor-pointer ${
-            showMinimap ? 'text-emerald-400 bg-zinc-800' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-          }`}
-          title="Mostrar/Ocultar Minimap"
+                ? 'Conectar: elige destino (clic en otra tarjeta)'
+                : 'Conectar: elige origen'
+              : 'Modo conectar / desconectar tarjetas'
+          }
+          side="top"
         >
-          <MapPin size={13} />
-        </button>
+          <button
+            onClick={() => {
+              setIsConnectMode(!isConnectMode)
+              setConnectStartId(null)
+            }}
+            className={`p-1.5 rounded-button transition-colors cursor-pointer ${
+              isConnectMode
+                ? 'bg-zinc-100 text-zinc-950 '
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+            }`}
+          >
+            <GitBranch size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleAutoArrange}
-          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
-          title="Auto-organizar cuadrícula limpia"
-        >
-          <Sparkles size={13} />
-        </button>
+        <Tooltip label={showMinimap ? 'Ocultar minimapa' : 'Mostrar minimapa'} side="top">
+          <button
+            onClick={() => setShowMinimap(!showMinimap)}
+            className={`p-1.5 rounded-control transition-colors cursor-pointer ${
+              showMinimap ? 'text-zinc-100 bg-zinc-800' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+            }`}
+          >
+            <MapPin size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={() => handleZoomCenter(1.15)}
-          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-          title="Zoom In (Ctrl + Wheel)"
-        >
-          <ZoomIn size={14} />
-        </button>
+        <Tooltip label="Auto-organizar cuadrícula" side="top">
+          <button onClick={handleAutoArrange} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">
+            <Sparkles size={14} />
+          </button>
+        </Tooltip>
 
-        <span className="text-[11px] text-zinc-400 px-1 font-mono min-w-[42px] text-center">
-          {Math.round(zoom * 100)}%
-        </span>
+        <Tooltip label="Acercar (Ctrl + rueda)" side="top">
+          <button onClick={() => handleZoomCenter(1.15)} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+            <ZoomIn size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={() => handleZoomCenter(0.85)}
-          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-          title="Zoom Out (Ctrl + Wheel)"
-        >
-          <ZoomOut size={14} />
-        </button>
+        <Tooltip label="Alejar (Ctrl + rueda)" side="top">
+          <button onClick={() => handleZoomCenter(0.85)} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+            <ZoomOut size={14} />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={handleResetView}
-          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-          title="Reset View to 100%"
-        >
-          <RotateCcw size={13} />
-        </button>
+        <Tooltip label={`Restablecer vista a 100% (actual ${Math.round(zoom * 100)}%)`} side="top">
+          <button onClick={handleResetView} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+            <RotateCcw size={14} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Infinite Canvas Area */}
@@ -885,15 +778,21 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         ref={containerRef}
         onMouseDown={handleCanvasMouseDown}
         onWheel={handleWheel}
-        style={{
-          cursor: isPanning ? 'grabbing' : isConnectMode ? 'crosshair' : 'default',
-          backgroundImage:
-            'radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
-          backgroundSize: `${32 * zoom}px ${32 * zoom}px`,
-          backgroundPosition: `${pan.x}px ${pan.y}px`
-        }}
-        className="w-full h-full relative overflow-hidden"
+        style={{ cursor: isPanning ? 'grabbing' : isConnectMode ? 'crosshair' : 'default' }}
+        className="w-full h-full relative"
       >
+        {/* Reaches the window edges so cards, panning and the grid run under the islands */}
+        <div
+          ref={surfaceRef}
+          style={{
+            backgroundImage:
+              'radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
+            backgroundSize: `${GRID * zoom}px ${GRID * zoom}px`,
+            backgroundPosition: `${pan.x}px ${pan.y}px`
+          }}
+          className="fixed inset-0"
+        />
+
         {/* World Transform Layer */}
         <div
           style={{
@@ -919,7 +818,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                 markerHeight="6"
                 orient="auto-start-reverse"
               >
-                <path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981" />
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#828384" />
               </marker>
             </defs>
             {connectors.map((conn) => {
@@ -957,7 +856,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   {/* Flow line */}
                   <path
                     d={pathData}
-                    stroke={conn.color || '#10b981'}
+                    stroke="#828384"
                     strokeWidth="2.5"
                     strokeDasharray="6 3"
                     fill="none"
@@ -980,7 +879,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                       cx={midX}
                       cy={midY}
                       r="12"
-                      className="fill-[#0c0e12] stroke-zinc-700 group-hover/conn:stroke-rose-500 group-hover/conn:fill-rose-950/90 transition-all shadow-xl"
+                      className="fill-void stroke-zinc-700 group-hover/conn:stroke-rose-500 group-hover/conn:fill-rose-950/90 transition-all"
                       strokeWidth="1.5"
                     />
                     {/* Cross icon */}
@@ -1010,6 +909,21 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             })}
           </svg>
 
+          {/* Alignment guides, above the card being held */}
+          {heldCard && (
+            <svg
+              style={{ zIndex: (heldCard.zIndex ?? 0) + 1 }}
+              className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+            >
+              {alignmentGuides(
+                heldCard,
+                cards.filter((c) => c !== heldCard)
+              ).map((line, i) => (
+                <line key={i} {...line} vectorEffect="non-scaling-stroke" strokeWidth={2} className="stroke-signal" />
+              ))}
+            </svg>
+          )}
+
           {/* Cards Layer */}
           <div className="w-full h-full relative pointer-events-none">
             {cards.map((card) => {
@@ -1035,9 +949,28 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   <NoteCard
                     key={card.id}
                     card={card}
+                    terminals={terminalsForNote(card.id)}
                     isFocused={isFocused}
                     onFocus={() => bringToFront(card.id)}
                     onUpdate={(updates) => handleUpdateCard(card.id, updates)}
+                    onLinkTerminal={(terminalId) => connectCards(card.id, terminalId)}
+                    onDelete={handleDeleteCard}
+                    onDragStart={handleDragStart}
+                    onResizeStart={handleResizeStart}
+                  />
+                )
+              }
+
+              if (card.kind === 'git') {
+                return (
+                  <GitCard
+                    key={card.id}
+                    card={card}
+                    folders={terminalFolders}
+                    isVisible={isVisible}
+                    refreshKey={lastAgentFinishedAt}
+                    isFocused={isFocused}
+                    onFocus={() => bringToFront(card.id)}
                     onDelete={handleDeleteCard}
                     onDragStart={handleDragStart}
                     onResizeStart={handleResizeStart}
@@ -1098,6 +1031,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   key={card.id}
                   card={card}
                   metrics={panelsMetrics[card.id]}
+                  agentStatus={agentStatuses[card.id]}
                   isFocused={isFocused}
                   onFocus={() => bringToFront(card.id)}
                   onUpdate={(updates) => handleUpdateCard(card.id, updates)}
@@ -1113,13 +1047,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
         {/* Empty state hint */}
         {cards.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 font-mono text-xs select-none pointer-events-none">
-            <div className="w-12 h-12 rounded-xl bg-zinc-900/60 border border-zinc-800 flex items-center justify-center mb-2">
-              <Layers size={20} className="text-zinc-600" />
-            </div>
-            <span className="text-zinc-400 font-medium">CANVAS VACÍO</span>
-            <span className="text-[11px] text-zinc-600 mt-1">
-              Usa los botones "+ Console", "+ Browser", "+ Explorer" o "+ Ports" arriba para agregar nodos.
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 text-xs select-none pointer-events-none">
+            <span className="display-serif text-5xl text-zinc-100 mb-3">Lienzo vacío</span>
+            <span className="text-sm font-light text-zinc-400">
+              Agrega una consola, un navegador o una nota desde la barra inferior.
             </span>
           </div>
         )}
@@ -1128,21 +1059,21 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         {showMinimap && cards.length > 0 && minimapData && (
           <div
             onWheel={(e) => e.stopPropagation()}
-            className="minimap-container absolute bottom-4 right-4 z-40 w-56 bg-[#0d1017]/95 backdrop-blur-md border border-zinc-800 rounded-lg shadow-2xl p-2 select-none font-mono"
+            className="minimap-container island absolute bottom-4 right-4 z-40 w-56 p-2.5 select-none"
           >
             <div className="flex items-center justify-between text-[10px] text-zinc-400 border-b border-zinc-800/80 pb-1 mb-1.5">
-              <span className="font-semibold text-emerald-400 flex items-center space-x-1">
+              <span className="font-medium text-zinc-100 flex items-center space-x-1">
                 <MapPin size={11} />
-                <span>MINIMAP</span>
+                <span className="stamp text-[10px]">MINIMAP</span>
               </span>
               <div className="flex items-center space-x-2">
-                <span className="text-[9px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800">
+                <span className="text-[9px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
                   {Math.round(zoom * 100)}%
                 </span>
                 <span className="text-zinc-500">{cards.length} nodos</span>
                 <button
                   onClick={() => setShowMinimap(false)}
-                  className="p-0.5 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                  className="p-0.5 text-zinc-500 hover:text-zinc-300 rounded-control hover:bg-zinc-800 transition-colors cursor-pointer"
                   title="Ocultar minimapa"
                 >
                   <X size={11} />
@@ -1153,7 +1084,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             <div
               ref={minimapBoxRef}
               onMouseDown={handleMinimapMouseDown}
-              className="relative w-full h-28 bg-[#06080b] rounded border border-zinc-800/80 cursor-crosshair overflow-hidden shadow-inner"
+              className="relative w-full h-28 bg-void rounded-control border border-zinc-800/80 cursor-crosshair overflow-hidden"
             >
               {/* Connector lines in minimap */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
@@ -1174,7 +1105,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                       y1={y1}
                       x2={x2}
                       y2={y2}
-                      stroke={conn.color || '#10b981'}
+                      stroke="#828384"
                       strokeWidth="1"
                       strokeDasharray="2 2"
                       opacity="0.6"
@@ -1190,13 +1121,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                 const cardW = Math.max(5, c.width * minimapData.scale)
                 const cardH = Math.max(4, c.height * minimapData.scale)
 
-                let color = 'bg-emerald-500'
-                if (c.kind === 'browser') color = 'bg-cyan-500'
-                if (c.kind === 'vscode') color = 'bg-blue-500'
-                if (c.kind === 'note') color = 'bg-amber-500'
-                if (c.kind === 'explorer') color = 'bg-indigo-500'
-                if (c.kind === 'port-monitor') color = 'bg-rose-500'
-
+                let color = 'bg-zinc-500'
+                                                                                
                 const isFocused = c.id === focusedCardId
 
                 return (
@@ -1225,7 +1151,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   width: `${minimapData.viewportRect.w}px`,
                   height: `${minimapData.viewportRect.h}px`
                 }}
-                className="absolute border border-emerald-400 bg-emerald-500/15 rounded-[2px] pointer-events-none shadow-[0_0_10px_rgba(16,185,129,0.35)] transition-all duration-75"
+                className="absolute border border-white/15 bg-white/5 rounded-[2px] pointer-events-none shadow-[0_0_10px_rgb(var(--signal-rgb)/0.35)] transition-all duration-75"
               />
             </div>
           </div>

@@ -9,9 +9,10 @@ import {
   Square,
   Copy,
   AlertTriangle,
-  X,
+  BellRing,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react'
 import { Workspace, SidebarPosition } from '../types'
 
@@ -20,7 +21,10 @@ interface LaunchpadProps {
   activeWorkspaceId: string
   runningWorkspaceIds: string[]
   pendingChangesWorkspaceIds?: string[]
+  attentionWorkspaceIds?: string[]
+  workingWorkspaceIds?: string[]
   position?: SidebarPosition
+  railHeight?: number
   onSelectWorkspace: (id: string) => void
   onNewWorkspace: () => void
   onEditWorkspace: (workspace: Workspace) => void
@@ -35,12 +39,22 @@ interface ContextMenuState {
   workspace: Workspace
 }
 
+interface TooltipState {
+  label: string
+  x: number
+  y: number
+  side: 'left' | 'right'
+}
+
 export const Launchpad: React.FC<LaunchpadProps> = ({
   workspaces,
   activeWorkspaceId,
   runningWorkspaceIds,
   pendingChangesWorkspaceIds = [],
-  position = 'left',
+  attentionWorkspaceIds = [],
+  workingWorkspaceIds = [],
+  position = 'top',
+  railHeight = 200,
   onSelectWorkspace,
   onNewWorkspace,
   onEditWorkspace,
@@ -50,11 +64,21 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
 }) => {
   const isHorizontal = position === 'top' || position === 'bottom'
 
+  const agentLabel = (id: string): string =>
+    attentionWorkspaceIds.includes(id)
+      ? ' · un agente terminó o espera tu respuesta'
+      : workingWorkspaceIds.includes(id)
+      ? ' · trabajando'
+      : ''
+
   // Dropdown context menu state (triggered on right-click only)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
   // Confirmation modal state for workspace deletion
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null)
+
+  // Hover tooltip for the vertical rail (portaled so the scroll container can't clip it)
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null)
@@ -152,153 +176,171 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
     }
   }
 
+  // Shows the tooltip next to a rail button, on the side facing the screen centre
+  const showTooltip = (e: React.MouseEvent<HTMLElement>, label: string): void => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const side = position === 'right' ? 'left' : 'right'
+    setTooltip({
+      label,
+      side,
+      x: side === 'left' ? rect.left - 8 : rect.right + 8,
+      y: rect.top + rect.height / 2
+    })
+  }
+
   // HORIZONTAL LAYOUT (Top or Bottom bar)
   if (isHorizontal) {
-    const borderClass = position === 'top' ? 'border-b' : 'border-t'
-
     return (
       <>
-        <nav
-          className={`h-11 w-full bg-[#0a0c0e] ${borderClass} border-zinc-800/80 flex items-center justify-between px-3 select-none shrink-0 z-10`}
-        >
-          {/* Left: Branding & Counts */}
-          <div className="flex items-center space-x-2.5 shrink-0 mr-2 border-r border-zinc-800/80 pr-3">
-            <div className="flex items-center space-x-1.5 text-xs font-mono font-semibold tracking-wider text-zinc-300">
-              <Layers size={13} className="text-emerald-400" />
-              <span className="hidden sm:inline">LAUNCHPAD</span>
+        <div className="shrink-0 z-10 w-full">
+          <nav
+            style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
+            className="island rounded-full h-9 w-full flex items-center justify-between px-3 select-none"
+          >
+            {/* Left: Branding & Counts */}
+            <div className="flex items-center space-x-2.5 shrink-0 mr-2 border-r border-zinc-800/80 pr-3">
+              <div className="flex items-center space-x-1.5 text-xs stamp text-zinc-300">
+                <Layers size={13} className="text-zinc-400" />
+                <span className="hidden sm:inline">LAUNCHPAD</span>
+              </div>
+              <span className="text-[10px] whitespace-nowrap text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded-control">
+                {runningWorkspaceIds.length} running
+              </span>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
-              {runningWorkspaceIds.length} running
-            </span>
-          </div>
 
-          {/* Center: Workspaces Horizontal Scroll Container */}
-          <div className="flex-1 min-w-0 flex items-center relative overflow-hidden py-0.5">
-            {/* Scroll Left Button */}
-            {canScrollLeft && (
-              <button
-                type="button"
-                onClick={() => handleScrollBy(-180)}
-                className="absolute left-0 z-20 h-7 w-6 bg-[#0a0c0e]/95 hover:bg-zinc-800 border-r border-zinc-800/80 rounded-r flex items-center justify-center text-zinc-400 hover:text-emerald-400 transition-colors shadow-lg cursor-pointer"
-                title="Desplazar a la izquierda"
+            {/* Center: Workspaces Horizontal Scroll Container */}
+            <div className="flex-1 min-w-0 flex items-center relative overflow-hidden py-0.5">
+              {/* Scroll Left Button */}
+              {canScrollLeft && (
+                <button
+                  type="button"
+                  onClick={() => handleScrollBy(-180)}
+                  className="absolute left-0 z-20 h-7 w-6 bg-void/95 hover:bg-zinc-800 border-r border-zinc-800/80 rounded-r flex items-center justify-center text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+                  title="Desplazar a la izquierda"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+              )}
+
+              {/* Scrollable Tabs */}
+              <div
+                ref={scrollContainerRef}
+                onWheel={handleHorizontalWheel}
+                className={`flex-1 min-w-0 flex items-center space-x-1.5 overflow-x-auto py-1 launchpad-scrollbar ${
+                  canScrollLeft ? 'pl-6' : ''
+                } ${canScrollRight ? 'pr-6' : ''}`}
               >
-                <ChevronLeft size={13} />
-              </button>
-            )}
+                {workspaces.map((ws, idx) => {
+                  const isActive = ws.id === activeWorkspaceId
+                  const isRunning = runningWorkspaceIds.includes(ws.id)
+                  const codeFormatted = ws.code
+                    ? ws.code.padStart(2, '0')
+                    : (idx + 1).toString().padStart(2, '0')
 
-            {/* Scrollable Tabs */}
-            <div
-              ref={scrollContainerRef}
-              onWheel={handleHorizontalWheel}
-              className={`flex-1 min-w-0 flex items-center space-x-1.5 overflow-x-auto py-1 launchpad-scrollbar ${
-                canScrollLeft ? 'pl-6' : ''
-              } ${canScrollRight ? 'pr-6' : ''}`}
-            >
-              {workspaces.map((ws, idx) => {
-                const isActive = ws.id === activeWorkspaceId
-                const isRunning = runningWorkspaceIds.includes(ws.id)
-                const codeFormatted = ws.code
-                  ? ws.code.padStart(2, '0')
-                  : (idx + 1).toString().padStart(2, '0')
+                  return (
+                    <div
+                      key={ws.id}
+                      data-workspace-id={ws.id}
+                      onClick={() => onSelectWorkspace(ws.id)}
+                      onContextMenu={(e) => handleTabContextMenu(e, ws)}
+                      className={`relative flex items-center space-x-2 px-2.5 py-1 rounded-control cursor-pointer transition-all duration-150 text-xs shrink-0 ${
+                        isActive
+                          ? 'bg-white/[0.04] text-zinc-100 border border-zinc-700/80 '
+                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                      }`}
+                      title={`${ws.name}${agentLabel(ws.id)} (Clic derecho para opciones)`}
+                    >
+                      {/* Active Indicator Accent on bottom */}
+                      {isActive && (
+                        <div className="absolute left-2 right-2 bottom-0 h-0.5 bg-signal rounded-full" />
+                      )}
 
-                return (
-                  <div
-                    key={ws.id}
-                    data-workspace-id={ws.id}
-                    onClick={() => onSelectWorkspace(ws.id)}
-                    onContextMenu={(e) => handleTabContextMenu(e, ws)}
-                    className={`relative flex items-center space-x-2 px-2.5 py-1 rounded cursor-pointer transition-all duration-150 text-xs font-mono shrink-0 ${
-                      isActive
-                        ? 'bg-[#15181d] text-zinc-100 border border-zinc-700/80 shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
-                    }`}
-                    title={`${ws.name} (Clic derecho para opciones)`}
-                  >
-                    {/* Active Indicator Accent on bottom */}
-                    {isActive && (
-                      <div className="absolute left-2 right-2 bottom-0 h-0.5 bg-emerald-400 rounded-full" />
-                    )}
+                      {/* Status LED */}
+                      <div className="relative flex items-center justify-center shrink-0">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                            isRunning
+                              ? 'bg-signal shadow-[0_0_8px_rgb(var(--signal-rgb)/0.9)] animate-pulse'
+                              : 'bg-zinc-700/80 border border-zinc-600/50'
+                          }`}
+                          title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
+                        />
+                        {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                          <span
+                            title="Cambios guardados pendientes de aplicar al reiniciar"
+                            className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-signal-soft animate-ping"
+                          />
+                        )}
+                      </div>
 
-                    {/* Status LED */}
-                    <div className="relative flex items-center justify-center shrink-0">
+                      {attentionWorkspaceIds.includes(ws.id) && <BellRing size={11} className="text-signal shrink-0" />}
+                      {!attentionWorkspaceIds.includes(ws.id) && workingWorkspaceIds.includes(ws.id) && (
+                        <Loader2 size={11} className="text-zinc-300 shrink-0 animate-spin" />
+                      )}
+
                       <span
-                        className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
-                          isRunning
-                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
-                            : 'bg-zinc-700/80 border border-zinc-600/50'
+                        className={`truncate max-w-[120px] font-medium ${
+                          isActive ? 'text-zinc-100' : 'text-zinc-300'
                         }`}
-                        title={isRunning ? 'Activo en segundo plano' : 'No iniciado'}
-                      />
+                      >
+                        {ws.name}
+                      </span>
+
                       {pendingChangesWorkspaceIds?.includes(ws.id) && (
                         <span
                           title="Cambios guardados pendientes de aplicar al reiniciar"
-                          className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
-                        />
+                          className="text-[9px] text-signal-soft bg-white/5 border border-white/15 px-1 py-0.2 rounded-control"
+                        >
+                          ⚙
+                        </span>
                       )}
-                    </div>
 
-                    <span
-                      className={`truncate max-w-[120px] font-medium ${
-                        isActive ? 'text-zinc-100' : 'text-zinc-300'
-                      }`}
-                    >
-                      {ws.name}
-                    </span>
-
-                    {pendingChangesWorkspaceIds?.includes(ws.id) && (
                       <span
-                        title="Cambios guardados pendientes de aplicar al reiniciar"
-                        className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
+                        className={`text-[10px] ${
+                          isActive
+                            ? 'text-zinc-100 font-medium'
+                            : isRunning
+                            ? 'text-zinc-100'
+                            : 'text-zinc-500'
+                        }`}
                       >
-                        ⚙
+                        [{codeFormatted}]
                       </span>
-                    )}
+                    </div>
+                  )
+                })}
+                {workspaces.length === 0 && (
+                  <span className="text-[11px] text-zinc-500 italic px-2">
+                    No hay workspaces creados
+                  </span>
+                )}
+              </div>
 
-                    <span
-                      className={`text-[10px] font-mono ${
-                        isActive
-                          ? 'text-emerald-400 font-semibold'
-                          : isRunning
-                          ? 'text-emerald-400/70'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      [{codeFormatted}]
-                    </span>
-                  </div>
-                )
-              })}
-              {workspaces.length === 0 && (
-                <span className="text-[11px] font-mono text-zinc-500 italic px-2">
-                  No hay workspaces creados
-                </span>
+              {/* Scroll Right Button */}
+              {canScrollRight && (
+                <button
+                  type="button"
+                  onClick={() => handleScrollBy(180)}
+                  className="absolute right-0 z-20 h-7 w-6 bg-void/95 hover:bg-zinc-800 border-l border-zinc-800/80 rounded-l flex items-center justify-center text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+                  title="Desplazar a la derecha"
+                >
+                  <ChevronRight size={13} />
+                </button>
               )}
             </div>
 
-            {/* Scroll Right Button */}
-            {canScrollRight && (
+            {/* Right: Compact Add Workspace Button */}
+            <div className="shrink-0 pl-2">
               <button
-                type="button"
-                onClick={() => handleScrollBy(180)}
-                className="absolute right-0 z-20 h-7 w-6 bg-[#0a0c0e]/95 hover:bg-zinc-800 border-l border-zinc-800/80 rounded-l flex items-center justify-center text-zinc-400 hover:text-emerald-400 transition-colors shadow-lg cursor-pointer"
-                title="Desplazar a la derecha"
+                onClick={onNewWorkspace}
+                className="flex items-center space-x-1.5 px-2.5 py-1 rounded-control border border-dashed border-zinc-700 hover:border-white/25 bg-zinc-900/50 hover:bg-white/10 text-zinc-300 hover:text-zinc-100 text-xs transition-colors group cursor-pointer"
               >
-                <ChevronRight size={13} />
+                <Plus size={12} className="text-zinc-400 group-hover:text-zinc-100" />
+                <span className="hidden sm:inline">Workspace</span>
               </button>
-            )}
-          </div>
-
-          {/* Right: Compact Add Workspace Button */}
-          <div className="shrink-0 pl-2">
-            <button
-              onClick={onNewWorkspace}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded border border-dashed border-zinc-700 hover:border-emerald-500/60 bg-zinc-900/50 hover:bg-emerald-500/10 text-zinc-300 hover:text-emerald-400 text-xs font-mono transition-colors group cursor-pointer"
-            >
-              <Plus size={12} className="text-zinc-400 group-hover:text-emerald-400" />
-              <span className="hidden sm:inline">+ WORKSPACE</span>
-            </button>
-          </div>
-        </nav>
+            </div>
+          </nav>
+        </div>
 
         {/* Dropdown Menu & Confirmation Modal */}
         {renderContextMenu()}
@@ -307,33 +349,27 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
     )
   }
 
-  // VERTICAL LAYOUT (Left or Right Sidebar)
-  const borderClass = position === 'right' ? 'border-l' : 'border-r'
+  // VERTICAL RAIL (Left or Right): a 40px island of icons, one per workspace
+  const railButton = (
+    isActive: boolean,
+    isRunning: boolean
+  ): string =>
+    `group relative w-7 h-7 shrink-0 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer ${
+      isActive
+        ? 'bg-white/10 text-zinc-100 border border-white/15'
+        : isRunning
+        ? 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/70 border border-transparent'
+        : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/70 border border-transparent'
+    }`
 
   return (
     <>
-      <aside
-        className={`w-64 bg-[#0a0c0e] ${borderClass} border-zinc-800/80 flex flex-col justify-between select-none shrink-0 h-full`}
-      >
-        {/* Sidebar Header */}
-        <div>
-          <div className="px-4 py-3.5 border-b border-zinc-800/70 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-xs font-mono font-semibold tracking-wider text-zinc-400">
-              <Layers size={13} className="text-emerald-400" />
-              <span>LAUNCHPAD</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
-                {runningWorkspaceIds.length} running
-              </span>
-              <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
-                {workspaces.length.toString().padStart(2, '0')}
-              </span>
-            </div>
-          </div>
-
-          {/* Workspace List */}
-          <div className="p-2 space-y-1 overflow-y-auto max-h-[calc(100vh-140px)]">
+      <div className="shrink-0 self-center z-10">
+        <aside
+          style={{ height: `${railHeight}px`, zoom: 'var(--island-scale)' } as React.CSSProperties}
+          className="island rounded-full w-10 py-2 flex flex-col items-center gap-1.5 select-none"
+        >
+          <div className="flex-1 min-h-0 w-full flex flex-col items-center gap-1.5 overflow-y-auto no-scrollbar">
             {workspaces.map((ws, idx) => {
               const isActive = ws.id === activeWorkspaceId
               const isRunning = runningWorkspaceIds.includes(ws.id)
@@ -342,119 +378,62 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                 : (idx + 1).toString().padStart(2, '0')
 
               return (
-                <div
+                <button
                   key={ws.id}
+                  type="button"
                   onClick={() => onSelectWorkspace(ws.id)}
                   onContextMenu={(e) => handleTabContextMenu(e, ws)}
-                  className={`relative flex items-center justify-between px-3 py-2 rounded-md cursor-pointer transition-all duration-150 text-xs font-mono ${
-                    isActive
-                      ? 'bg-[#15181d] text-zinc-100 border border-zinc-700/60 shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
-                  }`}
-                  title={`${ws.name} (Clic derecho para opciones)`}
+                  onMouseEnter={(e) => showTooltip(e, `${ws.name} [${codeFormatted}]${agentLabel(ws.id)}`)}
+                  onMouseLeave={() => setTooltip(null)}
+                  className={railButton(isActive, isRunning)}
                 >
-                  {/* Active Indicator Accent on border */}
-                  {isActive && (
-                    <div
-                      className={`absolute ${
-                        position === 'right' ? 'right-0 rounded-l' : 'left-0 rounded-r'
-                      } top-1.5 bottom-1.5 w-1 bg-emerald-400`}
-                    />
+                  {attentionWorkspaceIds.includes(ws.id) ? (
+                    <BellRing size={14} className="text-signal" />
+                  ) : workingWorkspaceIds.includes(ws.id) ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <FolderKanban size={14} />
                   )}
-
-                  <div className="flex items-center space-x-2.5 truncate pl-1">
-                    {/* Status LED */}
-                    <div className="relative flex items-center justify-center shrink-0">
-                      <span
-                        className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
-                          isRunning
-                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse'
-                            : 'bg-zinc-700/80 border border-zinc-600/50'
-                        }`}
-                        title={
-                          isRunning
-                            ? 'Activo y corriendo en segundo plano'
-                            : 'Aún no iniciado'
-                        }
-                      />
-                      {pendingChangesWorkspaceIds?.includes(ws.id) && (
-                        <span
-                          title="Cambios guardados pendientes de aplicar al reiniciar"
-                          className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"
-                        />
-                      )}
-                    </div>
-
-                    <FolderKanban
-                      size={13}
-                      className={
-                        isActive
-                          ? 'text-emerald-400'
-                          : isRunning
-                          ? 'text-zinc-300'
-                          : 'text-zinc-600'
-                      }
-                    />
-
-                    <span
-                      className={`truncate font-medium ${
-                        isActive ? 'text-zinc-100' : 'text-zinc-300'
-                      }`}
-                    >
-                      {ws.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-1.5">
-                    {pendingChangesWorkspaceIds?.includes(ws.id) && (
-                      <span
-                        title="Cambios guardados pendientes de aplicar al reiniciar"
-                        className="text-[9px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded"
-                      >
-                        ⚙
-                      </span>
-                    )}
-
-                    <span
-                      className={`text-[11px] font-mono ${
-                        isActive
-                          ? 'text-emerald-400 font-semibold'
-                          : isRunning
-                          ? 'text-emerald-400/70'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      [{codeFormatted}]
-                    </span>
-                  </div>
-                </div>
+                  {isRunning && (
+                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-signal shadow-[0_0_6px_rgb(var(--signal-rgb)/0.9)]" />
+                  )}
+                  {pendingChangesWorkspaceIds?.includes(ws.id) && (
+                    <span className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-signal-soft" />
+                  )}
+                </button>
               )
             })}
-            {workspaces.length === 0 && (
-              <div className="p-4 text-center">
-                <p className="text-xs font-mono text-zinc-500 mb-2">No hay workspaces</p>
-                <p className="text-[10px] font-mono text-zinc-600 leading-relaxed">
-                  Crea tu primer workspace para comenzar
-                </p>
-              </div>
-            )}
           </div>
-        </div>
 
-        {/* Bottom: New Workspace Button */}
-        <div className="p-3 border-t border-zinc-800/70 bg-[#0a0c0e]">
           <button
+            type="button"
             onClick={onNewWorkspace}
-            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded border border-dashed border-zinc-700/80 hover:border-emerald-500/60 bg-zinc-900/40 hover:bg-emerald-500/5 text-zinc-300 hover:text-emerald-400 text-xs font-mono transition-all duration-150 group cursor-pointer"
+            onMouseEnter={(e) => showTooltip(e, 'Nuevo workspace')}
+            onMouseLeave={() => setTooltip(null)}
+            className="group w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer"
           >
-            <Plus
-              size={13}
-              className="text-zinc-400 group-hover:text-emerald-400 transition-colors"
-            />
-            <span>+ NEW WORKSPACE</span>
+            <Plus size={13} />
           </button>
-        </div>
-      </aside>
+        </aside>
+      </div>
+
+      {tooltip &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: 'fixed',
+              top: `${tooltip.y}px`,
+              left: `${tooltip.x}px`,
+              transform: tooltip.side === 'left' ? 'translate(-100%, -50%)' : 'translateY(-50%)',
+              zIndex: 99998
+            }}
+            className="pointer-events-none whitespace-nowrap rounded-button bg-void border border-zinc-700/80 px-2 py-1 text-[11px] text-zinc-100 select-none"
+          >
+            {tooltip.label}
+          </div>,
+          document.body
+        )}
 
       {/* Dropdown Menu & Confirmation Modal */}
       {renderContextMenu()}
@@ -486,9 +465,9 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
           e.preventDefault()
           e.stopPropagation()
         }}
-        className="w-48 bg-[#12151c] border border-zinc-700/80 rounded-md shadow-2xl py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
+        className="w-48 bg-void border border-zinc-700/80 rounded-button py-1 text-xs text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
       >
-        <div className="px-3 py-1.5 border-b border-zinc-800 text-[10px] text-zinc-500 font-semibold truncate uppercase">
+        <div className="px-3 py-1.5 border-b border-zinc-800 text-[10px] text-zinc-500 font-medium truncate uppercase">
           WORKSPACE: {ws.name}
         </div>
 
@@ -500,7 +479,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
           }}
           className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-zinc-800 text-zinc-200 hover:text-white transition-colors cursor-pointer text-left"
         >
-          <Edit2 size={12} className="text-emerald-400" />
+          <Edit2 size={12} className="text-zinc-100" />
           <span>Configurar / Editar</span>
         </button>
 
@@ -511,9 +490,9 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
               closeContextMenu()
               onStopWorkspace(ws.id)
             }}
-            className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-amber-500/20 text-zinc-200 hover:text-amber-300 transition-colors cursor-pointer text-left"
+            className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-white/10 text-zinc-200 hover:text-zinc-100 transition-colors cursor-pointer text-left"
           >
-            <Square size={12} className="text-amber-400" fill="currentColor" />
+            <Square size={12} className="text-zinc-400" fill="currentColor" />
             <span>Detener procesos</span>
           </button>
         )}
@@ -560,18 +539,18 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
         onClick={() => setWorkspaceToDelete(null)}
       >
         <div
-          className="bg-[#111318] border border-rose-500/40 rounded-lg w-full max-w-md p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 font-mono text-xs"
+          className="bg-void border border-rose-500/40 rounded-button w-full max-w-md p-5 animate-in fade-in zoom-in-95 duration-150 text-xs"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center space-x-2.5 text-rose-400 font-semibold text-sm pb-3 border-b border-zinc-800">
+          <div className="flex items-center space-x-2.5 text-rose-400 font-medium text-sm pb-3 border-b border-zinc-800">
             <AlertTriangle size={18} className="shrink-0" />
-            <span>CONFIRMAR ELIMINACIÓN</span>
+            <span className="stamp text-[10px]">CONFIRMAR ELIMINACIÓN</span>
           </div>
 
           <div className="py-4 space-y-2 text-zinc-300 text-xs leading-relaxed">
             <p>
               ¿Estás seguro de que deseas eliminar permanentemente el workspace{' '}
-              <strong className="text-zinc-100 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+              <strong className="text-zinc-100 bg-zinc-900 px-1.5 py-0.5 rounded-control border border-zinc-800">
                 {workspaceToDelete.name}
               </strong>
               ?
@@ -585,14 +564,14 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
             <button
               type="button"
               onClick={() => setWorkspaceToDelete(null)}
-              className="px-3 py-1.5 rounded border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-control border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={handleConfirmDelete}
-              className="px-3.5 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-rose-600/20"
+              className="px-3.5 py-1.5 rounded-control bg-rose-600 hover:bg-rose-700 text-white font-medium transition-colors flex items-center space-x-1.5 cursor-pointer"
             >
               <Trash2 size={13} />
               <span>Eliminar Workspace</span>

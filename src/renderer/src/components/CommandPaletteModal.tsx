@@ -15,9 +15,10 @@ import {
   Play,
   Download,
   RotateCw,
-  Code2
+  Code2,
+  GitCompare
 } from 'lucide-react'
-import { Workspace, AppState } from '../types'
+import { Workspace, AppState, NodeKind } from '../types'
 
 interface PaletteItem {
   id: string
@@ -34,12 +35,11 @@ interface CommandPaletteModalProps {
   appState: AppState
   onSelectWorkspace: (id: string) => void
   onNewWorkspace: () => void
-  onToggleLayoutMode: () => void
   onToggleSidebar: () => void
   onOpenSettings: () => void
   onOpenShortcuts: () => void
   onRestartActiveWorkspace: () => void
-  onAddCanvasCard?: (kind: 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode') => void
+  onAddCanvasCard?: (kind: NodeKind) => void
 }
 
 export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
@@ -48,7 +48,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   appState,
   onSelectWorkspace,
   onNewWorkspace,
-  onToggleLayoutMode,
   onToggleSidebar,
   onOpenSettings,
   onOpenShortcuts,
@@ -79,7 +78,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: `Workspace: ${ws.name}`,
       subtitle: `${ws.panels.length} terminales [${ws.code || '01'}] ${isActive ? '(Activo)' : ''}`,
       category: 'Workspaces',
-      icon: <FolderKanban size={15} className="text-emerald-400" />,
+      icon: <FolderKanban size={15} className="text-zinc-100" />,
       action: () => {
         onSelectWorkspace(ws.id)
         onClose()
@@ -93,7 +92,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     title: 'Crear nuevo Workspace',
     subtitle: 'Configura un nuevo entorno de trabajo con paneles personalizados',
     category: 'Acciones',
-    icon: <Terminal size={15} className="text-emerald-400" />,
+    icon: <Terminal size={15} className="text-zinc-100" />,
     action: () => {
       onNewWorkspace()
       onClose()
@@ -105,24 +104,13 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     title: 'Reiniciar Workspace Activo',
     subtitle: 'Reinicia todas las terminales y aplica cambios pendientes',
     category: 'Acciones',
-    icon: <RotateCw size={15} className="text-amber-400" />,
+    icon: <RotateCw size={15} className="text-zinc-400" />,
     action: () => {
       onRestartActiveWorkspace()
       onClose()
     }
   })
 
-  items.push({
-    id: 'act-toggle-layout',
-    title: 'Alternar Cuadrícula / Canvas Libre',
-    subtitle: 'Cambia entre vista de terminales fija o lienzo infinito (Ctrl+Shift+F)',
-    category: 'Acciones',
-    icon: <Layers size={15} className="text-cyan-400" />,
-    action: () => {
-      onToggleLayoutMode()
-      onClose()
-    }
-  })
 
   items.push({
     id: 'act-toggle-sidebar',
@@ -156,7 +144,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Terminal / Consola',
       subtitle: 'Inserta un nuevo nodo de consola interactiva en el lienzo',
       category: 'Canvas',
-      icon: <Terminal size={15} className="text-emerald-400" />,
+      icon: <Terminal size={15} className="text-zinc-100" />,
       action: () => {
         onAddCanvasCard('terminal')
         onClose()
@@ -168,7 +156,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Navegador Web',
       subtitle: 'Inserta una tarjeta de vista previa web interactiva',
       category: 'Canvas',
-      icon: <Globe size={15} className="text-cyan-400" />,
+      icon: <Globe size={15} className="text-zinc-300" />,
       action: () => {
         onAddCanvasCard('browser')
         onClose()
@@ -180,7 +168,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Instancia de VS Code',
       subtitle: 'Inserta un editor de código VS Code completo (local o web) en el lienzo',
       category: 'Canvas',
-      icon: <Code2 size={15} className="text-blue-400" />,
+      icon: <Code2 size={15} className="text-zinc-300" />,
       action: () => {
         onAddCanvasCard('vscode')
         onClose()
@@ -192,7 +180,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Bloc de Notas',
       subtitle: 'Inserta una tarjeta de notas Markdown con listas de tareas',
       category: 'Canvas',
-      icon: <FileText size={15} className="text-amber-400" />,
+      icon: <FileText size={15} className="text-zinc-400" />,
       action: () => {
         onAddCanvasCard('note')
         onClose()
@@ -204,7 +192,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Explorador de Archivos',
       subtitle: 'Inserta un explorador de carpetas con previsualización rápida',
       category: 'Canvas',
-      icon: <Folder size={15} className="text-indigo-400" />,
+      icon: <Folder size={15} className="text-zinc-300" />,
       action: () => {
         onAddCanvasCard('explorer')
         onClose()
@@ -216,9 +204,21 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Canvas: Añadir Monitor de Puertos',
       subtitle: 'Inserta un monitor en tiempo real de servicios y puertos locales',
       category: 'Canvas',
-      icon: <Activity size={15} className="text-emerald-400" />,
+      icon: <Activity size={15} className="text-zinc-100" />,
       action: () => {
         onAddCanvasCard('port-monitor')
+        onClose()
+      }
+    })
+
+    items.push({
+      id: 'canvas-git',
+      title: 'Canvas: Añadir Cambios de la Sesión (git)',
+      subtitle: 'Muestra qué archivos cambiaron desde que se abrió la terminal',
+      category: 'Canvas',
+      icon: <GitCompare size={15} className="text-zinc-300" />,
+      action: () => {
+        onAddCanvasCard('git')
         onClose()
       }
     })
@@ -255,11 +255,11 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-[#0f1117] border border-zinc-700/80 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
+        className="w-full max-w-xl bg-void border border-zinc-700/80 rounded-card overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
       >
         {/* Search Input Bar */}
-        <div className="flex items-center px-4 py-3 bg-[#13161f] border-b border-zinc-800">
-          <Search size={16} className="text-emerald-400 mr-3 shrink-0" />
+        <div className="flex items-center px-4 py-3 bg-white/[0.04] border-b border-zinc-800">
+          <Search size={16} className="text-zinc-100 mr-3 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -274,7 +274,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           />
           <button
             onClick={onClose}
-            className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded-control text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
           >
             <X size={15} />
           </button>
@@ -283,7 +283,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         {/* Results List */}
         <div className="max-h-[380px] overflow-y-auto p-2 space-y-1">
           {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs font-mono text-zinc-500">
+            <div className="py-8 text-center text-xs text-zinc-500">
               No se encontraron comandos coincidentes con "{query}".
             </div>
           ) : (
@@ -295,31 +295,31 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                   key={item.id}
                   onClick={item.action}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-button cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-emerald-500/15 border border-emerald-500/40 text-white'
+                      ? 'bg-white/5 border border-white/15 text-white'
                       : 'hover:bg-zinc-800/60 border border-transparent text-zinc-300'
                   }`}
                 >
                   <div className="flex items-center space-x-3 truncate">
                     <div
-                      className={`p-1.5 rounded ${
-                        isSelected ? 'bg-emerald-500/20' : 'bg-zinc-800/80'
+                      className={`p-1.5 rounded-control ${
+                        isSelected ? 'bg-white/10' : 'bg-zinc-800/80'
                       }`}
                     >
                       {item.icon}
                     </div>
                     <div className="truncate">
-                      <div className="font-mono text-xs font-semibold">{item.title}</div>
+                      <div className="text-xs font-medium">{item.title}</div>
                       {item.subtitle && (
-                        <div className="font-mono text-[10px] text-zinc-500 truncate mt-0.5">
+                        <div className="text-[10px] text-zinc-500 truncate mt-0.5">
                           {item.subtitle}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <span className="font-mono text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded shrink-0">
+                  <span className="text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-control shrink-0">
                     {item.category}
                   </span>
                 </div>
@@ -329,13 +329,13 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="px-4 py-2 bg-[#0c0e14] border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+        <div className="px-4 py-2 bg-white/[0.04] border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-500">
           <div className="flex items-center space-x-3">
             <span>↑↓ Navegar</span>
             <span>↵ Ejecutar</span>
             <span>Esc Cerrar</span>
           </div>
-          <span className="text-emerald-400">Ctrl+K / Ctrl+P</span>
+          <span className="text-zinc-100">Ctrl+K / Ctrl+P</span>
         </div>
       </div>
     </div>

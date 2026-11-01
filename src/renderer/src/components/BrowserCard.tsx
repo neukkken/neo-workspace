@@ -4,8 +4,6 @@ import {
   RotateCw,
   ExternalLink,
   Trash2,
-  Maximize2,
-  Minimize2,
   Smartphone,
   Tablet,
   Monitor,
@@ -76,7 +74,6 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
   }
 
   const [inputUrl, setInputUrl] = useState(activeTab.url)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [viewport, setViewport] = useState<ViewportMode>('full')
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
@@ -343,25 +340,14 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
     }
   }, [activeTabId, onUpdate])
 
-  const cardStyle: React.CSSProperties = isExpanded
-    ? {
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
-        bottom: 10,
-        width: 'calc(100% - 20px)',
-        height: 'calc(100% - 20px)',
-        zIndex: 999
-      }
-    : {
-        position: 'absolute',
-        left: `${card.x}px`,
-        top: `${card.y}px`,
-        width: `${card.width}px`,
-        height: `${card.height}px`,
-        zIndex: isFocused ? 50 : card.zIndex || 10
-      }
+  const cardStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `${card.x}px`,
+    top: `${card.y}px`,
+    width: `${card.width}px`,
+    height: `${card.height}px`,
+    zIndex: isFocused ? 50 : card.zIndex || 10
+  }
 
   const getViewportWidth = (): string => {
     switch (viewport) {
@@ -384,24 +370,24 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           e.preventDefault()
         }
       }}
-      className={`canvas-card pointer-events-auto flex flex-col bg-[#0d0f14] rounded-lg border shadow-xl overflow-hidden select-none transition-shadow ${
+      className={`canvas-card pointer-events-auto flex flex-col island overflow-hidden select-none transition-shadow ${
         isFocused
-          ? 'border-cyan-500/80 shadow-[0_0_20px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/40'
+          ? 'border-white/40 shadow-[0_0_32px_-6px_rgb(var(--signal-rgb)/0.55)]'
           : 'border-zinc-800/90 hover:border-zinc-700/80'
       }`}
     >
       {/* Header Bar */}
       <div
         onMouseDown={(e) => onDragStart(e, card.id)}
-        className="h-9 px-2.5 bg-[#12151b] border-b border-zinc-800 flex items-center justify-between cursor-move select-none shrink-0"
+        className="h-9 px-2.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between cursor-move select-none shrink-0"
       >
         {/* Left: Indicator & Title */}
         <div className="flex items-center space-x-2 truncate">
-          <Globe size={13} className="text-cyan-400 shrink-0" />
-          <span className="font-mono text-[11px] font-semibold tracking-wide text-zinc-200 uppercase truncate">
+          <Globe size={13} className="text-zinc-300 shrink-0" />
+          <span className="text-[11px] stamp text-zinc-200 truncate">
             {activeTab.title || 'WEB-BROWSER'}
           </span>
-          <span className="hidden sm:inline-block text-[10px] font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded">
+          <span className="hidden sm:inline-block text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded-control">
             {tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}
           </span>
         </div>
@@ -413,7 +399,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Responsive viewport controls */}
-          <div className="flex items-center space-x-0.5 bg-zinc-900 border border-zinc-800 p-0.5 rounded mr-1">
+          <div className="flex items-center space-x-0.5 bg-zinc-900 border border-zinc-800 p-0.5 rounded-control mr-1">
             <button
               type="button"
               onClick={(e) => {
@@ -421,8 +407,8 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
                 setViewport('full')
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                viewport === 'full' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
+              className={`p-1 rounded-control transition-colors cursor-pointer ${
+                viewport === 'full' ? 'bg-white/10 text-zinc-300' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Resolución Completa (100%)"
             >
@@ -435,8 +421,8 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
                 setViewport('tablet')
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                viewport === 'tablet' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
+              className={`p-1 rounded-control transition-colors cursor-pointer ${
+                viewport === 'tablet' ? 'bg-white/10 text-zinc-300' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Vista Tablet (768px)"
             >
@@ -449,8 +435,8 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
                 setViewport('mobile')
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                viewport === 'mobile' ? 'bg-cyan-500/20 text-cyan-400' : 'text-zinc-500 hover:text-zinc-300'
+              className={`p-1 rounded-control transition-colors cursor-pointer ${
+                viewport === 'mobile' ? 'bg-white/10 text-zinc-300' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title="Vista Móvil (375px)"
             >
@@ -465,7 +451,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
               handleOpenDevTools()
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Abrir DevTools del Navegador"
           >
             <Code size={11} className="pointer-events-none" />
@@ -477,7 +463,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
               handleOpenExternal()
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Abrir en navegador externo del sistema"
           >
             <ExternalLink size={12} className="pointer-events-none" />
@@ -486,26 +472,10 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setIsExpanded((prev) => !prev)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title={isExpanded ? 'Restaurar tamaño' : 'Maximizar tarjeta'}
-          >
-            {isExpanded ? (
-              <Minimize2 size={12} className="pointer-events-none" />
-            ) : (
-              <Maximize2 size={12} className="pointer-events-none" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
               onDelete(card.id)
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
+            className="p-1.5 rounded-control text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar nodo de navegador"
           >
             <Trash2 size={13} className="pointer-events-none" />
@@ -515,7 +485,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
       {/* Integrated Window / Tabs Bar */}
       <div
-        className="h-7 px-1.5 bg-[#0a0c10] border-b border-zinc-800/80 flex items-center space-x-1 shrink-0 overflow-x-auto no-scrollbar"
+        className="h-7 px-1.5 bg-void border-b border-zinc-800/80 flex items-center space-x-1 shrink-0 overflow-x-auto no-scrollbar"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {tabs.map((tab) => {
@@ -524,14 +494,14 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             <div
               key={tab.id}
               onClick={() => handleSelectTab(tab.id)}
-              className={`group flex items-center space-x-1.5 px-2 py-0.5 rounded text-[11px] font-mono transition-all cursor-pointer max-w-[170px] truncate select-none ${
+              className={`group flex items-center space-x-1.5 px-2 py-0.5 rounded-control text-[11px] transition-all cursor-pointer max-w-[170px] truncate select-none ${
                 isActive
-                  ? 'bg-zinc-800 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                  ? 'bg-zinc-800 text-zinc-300 border border-white/15 '
                   : 'bg-zinc-900/70 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 border border-zinc-800/60'
               }`}
               title={tab.url}
             >
-              <Globe size={10} className={isActive ? 'text-cyan-400 shrink-0' : 'text-zinc-500 shrink-0'} />
+              <Globe size={10} className={isActive ? 'text-zinc-300 shrink-0' : 'text-zinc-500 shrink-0'} />
               <span className="truncate">{tab.title || 'Pestaña'}</span>
               <button
                 type="button"
@@ -539,7 +509,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
                   e.stopPropagation()
                   handleCloseTab(tab.id)
                 }}
-                className="opacity-40 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded text-zinc-400 transition-opacity"
+                className="opacity-40 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded-control text-zinc-400 transition-opacity"
                 title="Cerrar pestaña"
               >
                 <X size={10} />
@@ -551,7 +521,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
         <button
           type="button"
           onClick={() => handleNewTab('https://www.google.com')}
-          className="p-1 rounded text-zinc-500 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+          className="p-1 rounded-control text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
           title="Abrir nueva ventana / pestaña"
         >
           <Plus size={12} />
@@ -560,7 +530,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
       {/* Navigation Toolbar */}
       <div
-        className="h-8 px-2 bg-[#090b0e] border-b border-zinc-800/80 flex items-center space-x-1 shrink-0"
+        className="h-8 px-2 bg-void border-b border-zinc-800/80 flex items-center space-x-1 shrink-0"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* History Nav */}
@@ -568,7 +538,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           type="button"
           onClick={handleGoBack}
           disabled={!canGoBack}
-          className={`p-1 rounded transition-colors cursor-pointer ${
+          className={`p-1 rounded-control transition-colors cursor-pointer ${
             canGoBack ? 'text-zinc-300 hover:bg-zinc-800' : 'text-zinc-600 cursor-not-allowed'
           }`}
           title="Atrás"
@@ -579,7 +549,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           type="button"
           onClick={handleGoForward}
           disabled={!canGoForward}
-          className={`p-1 rounded transition-colors cursor-pointer ${
+          className={`p-1 rounded-control transition-colors cursor-pointer ${
             canGoForward ? 'text-zinc-300 hover:bg-zinc-800' : 'text-zinc-600 cursor-not-allowed'
           }`}
           title="Adelante"
@@ -589,15 +559,15 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
         <button
           type="button"
           onClick={handleReload}
-          className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
           title="Recargar página"
         >
-          <RotateCw size={12} className={isLoading ? 'animate-spin text-cyan-400' : ''} />
+          <RotateCw size={12} className={isLoading ? 'animate-spin text-zinc-300' : ''} />
         </button>
         <button
           type="button"
           onClick={() => navigateTo('https://www.google.com')}
-          className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
           title="Ir a inicio (Google)"
         >
           <Home size={12} />
@@ -612,7 +582,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             onChange={(e) => setInputUrl(e.target.value)}
             onFocus={(e) => e.target.select()}
             placeholder="Introduce URL o busca en Google..."
-            className="w-full bg-[#12151c] text-zinc-200 text-xs font-mono pl-7 pr-2 py-1 rounded border border-zinc-800 focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/40 focus:outline-none transition-all truncate"
+            className="w-full bg-white/[0.04] text-zinc-200 text-xs font-mono pl-7 pr-2 py-1 rounded-control border border-zinc-800 focus:border-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none transition-all truncate"
           />
         </form>
 
@@ -623,7 +593,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
               key={port}
               type="button"
               onClick={() => handleQuickBookmark(`http://localhost:${port}`)}
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-cyan-300 border border-zinc-800 transition-colors cursor-pointer"
+              className="text-[10px] px-1.5 py-0.5 rounded-control bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
             >
               :{port}
             </button>
@@ -634,7 +604,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
       {/* Web Content Container */}
       <div
         style={{ overscrollBehavior: 'contain' }}
-        className="flex-1 w-full h-full relative min-h-0 bg-[#060709] overflow-hidden flex justify-center"
+        className="flex-1 w-full h-full relative min-h-0 bg-void overflow-hidden flex justify-center"
       >
         <div
           style={{
@@ -643,7 +613,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             pointerEvents: isFocused ? 'auto' : 'none'
           }}
           className={`h-full transition-all duration-200 relative ${
-            viewport !== 'full' ? 'border-x border-zinc-800/60 shadow-2xl' : ''
+            viewport !== 'full' ? 'border-x border-zinc-800/60 ' : ''
           }`}
         >
           {useIframeFallback ? (
@@ -669,25 +639,23 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
 
           {/* Loading bar */}
           {isLoading && (
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500/30 overflow-hidden z-20">
-              <div className="h-full bg-cyan-400 animate-pulse w-full" />
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10 overflow-hidden z-20">
+              <div className="h-full bg-zinc-100 animate-pulse w-full" />
             </div>
           )}
         </div>
       </div>
 
       {/* Resize Handle (Bottom Right) */}
-      {!isExpanded && (
-        <div
-          onMouseDown={(e) => onResizeStart(e, card.id)}
-          className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-cyan-400"
-          title="Redimensionar nodo"
-        >
-          <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-            <polygon points="6 0, 6 6, 0 6" />
-          </svg>
-        </div>
-      )}
+      <div
+        onMouseDown={(e) => onResizeStart(e, card.id)}
+        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
+        title="Redimensionar nodo"
+      >
+        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
+          <polygon points="6 0, 6 6, 0 6" />
+        </svg>
+      </div>
     </div>
   )
 }

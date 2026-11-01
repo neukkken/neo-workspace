@@ -7,6 +7,7 @@ import { cleanUrl, openExternalUrl } from '../utils/url'
 
 export interface TerminalSpawnConfig {
   cwd: string
+  shell?: string
   command?: string
   commands?: string[]
   autoStart?: boolean
@@ -33,7 +34,34 @@ export interface ManagedTerminal {
   onUrlDetected: (cb: (url: string) => void) => () => void
 }
 
+// Time for a TUI to finish taking a paste; any sooner and Enter lands inside it
+const SUBMIT_DELAY_MS = 200
+
 export const TERMINAL_THEMES: Record<TerminalThemeName, ITheme> = {
+  // Transparent so the card's frosted surface shows through (allowTransparency is on)
+  midnight: {
+    background: '#00000000',
+    foreground: '#f3efe7',
+    cursor: '#e3a13b',
+    cursorAccent: '#171614',
+    selectionBackground: 'rgba(227, 161, 59, 0.26)',
+    black: '#3a3733',
+    red: '#e8836f',
+    green: '#a9c08a',
+    yellow: '#e3a13b',
+    blue: '#8fb0c4',
+    magenta: '#c9a0b4',
+    cyan: '#94bfae',
+    white: '#e9e4da',
+    brightBlack: '#979186',
+    brightRed: '#f2a594',
+    brightGreen: '#c4d6a8',
+    brightYellow: '#f2c477',
+    brightBlue: '#b2cbda',
+    brightMagenta: '#dfc0cf',
+    brightCyan: '#b5d6c9',
+    brightWhite: '#fbf8f2'
+  },
   matrix: {
     background: '#090a0d',
     foreground: '#e2e8f0',
@@ -151,6 +179,8 @@ export const TERMINAL_THEMES: Record<TerminalThemeName, ITheme> = {
   }
 }
 
+const HOUSE_THEME = TERMINAL_THEMES.midnight
+
 export function isAgyTerminal(_panelId: string, term: Terminal): boolean {
   try {
     const buffer = term.buffer.active
@@ -174,15 +204,21 @@ export function isAgyTerminal(_panelId: string, term: Terminal): boolean {
 
 class TerminalPool {
   private terminals = new Map<string, ManagedTerminal>()
-  private currentTheme: TerminalThemeName = 'matrix'
+  private currentTheme: TerminalThemeName = 'midnight'
   private currentFontSize = 13
 
   public setTheme(themeName: TerminalThemeName): void {
     this.currentTheme = themeName
-    const theme = TERMINAL_THEMES[themeName] || TERMINAL_THEMES.matrix
+    const theme = TERMINAL_THEMES[themeName] || TERMINAL_THEMES.midnight
     for (const managed of this.terminals.values()) {
       managed.term.options.theme = theme
     }
+  }
+
+  // The default theme takes its colours from the wallpaper; without one it keeps the house colours
+  public setWallpaperColors(colors: ITheme | null): void {
+    TERMINAL_THEMES.midnight = { ...HOUSE_THEME, ...colors }
+    if (this.currentTheme === 'midnight') this.setTheme('midnight')
   }
 
   public setFontSize(fontSize: number): void {
@@ -231,7 +267,7 @@ class TerminalPool {
       if (container.scrollLeft !== 0) container.scrollLeft = 0
     }, { passive: true })
 
-    const theme = TERMINAL_THEMES[this.currentTheme] || TERMINAL_THEMES.matrix
+    const theme = TERMINAL_THEMES[this.currentTheme] || TERMINAL_THEMES.midnight
 
     const term = new Terminal({
       cursorBlink: true,
@@ -458,6 +494,7 @@ class TerminalPool {
       window.neoAPI.spawnTerminal({
         panelId,
         cwd: config.cwd,
+        shell: config.shell,
         command: config.autoStart ? (config.command || '') : '',
         commands: config.autoStart ? config.commands : undefined,
         env: config.env,
@@ -597,6 +634,34 @@ class TerminalPool {
 
     this.terminals.set(panelId, managed)
     return managed
+  }
+
+  // Pasted, so apps that support it take multi-line text as one message
+  public submitText(panelId: string, text: string): boolean {
+    const managed = this.terminals.get(panelId)
+    if (!managed) return false
+    managed.term.paste(text)
+    setTimeout(() => window.neoAPI.writeTerminal(panelId, '\r'), SUBMIT_DELAY_MS)
+    return true
+  }
+
+  // Without bracketed paste, each line of a pasted text runs on its own
+  public pastesAsOneBlock(panelId: string): boolean {
+    return this.terminals.get(panelId)?.term.modes.bracketedPasteMode ?? false
+  }
+
+  // What the user selected in the terminal, or else its latest output
+  public readOutput(panelId: string, maxLines: number): string {
+    const managed = this.terminals.get(panelId)
+    if (!managed) return ''
+    const selection = managed.term.getSelection().trimEnd()
+    if (selection) return selection
+    return managed
+      .getBufferText()
+      .split('\n')
+      .filter((line) => line.trim())
+      .slice(-maxLines)
+      .join('\n')
   }
 
   public exportLog(panelId: string): string {

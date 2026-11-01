@@ -5,8 +5,6 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  Maximize2,
-  Minimize2,
   CheckCircle2,
   XCircle,
   ExternalLink
@@ -43,7 +41,6 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
   const [statuses, setStatuses] = useState<Record<number, boolean>>({})
   const [newPortInput, setNewPortInput] = useState('')
   const [checking, setChecking] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
 
   const checkAllPorts = async (): Promise<void> => {
     setChecking(true)
@@ -85,25 +82,14 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
     onUpdate({ monitoredPorts: nextPorts })
   }
 
-  const cardStyle: React.CSSProperties = isExpanded
-    ? {
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
-        bottom: 10,
-        width: 'calc(100% - 20px)',
-        height: 'calc(100% - 20px)',
-        zIndex: 999
-      }
-    : {
-        position: 'absolute',
-        left: `${card.x}px`,
-        top: `${card.y}px`,
-        width: `${card.width}px`,
-        height: `${card.height}px`,
-        zIndex: isFocused ? 50 : card.zIndex || 10
-      }
+  const cardStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `${card.x}px`,
+    top: `${card.y}px`,
+    width: `${card.width}px`,
+    height: `${card.height}px`,
+    zIndex: isFocused ? 50 : card.zIndex || 10
+  }
 
   return (
     <div
@@ -115,23 +101,23 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           e.preventDefault()
         }
       }}
-      className={`canvas-card pointer-events-auto flex flex-col bg-[#0c0e12] rounded-lg border shadow-2xl overflow-hidden select-none transition-shadow ${
+      className={`canvas-card pointer-events-auto flex flex-col island overflow-hidden select-none transition-shadow ${
         isFocused
-          ? 'border-emerald-500/80 shadow-[0_0_20px_rgba(16,185,129,0.2)] ring-1 ring-emerald-500/40'
+          ? 'border-white/40 shadow-[0_0_32px_-6px_rgb(var(--signal-rgb)/0.55)]'
           : 'border-zinc-800/90 hover:border-zinc-700/80'
       }`}
     >
       {/* Header */}
       <div
         onMouseDown={(e) => onDragStart(e, card.id)}
-        className="h-9 px-2.5 bg-[#12151b] border-b border-zinc-800 flex items-center justify-between cursor-move shrink-0"
+        className="h-9 px-2.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between cursor-move shrink-0"
       >
         <div className="flex items-center space-x-2 truncate">
-          <Activity size={14} className="text-emerald-400 shrink-0" />
-          <span className="font-mono text-[11px] font-semibold tracking-wide text-zinc-100 uppercase truncate">
+          <Activity size={14} className="text-zinc-100 shrink-0" />
+          <span className="text-[11px] stamp text-zinc-100 truncate">
             {card.title || 'PORT MONITOR'}
           </span>
-          <span className="text-[10px] text-zinc-500 font-mono">({ports.length} puertos)</span>
+          <span className="text-[10px] text-zinc-500">({ports.length} puertos)</span>
         </div>
 
         <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -142,7 +128,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
               checkAllPorts()
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Escanear puertos ahora"
           >
             <RefreshCw size={12} className={`pointer-events-none ${checking ? 'animate-spin' : ''}`} />
@@ -151,22 +137,10 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setIsExpanded((prev) => !prev)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title={isExpanded ? 'Restaurar' : 'Maximizar'}
-          >
-            {isExpanded ? <Minimize2 size={12} className="pointer-events-none" /> : <Maximize2 size={12} className="pointer-events-none" />}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
               onDelete(card.id)
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
+            className="p-1.5 rounded-control text-zinc-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
             title="Eliminar tarjeta"
           >
             <Trash2 size={13} className="pointer-events-none" />
@@ -177,7 +151,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
       {/* Add Port Form */}
       <form
         onSubmit={handleAddPort}
-        className="px-2.5 py-1.5 bg-[#090b0e] border-b border-zinc-800/80 flex items-center space-x-1.5 shrink-0"
+        className="px-2.5 py-1.5 bg-void border-b border-zinc-800/80 flex items-center space-x-1.5 shrink-0"
       >
         <input
           type="number"
@@ -186,11 +160,11 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           value={newPortInput}
           onChange={(e) => setNewPortInput(e.target.value)}
           placeholder="Ej: 3000, 5000..."
-          className="flex-1 bg-[#14171e] border border-zinc-800 focus:border-emerald-500 focus:outline-none rounded px-2 py-0.5 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
+          className="flex-1 bg-white/[0.04] border border-zinc-800 focus:border-white/40 focus:outline-none rounded-control px-2 py-0.5 text-xs font-mono text-zinc-200 placeholder:text-zinc-600"
         />
         <button
           type="submit"
-          className="flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-mono transition-colors cursor-pointer"
+          className="flex items-center space-x-1 px-2.5 py-1 rounded-control bg-white/10 hover:bg-white/10 text-zinc-100 border border-white/15 text-xs transition-colors cursor-pointer"
         >
           <Plus size={11} />
           <span>Monitorear</span>
@@ -200,7 +174,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
       {/* Ports List */}
       <div
         style={{ overscrollBehavior: 'contain' }}
-        className={`flex-1 p-2 space-y-1.5 font-mono text-xs ${
+        className={`flex-1 p-2 space-y-1.5 text-xs ${
           isFocused ? 'overflow-y-auto' : 'overflow-hidden pointer-events-none'
         }`}
       >
@@ -211,21 +185,21 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           return (
             <div
               key={port}
-              className="flex items-center justify-between p-2 rounded bg-[#0e1117] border border-zinc-800/80 hover:border-zinc-700/80 transition-colors"
+              className="flex items-center justify-between p-2 rounded-control bg-white/[0.04] border border-zinc-800/80 hover:border-zinc-700/80 transition-colors"
             >
               <div className="flex items-center space-x-2.5">
                 <span
                   className={`w-2 h-2 rounded-full shrink-0 ${
                     isOpen
-                      ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse'
+                      ? 'bg-signal shadow-[0_0_8px_rgb(var(--signal-rgb)/0.8)] animate-pulse'
                       : 'bg-zinc-700'
                   }`}
                 />
-                <span className="font-semibold text-zinc-200 text-xs">:{port}</span>
+                <span className="font-medium text-zinc-200 text-xs">:{port}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                  className={`text-[10px] px-1.5 py-0.2 rounded-control font-medium ${
                     isOpen
-                      ? 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/20'
+                      ? 'text-zinc-100 bg-white/5 border border-white/15'
                       : 'text-zinc-500 bg-zinc-900 border border-zinc-800'
                   }`}
                 >
@@ -244,7 +218,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
                         openExternalUrl(target)
                       }
                     }}
-                    className="flex items-center space-x-1 px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] transition-colors cursor-pointer"
+                    className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/15 text-[10px] transition-colors cursor-pointer"
                     title={`Abrir ${cleanUrl(url)}`}
                   >
                     <Globe size={10} />
@@ -253,7 +227,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
                 )}
                 <button
                   onClick={() => handleRemovePort(port)}
-                  className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="p-1 rounded-control text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                   title="Dejar de monitorear"
                 >
                   <Trash2 size={11} />
@@ -265,16 +239,14 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
       </div>
 
       {/* Resize Handle */}
-      {!isExpanded && (
-        <div
-          onMouseDown={(e) => onResizeStart(e, card.id)}
-          className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-emerald-400"
-        >
-          <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-            <polygon points="6 0, 6 6, 0 6" />
-          </svg>
-        </div>
-      )}
+      <div
+        onMouseDown={(e) => onResizeStart(e, card.id)}
+        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
+      >
+        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
+          <polygon points="6 0, 6 6, 0 6" />
+        </svg>
+      </div>
     </div>
   )
 }

@@ -30,6 +30,7 @@ export interface XTermViewHandle {
 interface XTermViewProps {
   panelId: string
   cwd: string
+  shell?: string
   command: string
   commands?: string[]
   env?: Record<string, string>
@@ -45,7 +46,7 @@ interface ContextMenuState {
 }
 
 export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
-  ({ panelId, cwd, command, commands, env, autoStart, isActive = true }, ref) => {
+  ({ panelId, cwd, shell, command, commands, env, autoStart, isActive = true }, ref) => {
     const slotRef = useRef<HTMLDivElement>(null)
     const managedRef = useRef<ManagedTerminal | null>(null)
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -274,6 +275,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
 
       const managed = terminalPool.getOrCreateTerminal(panelId, {
         cwd,
+        shell,
         command,
         commands,
         env,
@@ -388,11 +390,11 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
         onContextMenu={handleContextMenu}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className="terminal-slot-container w-full h-full overflow-hidden bg-[#090a0d] relative select-text cursor-text"
+        className="terminal-slot-container w-full h-full overflow-hidden bg-void relative select-text cursor-text"
       >
         {/* Floating image/file paste toast */}
         {pasteToast && (
-          <div className="absolute bottom-3 left-4 z-40 flex items-center space-x-1.5 bg-emerald-950/95 border border-emerald-500/70 text-emerald-300 text-xs px-2.5 py-1 rounded shadow-2xl font-mono animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none">
+          <div className="absolute bottom-3 left-4 z-40 flex items-center space-x-1.5 bg-white/5 border border-white/15 text-zinc-100 text-xs px-2.5 py-1 rounded-control font-mono animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none">
             <span>{pasteToast}</span>
           </div>
         )}
@@ -400,7 +402,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
         {isSearching && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute top-2 right-4 z-30 flex items-center space-x-1.5 bg-[#14171d]/95 backdrop-blur-md border border-zinc-700/90 px-2 py-1 rounded shadow-2xl animate-in fade-in zoom-in-95 duration-100 text-xs font-mono"
+            className="absolute top-2 right-4 z-30 flex items-center space-x-1.5 bg-void/95 backdrop-blur-md border border-zinc-700/90 px-2 py-1 rounded-control animate-in fade-in zoom-in-95 duration-100 text-xs font-mono"
           >
             <Search size={12} className="text-zinc-400 shrink-0" />
             <input
@@ -425,10 +427,10 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
 
             {searchQuery && (
               <span
-                className={`text-[10px] px-1 rounded ${
+                className={`text-[10px] px-1 rounded-control ${
                   matchStatus === false
                     ? 'text-rose-400 bg-rose-500/10'
-                    : 'text-emerald-400 bg-emerald-500/10'
+                    : 'text-zinc-100 bg-white/5'
                 }`}
               >
                 {matchStatus === false ? '0' : '✓'}
@@ -438,21 +440,21 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
             <button
               onClick={handleSearchPrev}
               title="Anterior (Shift+Enter)"
-              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
+              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-control transition-colors"
             >
               <ChevronUp size={13} />
             </button>
             <button
               onClick={handleSearchNext}
               title="Siguiente (Enter)"
-              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
+              className="p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-control transition-colors"
             >
               <ChevronDown size={13} />
             </button>
             <button
               onClick={handleCloseSearch}
               title="Cerrar (Esc)"
-              className="p-0.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded transition-colors"
+              className="p-0.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-control transition-colors"
             >
               <X size={13} />
             </button>
@@ -474,7 +476,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                 left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 216))}px`,
                 zIndex: 99999
               }}
-              className="w-52 bg-[#121418] border border-zinc-700/80 rounded-md shadow-2xl py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
+              className="w-52 bg-void border border-zinc-700/80 rounded-button py-1 text-xs font-mono text-zinc-300 animate-in fade-in zoom-in-95 duration-100 select-none"
             >
               {contextMenu.selectedUrl && (
                 <>
@@ -485,10 +487,10 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                       }
                       closeContextMenu()
                     }}
-                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-cyan-500/15 text-cyan-300 hover:text-cyan-200 cursor-pointer transition-colors"
+                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-white/10 text-zinc-300 hover:text-zinc-100 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      <ExternalLink size={13} className="text-cyan-400 shrink-0" />
+                      <ExternalLink size={13} className="text-zinc-300 shrink-0" />
                       <span className="truncate">Abrir enlace</span>
                     </div>
                   </button>
@@ -506,7 +508,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                 }`}
               >
                 <div className="flex items-center space-x-2">
-                  <Copy size={13} className={contextMenu.hasSelection ? 'text-emerald-400' : 'text-zinc-600'} />
+                  <Copy size={13} className={contextMenu.hasSelection ? 'text-zinc-100' : 'text-zinc-600'} />
                   <span>Copiar</span>
                 </div>
                 <span className="text-[10px] text-zinc-500">Ctrl+Shift+C</span>

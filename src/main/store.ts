@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
@@ -11,7 +11,7 @@ export interface PanelConfig {
   autoStart: boolean
 }
 
-export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode'
+export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode' | 'git'
 
 export interface CanvasCard {
   id: string
@@ -26,6 +26,7 @@ export interface CanvasCard {
   command?: string
   autoStart?: boolean
   url?: string
+  notifyMuted?: boolean
 }
 
 export type WorkspaceLayoutMode = 'grid' | 'canvas'
@@ -43,6 +44,15 @@ export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 
 export interface AppSettings {
   sidebarPosition: SidebarPosition
+  /** Legacy inline image; migrated to the wallpaper folder at startup */
+  canvasBackground?: string
+  wallpaper?: string
+  wallpaperAppearance?: Record<string, { islandOpacity?: number; islandBlur?: number }>
+  islandScale?: number
+  islandOpacity?: number
+  islandBlur?: number
+  railHeight?: number
+  defaultShell?: string
 }
 
 export interface AppState {
@@ -54,7 +64,7 @@ export interface AppState {
 const defaultState: AppState = {
   activeWorkspaceId: '',
   settings: {
-    sidebarPosition: 'left'
+    sidebarPosition: 'right'
   },
   workspaces: []
 }
@@ -84,7 +94,10 @@ export class StoreManager {
 
   public saveState(state: AppState): boolean {
     try {
-      writeFileSync(this.configPath, JSON.stringify(state, null, 2), 'utf-8')
+      // Write then swap, so a crash mid-save can't leave a truncated config
+      const tmp = `${this.configPath}.tmp`
+      writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8')
+      renameSync(tmp, this.configPath)
       return true
     } catch (err) {
       console.error('Failed to save workspaces state:', err)

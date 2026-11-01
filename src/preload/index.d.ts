@@ -15,7 +15,7 @@ export interface PanelConfig {
     autoStart: boolean;
     env?: Record<string, string>;
 }
-export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord';
+export type TerminalThemeName = 'midnight' | 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord';
 export type WorkspaceLayoutMode = 'grid' | 'canvas';
 export interface Workspace {
     id: string;
@@ -29,7 +29,13 @@ export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom';
 export interface AppSettings {
     sidebarPosition: SidebarPosition;
     terminalTheme?: TerminalThemeName;
-    terminalFontSize?: number;
+    terminalFontSize?: number
+    wallpaper?: string
+    wallpaperAppearance?: Record<string, { islandOpacity?: number; islandBlur?: number }>
+    islandScale?: number
+    islandOpacity?: number
+    islandBlur?: number
+    railHeight?: number;
     defaultShell?: string;
 }
 export interface AppState {
@@ -109,6 +115,10 @@ export declare const neoAPI: {
     vscodeStartServer: (folderPath?: string) => Promise<{ success: boolean; url?: string; port?: number; error?: string }>;
     vscodeStopServer: (port?: number) => Promise<boolean>;
     vscodeOpenDesktop: (folderPath?: string) => Promise<boolean>;
+    wallpapersList: () => Promise<string[]>;
+    wallpapersImport: () => Promise<{ imported: string[]; rejected: string[] }>;
+    wallpapersRemove: (id: string) => Promise<boolean>;
+    gitBranches: (folders: string[]) => Promise<{ name: string; branch: string }[]>;
     adblockGetStatus: () => Promise<boolean>;
     adblockToggle: (enabled?: boolean) => Promise<boolean>;
     openExternal: (url: string) => Promise<boolean>;

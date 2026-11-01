@@ -8,7 +8,13 @@ export interface PanelConfig {
   env?: Record<string, string>
 }
 
-export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode'
+export type NodeKind = 'terminal' | 'browser' | 'note' | 'explorer' | 'port-monitor' | 'vscode' | 'git'
+
+export interface WorkspaceTime {
+  elapsedMs: number
+  totalMs: number
+  weekMs: number
+}
 
 export type NoteColor = 'emerald' | 'amber' | 'cyan' | 'purple' | 'zinc'
 
@@ -23,10 +29,12 @@ export interface CanvasCard {
   zIndex?: number
   // For terminal kind:
   cwd?: string
+  shell?: string
   command?: string
   commands?: string[]
   autoStart?: boolean
   env?: Record<string, string>
+  notifyMuted?: boolean
   // For browser kind:
   url?: string
   // For note kind:
@@ -86,12 +94,18 @@ export interface Workspace {
 
 export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
 
-export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
+export type TerminalThemeName = 'midnight' | 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
 
 export interface AppSettings {
   sidebarPosition: SidebarPosition
   terminalTheme?: TerminalThemeName
   terminalFontSize?: number
+  wallpaper?: string
+  wallpaperAppearance?: Record<string, { islandOpacity?: number; islandBlur?: number }>
+  islandScale?: number
+  islandOpacity?: number
+  islandBlur?: number
+  railHeight?: number
   defaultShell?: string
 }
 
@@ -99,6 +113,35 @@ export interface AppState {
   activeWorkspaceId: string
   workspaces: Workspace[]
   settings?: AppSettings
+}
+
+export interface SessionFile {
+  path: string
+  status: string
+  added: number | null
+  removed: number | null
+}
+
+export interface SessionChanges {
+  repo: string
+  name: string
+  branch: string
+  hasBaseline: boolean
+  commits: { hash: string; subject: string }[]
+  files: SessionFile[]
+  truncated: boolean
+}
+
+export interface AgentStatus {
+  panelId: string
+  state: 'working' | 'done' | 'exited' | 'stopped'
+  startedAt: number | null
+  exitCode?: number
+  workspaceId: string
+  workspaceName: string
+  title: string
+  at: number
+  notify: boolean
 }
 
 export interface ProcessMetrics {

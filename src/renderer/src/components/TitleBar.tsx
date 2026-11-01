@@ -1,24 +1,44 @@
 import React, { useEffect, useState } from 'react'
-import { Terminal, Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search } from 'lucide-react'
+import { Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Save, Check, GitBranch } from 'lucide-react'
 import { SystemMetrics } from '../types'
+import { Tooltip } from './Tooltip'
+import logo from '../assets/logo.svg'
 
 interface TitleBarProps {
   systemMetrics?: SystemMetrics
-  activeWorkspaceName?: string
-  onOpenSettings?: () => void
-  onOpenShortcuts?: () => void
-  onOpenCommandPalette?: () => void
+  workspaceActions?: React.ReactNode
+  workspaceFolders: string[]
+  updateAvailable?: boolean
+  onSave: () => Promise<void>
+  onOpenSettings: () => void
+  onOpenShortcuts: () => void
+  onOpenCommandPalette: () => void
 }
+
+interface RepoBranch {
+  name: string
+  branch: string
+}
+
+const BRANCH_REFRESH_MS = 15000
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   systemMetrics,
-  activeWorkspaceName,
+  workspaceActions,
+  workspaceFolders,
+  updateAvailable,
+  onSave,
   onOpenSettings,
   onOpenShortcuts,
   onOpenCommandPalette
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
   const [appVersion, setAppVersion] = useState('1.6.2')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [branches, setBranches] = useState<RepoBranch[]>([])
+
+  const foldersKey = workspaceFolders.join('|')
 
   useEffect(() => {
     window.neoAPI.isWindowMaximized().then(setIsMaximized)
@@ -29,8 +49,29 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     }
   }, [])
 
-  const handleMinimize = (): void => {
-    window.neoAPI.minimizeWindow()
+  // Branches of the active workspace's projects, refreshed so switched branches show up
+  useEffect(() => {
+    let cancelled = false
+    const load = (): void => {
+      window.neoAPI
+        .gitBranches(foldersKey ? foldersKey.split('|') : [])
+        .then((list) => !cancelled && setBranches(list))
+        .catch(() => !cancelled && setBranches([]))
+    }
+    load()
+    const timer = setInterval(load, BRANCH_REFRESH_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [foldersKey])
+
+  const handleSave = async (): Promise<void> => {
+    setSaving(true)
+    await onSave()
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   const handleMaximize = async (): Promise<void> => {
@@ -39,112 +80,119 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     setIsMaximized(max)
   }
 
-  const handleClose = (): void => {
-    window.neoAPI.closeWindow()
-  }
-
   return (
-    <header className="h-10 bg-[#0d0f12] border-b border-zinc-800/80 flex items-center justify-between px-3 text-xs text-zinc-300 drag-region select-none">
-      {/* Left: App Title & Branding */}
-      <div className="flex items-center space-x-2.5 no-drag">
-        <div className="flex items-center justify-center w-5 h-5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-          <Terminal size={12} strokeWidth={2.5} />
-        </div>
-        <div className="flex items-center space-x-1.5 font-mono text-[11px] tracking-wide">
-          <span className="font-semibold text-zinc-100">NEO-WORKSPACE</span>
-          <span className="text-zinc-500">::</span>
-          <span className="text-emerald-400">CORE_ORCHESTRATOR</span>
-          <span className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded font-mono ml-1">
-            v{appVersion}
-          </span>
+    <div
+      style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
+      className="shrink-0 z-10 pointer-events-none flex items-center justify-between gap-1.5 select-none"
+    >
+      {/* Left island: logo, name, version and the active projects' branches */}
+      <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-2.5 pl-2.5 pr-3 text-xs text-zinc-300 drag-region min-w-0">
+        <img src={logo} alt="" className="w-5 h-5 shrink-0" draggable={false} />
+        <span className="text-[11px] stamp text-zinc-100 shrink-0">NWS</span>
+        <span className="text-[10px] text-zinc-400 shrink-0">
+          v{appVersion}
+        </span>
+
+        {branches.length > 0 && <span className="w-px h-4 bg-zinc-800 shrink-0" />}
+
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          {branches.map((repo) => (
+            <span
+              key={repo.name}
+              title={`${repo.name} · ${repo.branch}`}
+              className="flex items-center space-x-1 text-[10px] shrink-0 max-w-[180px]"
+            >
+              <GitBranch size={10} className="text-zinc-400 shrink-0" />
+              <span className="text-zinc-400 truncate">{repo.name}</span>
+              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-100 truncate">{repo.branch}</span>
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Center: Active Workspace Indicator & Command Palette */}
-      <div className="flex items-center space-x-3 no-drag">
-        {activeWorkspaceName && (
-          <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800/70 text-zinc-400 font-mono text-[11px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>WORKSPACE:</span>
-            <span className="text-zinc-100 font-medium">{activeWorkspaceName}</span>
-          </div>
+      {/* Right island: icon-only actions with tooltips */}
+      <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-1 px-2.5 text-xs text-zinc-300 no-drag">
+        {workspaceActions}
+
+        {systemMetrics && (
+          <Tooltip label={`CPU ${systemMetrics.cpuPercent}% · RAM ${systemMetrics.usedMemMb}MB`}>
+            <span className="p-1.5 rounded-control text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/70 transition-colors">
+              <Activity size={13} />
+            </span>
+          </Tooltip>
         )}
 
-        {onOpenCommandPalette && (
+        <Tooltip label="Comandos (Ctrl+K)">
           <button
             onClick={onOpenCommandPalette}
-            className="hidden sm:flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 text-[11px] font-mono transition-colors cursor-pointer"
-            title="Abrir paleta de comandos (Ctrl+K / Ctrl+P)"
+            className="p-1.5 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
           >
-            <Search size={11} className="text-emerald-400" />
-            <span className="text-zinc-400">Comandos...</span>
-            <kbd className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-400 border border-zinc-700 ml-1">
-              Ctrl+K
-            </kbd>
+            <Search size={13} />
           </button>
-        )}
-      </div>
+        </Tooltip>
 
-      {/* Right: Telemetry & Window Controls */}
-      <div className="flex items-center space-x-3 no-drag">
-        {systemMetrics && (
-          <div className="hidden sm:flex items-center space-x-2 font-mono text-[11px] text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-2 py-0.5 rounded">
-            <Activity size={12} className="text-emerald-400" />
-            <span>
-              CPU <strong className="text-zinc-200">{systemMetrics.cpuPercent}%</strong>
-            </span>
-            <span className="text-zinc-600">|</span>
-            <span>
-              RAM <strong className="text-zinc-200">{systemMetrics.usedMemMb}MB</strong>
-            </span>
-          </div>
-        )}
+        <Tooltip label={saved ? 'Guardado' : 'Guardar configuración'}>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`p-1.5 rounded-control transition-colors ${
+              saved ? 'text-zinc-100' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
+            }`}
+          >
+            {saved ? <Check size={13} /> : <Save size={13} />}
+          </button>
+        </Tooltip>
 
-
-        {onOpenShortcuts && (
+        <Tooltip label="Atajos de teclado (?)">
           <button
             onClick={onOpenShortcuts}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
-            title="Atajos de Teclado (?)"
+            className="p-1.5 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
           >
             <HelpCircle size={13} />
           </button>
-        )}
+        </Tooltip>
 
-        {onOpenSettings && (
+        <Tooltip label={updateAvailable ? 'Nueva versión disponible · Ajustes' : 'Ajustes'}>
           <button
             onClick={onOpenSettings}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
-            title="Settings"
+            className={`p-1.5 rounded-control transition-colors ${
+              updateAvailable
+                ? 'text-zinc-100 bg-white/5 hover:bg-white/10'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
+            }`}
           >
             <SlidersHorizontal size={13} />
           </button>
-        )}
+        </Tooltip>
 
-        <div className="flex items-center space-x-1 ml-1 border-l border-zinc-800 pl-2">
-          <button
-            onClick={handleMinimize}
-            className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
-            title="Minimize"
-          >
-            <Minus size={13} />
-          </button>
-          <button
-            onClick={handleMaximize}
-            className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
-            title={isMaximized ? 'Restore' : 'Maximize'}
-          >
-            <Square size={11} />
-          </button>
-          <button
-            onClick={handleClose}
-            className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-red-300 hover:bg-red-500/20 transition-colors"
-            title="Close"
-          >
-            <X size={13} />
-          </button>
+        <div className="flex items-center space-x-0.5 border-l border-zinc-800 pl-1.5 ml-0.5">
+          <Tooltip label="Minimizar">
+            <button
+              onClick={() => window.neoAPI.minimizeWindow()}
+              className="w-6 h-6 flex items-center justify-center rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
+            >
+              <Minus size={13} />
+            </button>
+          </Tooltip>
+          <Tooltip label={isMaximized ? 'Restaurar' : 'Maximizar'}>
+            <button
+              onClick={handleMaximize}
+              className="w-6 h-6 flex items-center justify-center rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
+            >
+              <Square size={11} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Cerrar">
+            <button
+              onClick={() => window.neoAPI.closeWindow()}
+              className="w-6 h-6 flex items-center justify-center rounded-control text-zinc-400 hover:text-red-300 hover:bg-red-500/20 transition-colors"
+            >
+              <X size={13} />
+            </button>
+          </Tooltip>
         </div>
       </div>
-    </header>
+    </div>
   )
 }

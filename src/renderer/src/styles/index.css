@@ -3,16 +3,50 @@
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 @import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/inter/300.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/lora/400-italic.css";
 
+/* Palette lives here: --signal-rgb, --island-rgb and --color-void set the whole look.
+   Warm charcoal, bone text, one ochre signal. zinc is redefined so every utility
+   lands on the scale; 900-700 are translucent so hairlines read on glass and on the base. */
 :root {
+  color-scheme: dark;
+  --signal-rgb: 227 161 59;
+  --island-rgb: 46 44 40;
+}
+
+@theme {
+  --color-void: #171614;
+  --color-signal: rgb(var(--signal-rgb));
+  --color-signal-soft: #f2d6a2;
+
+  --color-zinc-50: #f3efe7;
+  --color-zinc-100: #f3efe7;
+  --color-zinc-200: #e9e4da;
+  --color-zinc-300: #cfc9be;
+  --color-zinc-400: #aca69b;
+  --color-zinc-500: #a09a8f;
+  --color-zinc-600: #979186;
+  --color-zinc-700: rgb(243 239 231 / 0.22);
+  --color-zinc-800: rgb(243 239 231 / 0.12);
+  --color-zinc-900: rgb(243 239 231 / 0.06);
+  --color-zinc-950: #171614;
+
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Liberation Mono', 'Noto Sans Mono', 'DejaVu Sans Mono', monospace;
+  --font-display: 'Lora', Georgia, serif;
+
+  --radius-control: 6px;
+  --radius-button: 8px;
+  --radius-card: 19.2px;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #090a0d;
-  color: #e2e8f0;
+  background-color: var(--color-void);
+  color: var(--color-zinc-100);
 }
 
 /* Fix xterm character glyph rendering & prevent letter overlapping / kerning shifts */
@@ -42,12 +76,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgb(243 239 231 / 0.14);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgb(243 239 231 / 0.28);
 }
 
 /* Ensure xterm viewport blends seamlessly with theme */
@@ -58,6 +92,41 @@ body {
 .terminal-slot-container {
   overflow: clip !important;
   box-sizing: border-box;
+}
+
+/* FitAddon subtracts this padding, so columns stay correct */
+.terminal-slot-container .xterm {
+  padding: 8px 10px;
+}
+
+/* Floating island surface: every bar, rail and card shares this frosted panel.
+   Elevation is a hairline, never a shadow. Opacity, blur and scale come from the
+   appearance settings. Inside @layer so Tailwind utilities can still override it. */
+@layer components {
+  .island {
+    background-color: rgb(var(--island-rgb) / var(--island-alpha, 0.7));
+    backdrop-filter: blur(var(--island-blur, 10px));
+    border: 1px solid rgb(243 239 231 / 0.14);
+    border-radius: var(--radius-card);
+  }
+
+  /* Stamped label: mechanical mono, the letterspacing is the design */
+  .stamp {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  /* Display italic: hero moments only, never below 32px */
+  .display-serif {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+
 }
 
 /* Drag region for electron frameless window */
@@ -81,7 +150,7 @@ body {
 /* Launchpad horizontal scrollbar */
 .launchpad-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #27272a transparent;
+  scrollbar-color: rgb(243 239 231 / 0.14) transparent;
 }
 
 .launchpad-scrollbar::-webkit-scrollbar {
@@ -94,10 +163,10 @@ body {
 }
 
 .launchpad-scrollbar::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgb(243 239 231 / 0.14);
   border-radius: 9999px;
 }
 
 .launchpad-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #10b981;
+  background: rgb(243 239 231 / 0.28);
 }

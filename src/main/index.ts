@@ -1,22 +1,124 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session, protocol, net as electronNet, Notification } from 'electron'
 import { join, extname, basename } from 'path'
+import { pathToFileURL } from 'url'
 import * as fs from 'fs'
 import * as net from 'net'
 import * as XLSX from 'xlsx'
-import { StoreManager, AppState } from './store'
+import { StoreManager, AppState, Workspace } from './store'
+import { AgentActivity } from './agent-activity'
 import { PtyManager, SpawnOptions } from './pty-manager'
+import { detectShells, resolveShell, ShellInfo } from './shells'
 import { TelemetryMonitor, TelemetryPayload } from './telemetry'
 import { AppUpdater } from './updater'
 import { RemoteGateway } from './remote-gateway'
 import { VSCodeManager } from './vscode-manager'
+import { findRepos, readGitBranches } from './git-branches'
+import { GitSession } from './git-session'
+import { WallpaperStore } from './wallpapers'
+import { WorkspaceClock } from './workspace-clock'
+
+// Dev runs keep their own data: sharing the file with an installed release lets
+// the older app overwrite settings it doesn't know about. Seeded once from the live file.
+if (!app.isPackaged) {
+  const liveUserData = app.getPath('userData')
+  const devUserData = `${liveUserData}-dev`
+  const liveStore = join(liveUserData, 'neo-workspaces.json')
+  const devStore = join(devUserData, 'neo-workspaces.json')
+  if (!fs.existsSync(devStore) && fs.existsSync(liveStore)) {
+    fs.mkdirSync(devUserData, { recursive: true })
+    fs.copyFileSync(liveStore, devStore)
+  }
+  app.setPath('userData', devUserData)
+}
+
+// Windows groups and shows native notifications by this id
+app.setAppUserModelId(app.isPackaged ? 'com.neowork.app' : process.execPath)
+
+// corsEnabled lets the renderer read pixels from these images to derive the palette
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'nws-wallpaper', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
+])
 
 let mainWindow: BrowserWindow | null = null
 const store = new StoreManager()
+const wallpapers = new WallpaperStore(join(app.getPath('userData'), 'wallpapers'))
 const ptyManager = new PtyManager()
 const remoteGateway = new RemoteGateway(ptyManager, store)
 const vscodeManager = new VSCodeManager()
+const gitSession = new GitSession()
+const workspaceClock = new WorkspaceClock(join(app.getPath('userData'), 'workspace-time.json'))
 let telemetryMonitor: TelemetryMonitor | null = null
 let appUpdater: AppUpdater | null = null
+
+let shells: ShellInfo[] | null = null
+const getShells = (): ShellInfo[] => (shells ??= detectShells())
+
+const findPanelOwner = (panelId: string): { workspace: Workspace; title: string; muted: boolean } | null => {
+  for (const workspace of store.getState().workspaces) {
+    const card = workspace.canvasCards?.find((c) => c.id === panelId)
+    const panel = workspace.panels.find((p) => p.id === panelId)
+    if (card || panel) {
+      return { workspace, title: card?.title || panel?.title || 'Terminal', muted: !!card?.notifyMuted }
+    }
+  }
+  return null
+}
+
+const openWorkspace = (workspaceId: string): void => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.webContents.send('agent:open', workspaceId)
+}
+
+// Held until dismissed: a collected Notification silently loses its click handler
+const liveNotifications = new Set<Notification>()
+
+const notifyNative = (title: string, body: string, workspaceId: string): void => {
+  mainWindow?.flashFrame(true)
+  if (!Notification.isSupported()) return
+  const notification = new Notification({ title, body })
+  const release = (): void => void liveNotifications.delete(notification)
+  liveNotifications.add(notification)
+  notification.on('click', () => {
+    release()
+    openWorkspace(workspaceId)
+  })
+  notification.on('close', release)
+  notification.show()
+}
+
+const agentActivity = new AgentActivity((change) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const owner = findPanelOwner(change.panelId)
+  if (!owner) return
+
+  const finished = change.state === 'done' || change.state === 'exited'
+  const focused = mainWindow.isFocused()
+  const elsewhere = owner.workspace.id !== store.getState().activeWorkspaceId
+  const notify = finished && !owner.muted && (elsewhere || !focused)
+  mainWindow.webContents.send('agent:status', {
+    ...change,
+    workspaceId: owner.workspace.id,
+    workspaceName: owner.workspace.name,
+    title: owner.title,
+    at: Date.now(),
+    notify: notify && elsewhere
+  })
+
+  if (notify && !focused) {
+    const body =
+      change.state === 'exited'
+        ? `Se cerró con código ${change.exitCode}`
+        : 'Terminó o espera tu respuesta'
+    notifyNative(`${owner.title} · ${owner.workspace.name}`, body, owner.workspace.id)
+  }
+})
+
+ptyManager.subscribeData((panelId, data) => agentActivity.onOutput(panelId, data, Date.now()))
+setInterval(() => agentActivity.tick(Date.now()), 1000)
+setInterval(() => workspaceClock.flush(Date.now()), 60000)
 
 function cleanUrl(raw: string): string {
   if (!raw) return ''
@@ -63,7 +165,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     frame: false,
-    backgroundColor: '#090a0c',
+    backgroundColor: '#171614',
     icon: join(__dirname, '../../build/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -76,6 +178,10 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  mainWindow.on('focus', () => {
+    mainWindow?.flashFrame(false)
   })
 
   mainWindow.webContents.on('console-message', (event: any, level?: any, message?: any) => {
@@ -165,7 +271,32 @@ function setupSessionInterceptors(targetSession: Electron.Session): void {
   })
 }
 
+// Older versions kept the image inline in the config; move it to a file once
+const migrateLegacyWallpaper = (): void => {
+  const state = store.getState()
+  const legacy = state.settings?.canvasBackground
+  if (!state.settings || !legacy) return
+  const id = wallpapers.importBytes(Buffer.from(legacy.slice(legacy.indexOf(',') + 1), 'base64'))
+  if (!id) return
+  const { canvasBackground: _moved, ...settings } = state.settings
+  store.saveState({ ...state, settings: { ...settings, wallpaper: `user:${id}` } })
+}
+
 app.whenReady().then(() => {
+  migrateLegacyWallpaper()
+
+  protocol.handle('nws-wallpaper', async (request) => {
+    const file = wallpapers.resolve(new URL(request.url).pathname.slice(1))
+    if (!file) return new Response(null, { status: 404 })
+    const response = await electronNet.fetch(pathToFileURL(file).toString())
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') ?? 'application/octet-stream',
+        'Access-Control-Allow-Origin': '*'
+      }
+    })
+  })
+
   // Configure session interceptors for default session, browser partition, and vscode partition
   setupSessionInterceptors(session.defaultSession)
   setupSessionInterceptors(session.fromPartition('persist:neowork-browser'))
@@ -364,16 +495,24 @@ app.whenReady().then(() => {
   })
 
   // PTY IPC
+  ipcMain.handle('pty:shells', () => getShells().map(({ id, label }) => ({ id, label })))
+
   ipcMain.handle('pty:spawn', (_event, options: SpawnOptions) => {
     if (!mainWindow) return false
+    agentActivity.forget(options.panelId)
+    // The session starts here, before the terminal can change anything
+    for (const repo of findRepos(options.cwd)) void gitSession.ensureBaseline(repo)
+    const shell = options.shell ?? store.getState().settings?.defaultShell
     return ptyManager.spawn(
-      options,
+      { ...options, shell },
+      resolveShell(getShells(), shell),
       (data: string) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(`pty:data:${options.panelId}`, data)
         }
       },
       (code: number, signal?: number) => {
+        agentActivity.onExit(options.panelId, code)
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(`pty:exit:${options.panelId}`, { code, signal })
         }
@@ -382,6 +521,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.on('pty:write', (_event, { panelId, data }: { panelId: string; data: string }) => {
+    agentActivity.onInput(panelId, data)
     ptyManager.write(panelId, data)
   })
 
@@ -390,11 +530,13 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('pty:kill', (_event, panelId: string) => {
+    agentActivity.forget(panelId)
     ptyManager.kill(panelId)
     return true
   })
 
   ipcMain.handle('pty:killAll', () => {
+    for (const panelId of ptyManager.getPids().keys()) agentActivity.forget(panelId)
     ptyManager.killAll()
     return true
   })
@@ -678,6 +820,56 @@ app.whenReady().then(() => {
     return vscodeManager.openDesktop(folderPath)
   })
 
+  ipcMain.handle('wallpapers:list', () => wallpapers.list())
+
+  ipcMain.handle('wallpapers:import', async () => {
+    if (!mainWindow) return { imported: [], rejected: [] }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Agregar fondos de pantalla',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Imágenes', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }]
+    })
+    const imported: string[] = []
+    const rejected: string[] = []
+    for (const file of result.canceled ? [] : result.filePaths) {
+      const id = wallpapers.importFile(file)
+      if (id) imported.push(id)
+      else rejected.push(basename(file))
+    }
+    return { imported, rejected }
+  })
+
+  ipcMain.handle('wallpapers:remove', (_event, id: unknown) => {
+    return typeof id === 'string' && wallpapers.remove(id)
+  })
+
+  ipcMain.handle('git:branches', async (_event, folders: unknown) => {
+    const list = Array.isArray(folders) ? folders.filter((f): f is string => typeof f === 'string') : []
+    return readGitBranches(list)
+  })
+
+  ipcMain.handle('git:repos', (_event, folders: unknown) => {
+    const list = Array.isArray(folders) ? folders.filter((f): f is string => typeof f === 'string') : []
+    const repos = [...new Set(list.flatMap(findRepos))]
+    for (const repo of repos) void gitSession.ensureBaseline(repo)
+    return repos
+  })
+
+  ipcMain.handle('git:session-changes', (_event, repo: string) => gitSession.changes(repo))
+
+  ipcMain.handle('git:session-diff', (_event, { repo, file }: { repo: string; file: string }) =>
+    gitSession.fileDiff(repo, file)
+  )
+
+  ipcMain.handle('git:session-reset', async (_event, repo: string) => (await gitSession.reset(repo)) !== null)
+
+  ipcMain.on('clock:set-running', (_event, ids: unknown) => {
+    const list = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+    workspaceClock.setRunning(list, Date.now())
+  })
+
+  ipcMain.handle('clock:read', (_event, id: string) => workspaceClock.read(id, Date.now()))
+
   // Built-in AdBlocker IPC (disabled)
   ipcMain.handle('adblock:get-status', () => {
     return false
@@ -733,6 +925,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  workspaceClock.setRunning([], Date.now())
   telemetryMonitor?.stop()
   remoteGateway.stop()
   ptyManager.killAll()

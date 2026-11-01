@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 export interface SpawnOptions {
   panelId: string
   cwd: string
+  shell?: string
   command?: string
   commands?: string[]
   env?: Record<string, string>
@@ -20,7 +21,7 @@ export interface PanelConfig {
   env?: Record<string, string>
 }
 
-export type TerminalThemeName = 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
+export type TerminalThemeName = 'midnight' | 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
 
 export type WorkspaceLayoutMode = 'grid' | 'canvas'
 
@@ -39,6 +40,12 @@ export interface AppSettings {
   sidebarPosition: SidebarPosition
   terminalTheme?: TerminalThemeName
   terminalFontSize?: number
+  wallpaper?: string
+  wallpaperAppearance?: Record<string, { islandOpacity?: number; islandBlur?: number }>
+  islandScale?: number
+  islandOpacity?: number
+  islandBlur?: number
+  railHeight?: number
   defaultShell?: string
 }
 
@@ -102,6 +109,34 @@ export interface SmartClipboardResult {
   sizeBytes?: number
 }
 
+export interface SessionChanges {
+  repo: string
+  name: string
+  branch: string
+  hasBaseline: boolean
+  commits: { hash: string; subject: string }[]
+  files: { path: string; status: string; added: number | null; removed: number | null }[]
+  truncated: boolean
+}
+
+export interface WorkspaceTime {
+  elapsedMs: number
+  totalMs: number
+  weekMs: number
+}
+
+export interface AgentStatus {
+  panelId: string
+  state: 'working' | 'done' | 'exited' | 'stopped'
+  startedAt: number | null
+  exitCode?: number
+  workspaceId: string
+  workspaceName: string
+  title: string
+  at: number
+  notify: boolean
+}
+
 export type NeoAPI = typeof neoAPI
 export const neoAPI = {
   getStore: (): Promise<AppState> => ipcRenderer.invoke('store:get'),
@@ -118,6 +153,8 @@ export const neoAPI = {
 
   readSmartClipboard: (): Promise<SmartClipboardResult> =>
     ipcRenderer.invoke('clipboard:read-smart'),
+
+  getShells: (): Promise<{ id: string; label: string }[]> => ipcRenderer.invoke('pty:shells'),
 
   spawnTerminal: (options: SpawnOptions): Promise<boolean> =>
     ipcRenderer.invoke('pty:spawn', options),
@@ -160,6 +197,22 @@ export const neoAPI = {
     ipcRenderer.on(channel, handler)
     return () => {
       ipcRenderer.removeListener(channel, handler)
+    }
+  },
+
+  onAgentStatus: (callback: (status: AgentStatus) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: AgentStatus): void => callback(status)
+    ipcRenderer.on('agent:status', handler)
+    return () => {
+      ipcRenderer.removeListener('agent:status', handler)
+    }
+  },
+
+  onAgentOpen: (callback: (workspaceId: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string): void => callback(workspaceId)
+    ipcRenderer.on('agent:open', handler)
+    return () => {
+      ipcRenderer.removeListener('agent:open', handler)
     }
   },
 
@@ -281,6 +334,30 @@ export const neoAPI = {
 
   vscodeOpenDesktop: (folderPath?: string): Promise<boolean> =>
     ipcRenderer.invoke('vscode:open-desktop', folderPath),
+
+  wallpapersList: (): Promise<string[]> => ipcRenderer.invoke('wallpapers:list'),
+
+  wallpapersImport: (): Promise<{ imported: string[]; rejected: string[] }> =>
+    ipcRenderer.invoke('wallpapers:import'),
+
+  wallpapersRemove: (id: string): Promise<boolean> => ipcRenderer.invoke('wallpapers:remove', id),
+
+  gitBranches: (folders: string[]): Promise<{ name: string; branch: string }[]> =>
+    ipcRenderer.invoke('git:branches', folders),
+
+  setRunningWorkspaces: (ids: string[]): void => ipcRenderer.send('clock:set-running', ids),
+
+  readWorkspaceClock: (id: string): Promise<WorkspaceTime> => ipcRenderer.invoke('clock:read', id),
+
+  gitRepos: (folders: string[]): Promise<string[]> => ipcRenderer.invoke('git:repos', folders),
+
+  gitSessionChanges: (repo: string): Promise<SessionChanges | null> =>
+    ipcRenderer.invoke('git:session-changes', repo),
+
+  gitSessionDiff: (repo: string, file: string): Promise<string | null> =>
+    ipcRenderer.invoke('git:session-diff', { repo, file }),
+
+  gitSessionReset: (repo: string): Promise<boolean> => ipcRenderer.invoke('git:session-reset', repo),
 
   // Built-in AdBlocker
   adblockGetStatus: (): Promise<boolean> =>
