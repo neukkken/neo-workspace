@@ -7,6 +7,7 @@ import logo from '../assets/logo.svg'
 interface TitleBarProps {
   systemMetrics?: SystemMetrics
   workspaceActions?: React.ReactNode
+  activity?: React.ReactNode
   workspaceFolders: string[]
   updateAvailable?: boolean
   onSave: () => Promise<void>
@@ -25,6 +26,7 @@ const BRANCH_REFRESH_MS = 15000
 export const TitleBar: React.FC<TitleBarProps> = ({
   systemMetrics,
   workspaceActions,
+  activity,
   workspaceFolders,
   updateAvailable,
   onSave,
@@ -114,6 +116,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       {/* Right island: icon-only actions with tooltips */}
       <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-1 px-2.5 text-xs text-zinc-300 no-drag">
         {workspaceActions}
+
+        {activity}
 
         {systemMetrics && (
           <Tooltip label={`CPU ${systemMetrics.cpuPercent}% · RAM ${systemMetrics.usedMemMb}MB`}>

@@ -69,18 +69,18 @@ const findPanelOwner = (panelId: string): { workspace: Workspace; title: string;
   return null
 }
 
-const openWorkspace = (workspaceId: string): void => {
+const openPanel = (workspaceId: string, panelId: string): void => {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
-  mainWindow.webContents.send('agent:open', workspaceId)
+  mainWindow.webContents.send('agent:open', { workspaceId, panelId })
 }
 
 // Held until dismissed: a collected Notification silently loses its click handler
 const liveNotifications = new Set<Notification>()
 
-const notifyNative = (title: string, body: string, workspaceId: string): void => {
+const notifyNative = (title: string, body: string, workspaceId: string, panelId: string): void => {
   mainWindow?.flashFrame(true)
   if (!Notification.isSupported()) return
   const notification = new Notification({ title, body })
@@ -88,7 +88,7 @@ const notifyNative = (title: string, body: string, workspaceId: string): void =>
   liveNotifications.add(notification)
   notification.on('click', () => {
     release()
-    openWorkspace(workspaceId)
+    openPanel(workspaceId, panelId)
   })
   notification.on('close', release)
   notification.show()
@@ -109,7 +109,8 @@ const agentActivity = new AgentActivity((change) => {
     workspaceName: owner.workspace.name,
     title: owner.title,
     at: Date.now(),
-    notify: notify && elsewhere
+    notify: notify && elsewhere,
+    log: finished && !owner.muted
   })
 
   if (notify && !focused) {
@@ -117,7 +118,7 @@ const agentActivity = new AgentActivity((change) => {
       change.state === 'exited'
         ? `Se cerró con código ${change.exitCode}`
         : 'Terminó o espera tu respuesta'
-    notifyNative(`${owner.title} · ${owner.workspace.name}`, body, owner.workspace.id)
+    notifyNative(`${owner.title} · ${owner.workspace.name}`, body, owner.workspace.id, change.panelId)
   }
 })
 

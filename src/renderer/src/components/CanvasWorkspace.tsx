@@ -7,6 +7,7 @@ import {
   RotateCcw,
   Layers,
   FileText,
+  Scan,
   Sparkles,
   FolderOpen,
   Activity,
@@ -29,17 +30,32 @@ import { terminalPool } from '../services/terminal-pool'
 import { createCard, openingView, panelCards } from '../utils/cards'
 import {
   alignmentGuides,
+  boundsOf,
   Box,
+  Edges,
   findSpot,
+  fitCamera,
   GRID,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  resizeBox,
   SNAP_DISTANCE,
   snapPosition,
-  snapSize,
-  travelToShow
+  travelToShow,
+  within
 } from '../utils/canvasGrid'
 
 // Screen pixels the bottom toolbar takes from the canvas
 const TOOLBAR_CLEARANCE = 72
+
+const UNDO_DELETE_MS = 8000
+
+const marqueeBox = (band: { fromX: number; fromY: number; toX: number; toY: number }): Box => ({
+  x: Math.min(band.fromX, band.toX),
+  y: Math.min(band.fromY, band.toY),
+  width: Math.abs(band.toX - band.fromX),
+  height: Math.abs(band.toY - band.fromY)
+})
 
 interface CanvasWorkspaceProps {
   workspace: Workspace
@@ -47,6 +63,7 @@ interface CanvasWorkspaceProps {
   agentStatuses: Record<string, AgentStatus>
   isVisible: boolean
   addCardRef?: React.Ref<(kind: NodeKind) => void>
+  revealRequest?: { panelId: string; at: number } | null
   onSaveCanvasCards: (cards: CanvasCard[], connectors?: CanvasConnector[]) => void
 }
 
@@ -56,6 +73,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   agentStatuses,
   isVisible,
   addCardRef,
+  revealRequest,
   onSaveCanvasCards
 }) => {
   // Initialize cards from workspace panels or canvasCards
@@ -224,13 +242,33 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   const [focusedCardId, setFocusedCardId] = useState<string | null>(null)
 
-  // Dragging card state
+  // Dragging card state; `group` is every card moving with the one held
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null)
-  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, cardX: 0, cardY: 0 })
+  const dragStartRef = useRef({
+    mouseX: 0,
+    mouseY: 0,
+    cardX: 0,
+    cardY: 0,
+    group: [] as { id: string; x: number; y: number }[]
+  })
 
   // Resizing card state
   const [resizingCardId, setResizingCardId] = useState<string | null>(null)
-  const resizeStartRef = useRef({ mouseX: 0, mouseY: 0, cardW: 0, cardH: 0 })
+  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; box: Box; edges: Edges }>({
+    mouseX: 0,
+    mouseY: 0,
+    box: { x: 0, y: 0, width: 0, height: 0 },
+    edges: {}
+  })
+
+  // Multi-selection, and the rubber band that makes one, in world coordinates
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [marquee, setMarquee] = useState<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null)
+
+  const [lastDeleted, setLastDeleted] = useState<{ cards: CanvasCard[]; connectors: CanvasConnector[] } | null>(null)
+
+  // Where the camera was before focusing a card, to go back to it
+  const viewBeforeFocusRef = useRef<{ cardId: string; pan: { x: number; y: number }; zoom: number } | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
@@ -261,24 +299,54 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     [onSaveCanvasCards]
   )
 
-  // The canvas the user can see, in world coordinates
-  const visibleArea = (at = pan, scale = zoom): Box => ({
-    x: -at.x / scale + GRID,
-    y: -at.y / scale + GRID,
-    width: (containerRef.current?.clientWidth || window.innerWidth) / scale - 2 * GRID,
-    height: ((containerRef.current?.clientHeight || window.innerHeight) - TOOLBAR_CLEARANCE) / scale - GRID
+  // The part of the screen cards can use, clear of the bottom toolbar
+  const canvasSize = (): { width: number; height: number } => ({
+    width: containerRef.current?.clientWidth || window.innerWidth,
+    height: (containerRef.current?.clientHeight || window.innerHeight) - TOOLBAR_CLEARANCE
   })
 
-  const addCard = (kind: NodeKind, overrides?: Partial<CanvasCard>): void => {
-    const view = visibleArea()
-    const newCard = createCard(kind, workspace, cards, view, overrides)
-    updateCardsAndNotify((prev) => [...prev, newCard])
-    setFocusedCardId(newCard.id)
-    const { x, y } = travelToShow(newCard, view)
+  // The canvas the user can see, in world coordinates
+  const visibleArea = (at = pan, scale = zoom): Box => {
+    const { width, height } = canvasSize()
+    return {
+      x: -at.x / scale + GRID,
+      y: -at.y / scale + GRID,
+      width: width / scale - 2 * GRID,
+      height: height / scale - GRID
+    }
+  }
+
+  const reveal = (box: Box): void => {
+    const { x, y } = travelToShow(box, visibleArea())
     setPan((prev) => ({ x: prev.x - x * zoom, y: prev.y - y * zoom }))
   }
 
+  const frame = (box: Box): void => {
+    const { width, height } = canvasSize()
+    const camera = fitCamera(box, width, height)
+    setZoom(camera.zoom)
+    setPan(camera.pan)
+  }
+
+  const addCard = (kind: NodeKind, overrides?: Partial<CanvasCard>): void => {
+    const newCard = createCard(kind, workspace, cards, visibleArea(), overrides)
+    updateCardsAndNotify((prev) => [...prev, newCard])
+    setFocusedCardId(newCard.id)
+    reveal(newCard)
+  }
+
   useImperativeHandle(addCardRef, () => addCard)
+
+  // A notification opened from anywhere lands here; a hidden canvas has no size to work with yet
+  const handledRevealRef = useRef(0)
+  useEffect(() => {
+    if (!revealRequest || !isVisible || revealRequest.at === handledRevealRef.current) return
+    const card = cards.find((c) => c.id === revealRequest.panelId)
+    if (!card) return
+    handledRevealRef.current = revealRequest.at
+    setFocusedCardId(card.id)
+    reveal(card)
+  }, [revealRequest, isVisible, cards])
 
   const handleAddBrowser = (url: string): void => addCard('browser', { url })
 
@@ -338,6 +406,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const handleAutoArrange = (): void => {
     if (cards.length === 0) return
     const view = visibleArea({ x: 0, y: 0 }, 1)
+    viewBeforeFocusRef.current = null
 
     updateCardsAndNotify((prev) =>
       prev.reduce<CanvasCard[]>((placed, c) => {
@@ -351,17 +420,31 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     setZoom(1)
   }
 
-  const handleDeleteCard = (id: string): void => {
-    terminalPool.destroyTerminal(id)
+  const handleDeleteCards = (ids: string[]): void => {
+    const targets = cardsRef.current.filter((c) => ids.includes(c.id))
+    if (targets.length === 0) return
 
-    const targetCard = cardsRef.current.find((c) => c.id === id)
-    if (targetCard && targetCard.kind === 'vscode' && targetCard.vscodePort) {
-      window.neoAPI.vscodeStopServer(targetCard.vscodePort).catch(() => {})
+    const working = targets.filter((c) => agentStatuses[c.id]?.state === 'working').map((c) => c.title)
+    if (working.length > 0 && !confirm(`${working.join(', ')} sigue trabajando. Si lo eliminas, se detendrá. ¿Eliminar?`)) {
+      return
+    }
+
+    for (const target of targets) {
+      terminalPool.destroyTerminal(target.id)
+      if (target.kind === 'vscode' && target.vscodePort) {
+        window.neoAPI.vscodeStopServer(target.vscodePort).catch(() => {})
+      }
     }
 
     // Atomically filter both cards and attached connectors in a single synchronous operation
-    const nextCards = cardsRef.current.filter((c) => c.id !== id)
-    const nextConnectors = connectorsRef.current.filter((conn) => conn.fromId !== id && conn.toId !== id)
+    const nextCards = cardsRef.current.filter((c) => !ids.includes(c.id))
+    const nextConnectors = connectorsRef.current.filter((conn) => !ids.includes(conn.fromId) && !ids.includes(conn.toId))
+
+    setLastDeleted({
+      // The server just stopped, so its address means nothing to a restored card
+      cards: targets.map((c) => (c.vscodePort ? { ...c, vscodePort: undefined, vscodeUrl: undefined } : c)),
+      connectors: connectorsRef.current.filter((conn) => !nextConnectors.includes(conn))
+    })
 
     cardsRef.current = nextCards
     connectorsRef.current = nextConnectors
@@ -371,8 +454,35 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     setConnectors(nextConnectors)
     onSaveCanvasCards(nextCards, nextConnectors)
 
-    if (focusedCardId === id) setFocusedCardId(null)
+    if (focusedCardId && ids.includes(focusedCardId)) setFocusedCardId(null)
+    setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)))
   }
+
+  const handleDeleteCard = (id: string): void => handleDeleteCards([id])
+
+  const handleUndoDelete = (): void => {
+    if (!lastDeleted) return
+    updateCardsAndNotify((prev) => [...prev, ...lastDeleted.cards])
+    updateConnectorsAndNotify((prev) => [...prev, ...lastDeleted.connectors])
+    setLastDeleted(null)
+  }
+
+  useEffect(() => {
+    if (!lastDeleted) return
+    const timer = setTimeout(() => setLastDeleted(null), UNDO_DELETE_MS)
+    return () => clearTimeout(timer)
+  }, [lastDeleted])
+
+  useEffect(() => {
+    if (!isVisible) return
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return
+      if (e.key === 'Escape') setSelectedIds([])
+      if (e.key === 'Delete' && selectedIds.length > 0) handleDeleteCards(selectedIds)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
 
   const handleUpdateCard = (id: string, updates: Partial<CanvasCard>): void => {
     updateCardsAndNotify((prev) =>
@@ -392,10 +502,24 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     })
   }
 
+  const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    return {
+      x: (clientX - (rect?.left ?? 0) - pan.x) / zoom,
+      y: (clientY - (rect?.top ?? 0) - pan.y) / zoom
+    }
+  }
+
   // Mouse pan handlers
   const handleCanvasMouseDown = (e: React.MouseEvent): void => {
+    if (e.button === 0 && e.shiftKey && e.target === surfaceRef.current) {
+      const { x, y } = toWorld(e.clientX, e.clientY)
+      setMarquee({ fromX: x, fromY: y, toX: x, toY: y })
+      return
+    }
     if (e.button === 1 || (e.button === 0 && e.target === surfaceRef.current)) {
       setFocusedCardId(null)
+      setSelectedIds([])
       setIsPanning(true)
       panStartRef.current = {
         mouseX: e.clientX,
@@ -423,7 +547,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       const my = e.clientY - rect.top
 
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92
-      const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.35), 2.2)
+      const newZoom = Math.min(Math.max(zoom * zoomFactor, MIN_ZOOM), MAX_ZOOM)
       if (newZoom === zoom) return
 
       const newPanX = mx - ((mx - pan.x) / zoom) * newZoom
@@ -457,18 +581,32 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const targetCard = cards.find((c) => c.id === id)
     if (!targetCard) return
 
+    if (e.shiftKey) {
+      setSelectedIds((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]))
+      return
+    }
+
+    if (e.detail === 2 && !(e.target as HTMLElement).closest('button, input, select, a')) {
+      toggleCardFocus(targetCard)
+      return
+    }
+
+    const isGroup = selectedIds.includes(id)
+    if (!isGroup) setSelectedIds([])
+
     bringToFront(id)
     setDraggingCardId(id)
     dragStartRef.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
       cardX: targetCard.x,
-      cardY: targetCard.y
+      cardY: targetCard.y,
+      group: (isGroup ? cards.filter((c) => selectedIds.includes(c.id)) : [targetCard]).map(({ id, x, y }) => ({ id, x, y }))
     }
   }
 
   // Resize Card start
-  const handleResizeStart = (e: React.MouseEvent, id: string): void => {
+  const handleResizeStart = (e: React.MouseEvent, id: string, edges: Edges): void => {
     e.stopPropagation()
     const targetCard = cards.find((c) => c.id === id)
     if (!targetCard) return
@@ -478,9 +616,27 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     resizeStartRef.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
-      cardW: targetCard.width,
-      cardH: targetCard.height
+      box: { x: targetCard.x, y: targetCard.y, width: targetCard.width, height: targetCard.height },
+      edges
     }
+  }
+
+  // Double-clicking a header brings the card up close; doing it again goes back
+  const toggleCardFocus = (card: CanvasCard): void => {
+    const before = viewBeforeFocusRef.current
+    if (before?.cardId === card.id) {
+      viewBeforeFocusRef.current = null
+      setPan(before.pan)
+      setZoom(before.zoom)
+      return
+    }
+    viewBeforeFocusRef.current = { cardId: card.id, pan: before?.pan ?? pan, zoom: before?.zoom ?? zoom }
+    setFocusedCardId(card.id)
+    frame(card)
+  }
+
+  const handleFitAll = (): void => {
+    if (cards.length > 0) frame(boundsOf(cards))
   }
 
   const minimapBoxRef = useRef<HTMLDivElement>(null)
@@ -582,6 +738,9 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const handleMouseMove = (e: MouseEvent): void => {
       if (isMinimapDraggingRef.current) {
         panFromMinimap(e.clientX, e.clientY)
+      } else if (marquee) {
+        const { x, y } = toWorld(e.clientX, e.clientY)
+        setMarquee({ ...marquee, toX: x, toY: y })
       } else if (isPanning) {
         const dx = e.clientX - panStartRef.current.mouseX
         const dy = e.clientY - panStartRef.current.mouseY
@@ -592,26 +751,29 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       } else if (draggingCardId) {
         const dx = (e.clientX - dragStartRef.current.mouseX) / zoom
         const dy = (e.clientY - dragStartRef.current.mouseY) / zoom
-        const x = Math.round(dragStartRef.current.cardX + dx)
-        const y = Math.round(dragStartRef.current.cardY + dy)
+        const { cardX, cardY, group } = dragStartRef.current
+        const x = Math.round(cardX + dx)
+        const y = Math.round(cardY + dy)
         setCards((prev) => {
-          const others = prev.filter((c) => c.id !== draggingCardId)
-          return prev.map((c) =>
-            c.id === draggingCardId ? { ...c, ...snapPosition({ ...c, x, y }, others, SNAP_DISTANCE / zoom) } : c
-          )
+          const held = prev.find((c) => c.id === draggingCardId)
+          if (!held) return prev
+          const others = prev.filter((c) => !group.some((g) => g.id === c.id))
+          // The whole group follows the card in hand, sticking included
+          const snapped = snapPosition({ ...held, x, y }, others, SNAP_DISTANCE / zoom)
+          return prev.map((c) => {
+            const start = group.find((g) => g.id === c.id)
+            return start ? { ...c, x: start.x + snapped.x - cardX, y: start.y + snapped.y - cardY } : c
+          })
         })
       } else if (resizingCardId) {
-        const dw = (e.clientX - resizeStartRef.current.mouseX) / zoom
-        const dh = (e.clientY - resizeStartRef.current.mouseY) / zoom
-        const width = Math.round(resizeStartRef.current.cardW + dw)
-        const height = Math.round(resizeStartRef.current.cardH + dh)
+        const { mouseX, mouseY, box, edges } = resizeStartRef.current
+        const dx = Math.round((e.clientX - mouseX) / zoom)
+        const dy = Math.round((e.clientY - mouseY) / zoom)
         setCards((prev) => {
           const others = prev.filter((c) => c.id !== resizingCardId)
-          return prev.map((c) => {
-            if (c.id !== resizingCardId) return c
-            const snapped = snapSize({ ...c, width, height }, others, SNAP_DISTANCE / zoom)
-            return { ...c, width: Math.max(320, snapped.width), height: Math.max(220, snapped.height) }
-          })
+          return prev.map((c) =>
+            c.id === resizingCardId ? { ...c, ...resizeBox(box, edges, dx, dy, others, SNAP_DISTANCE / zoom) } : c
+          )
         })
       }
     }
@@ -619,6 +781,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const handleMouseUp = (): void => {
       if (isMinimapDraggingRef.current) {
         isMinimapDraggingRef.current = false
+      }
+      if (marquee) {
+        const band = marqueeBox(marquee)
+        setSelectedIds(cards.filter((c) => within(c, band, 0)).map((c) => c.id))
+        setMarquee(null)
       }
       if (isPanning) {
         setIsPanning(false)
@@ -636,14 +803,14 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isPanning, draggingCardId, resizingCardId, zoom, cards, connectors, onSaveCanvasCards, panFromMinimap])
+  }, [isPanning, marquee, draggingCardId, resizingCardId, zoom, pan, cards, connectors, onSaveCanvasCards, panFromMinimap])
 
   const handleZoomCenter = (factor: number): void => {
     const rect = containerRef.current?.getBoundingClientRect()
     const mx = rect ? rect.width / 2 : window.innerWidth / 2
     const my = rect ? rect.height / 2 : window.innerHeight / 2
 
-    const newZoom = Math.min(Math.max(zoom * factor, 0.35), 2.2)
+    const newZoom = Math.min(Math.max(zoom * factor, MIN_ZOOM), MAX_ZOOM)
     if (newZoom === zoom) return
 
     const newPanX = mx - ((mx - pan.x) / zoom) * newZoom
@@ -654,11 +821,15 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   }
 
   const handleResetView = (): void => {
+    viewBeforeFocusRef.current = null
     setPan({ x: 0, y: 0 })
     setZoom(1)
   }
 
   const heldCard = cards.find((c) => c.id === (draggingCardId ?? resizingCardId))
+  const selectedCards = cards.filter((c) => selectedIds.includes(c.id))
+  const movingIds = !heldCard ? [] : selectedIds.includes(heldCard.id) ? selectedIds : [heldCard.id]
+  const canvasTopZ = cards.reduce((top, c) => Math.max(top, c.zIndex ?? 0), 50) + 1
 
   return (
     <div className="flex-1 relative h-full w-full min-h-0 select-none">
@@ -748,6 +919,12 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           </button>
         </Tooltip>
 
+        <Tooltip label="Ver todas las tarjetas" side="top">
+          <button onClick={handleFitAll} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">
+            <Scan size={14} />
+          </button>
+        </Tooltip>
+
         <Tooltip label="Auto-organizar cuadrícula" side="top">
           <button onClick={handleAutoArrange} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">
             <Sparkles size={14} />
@@ -772,6 +949,28 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           </button>
         </Tooltip>
       </div>
+
+      {lastDeleted && (
+        <div
+          role="status"
+          className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 island rounded-full flex items-center gap-3 pl-4 pr-1.5 py-1.5 text-xs text-zinc-200 whitespace-nowrap"
+        >
+          <span>
+            {lastDeleted.cards.length === 1
+              ? `Eliminada: ${lastDeleted.cards[0].title || 'tarjeta'}`
+              : `${lastDeleted.cards.length} tarjetas eliminadas`}
+          </span>
+          <button
+            onClick={handleUndoDelete}
+            className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-zinc-100 transition-colors cursor-pointer"
+          >
+            Deshacer
+          </button>
+        </div>
+      )}
+
+      {/* While holding a card the mouse may cross a webview, which would swallow its events */}
+      {(heldCard || marquee) && <div className="fixed inset-0 z-[60]" />}
 
       {/* Infinite Canvas Area */}
       <div
@@ -909,23 +1108,50 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             })}
           </svg>
 
-          {/* Alignment guides, above the card being held */}
-          {heldCard && (
+          {/* Selection, rubber band and alignment guides, above every card */}
+          {(heldCard || marquee || selectedCards.length > 0) && (
             <svg
-              style={{ zIndex: (heldCard.zIndex ?? 0) + 1 }}
+              style={{ zIndex: canvasTopZ }}
               className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
             >
-              {alignmentGuides(
-                heldCard,
-                cards.filter((c) => c !== heldCard)
-              ).map((line, i) => (
-                <line key={i} {...line} vectorEffect="non-scaling-stroke" strokeWidth={2} className="stroke-signal" />
+              {selectedCards.map((c) => (
+                <rect
+                  key={c.id}
+                  data-selection-outline
+                  x={c.x - 3}
+                  y={c.y - 3}
+                  width={c.width + 6}
+                  height={c.height + 6}
+                  rx={14}
+                  fill="none"
+                  vectorEffect="non-scaling-stroke"
+                  strokeWidth={2}
+                  className="stroke-signal"
+                />
               ))}
+              {marquee && (
+                <rect
+                  {...marqueeBox(marquee)}
+                  vectorEffect="non-scaling-stroke"
+                  strokeWidth={1}
+                  className="stroke-signal fill-signal/10"
+                />
+              )}
+              {heldCard &&
+                alignmentGuides(
+                  heldCard,
+                  cards.filter((c) => !movingIds.includes(c.id))
+                ).map((line, i) => (
+                  <line key={i} {...line} vectorEffect="non-scaling-stroke" strokeWidth={2} className="stroke-signal" />
+                ))}
             </svg>
           )}
 
-          {/* Cards Layer */}
-          <div className="w-full h-full relative pointer-events-none">
+          {/* Cards Layer. A Shift + click only selects: focusing the card would hand the keyboard to it */}
+          <div
+            onClickCapture={(e) => e.shiftKey && e.stopPropagation()}
+            className="w-full h-full relative pointer-events-none"
+          >
             {cards.map((card) => {
               const isFocused = card.id === focusedCardId || card.id === connectStartId
 

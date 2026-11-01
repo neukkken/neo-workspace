@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { GitCommitHorizontal, GitCompare, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { CanvasCard, SessionChanges } from '../types'
+import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 
 const REFRESH_MS = 10000
 const MAX_DIFF_LINES = 2000
@@ -52,7 +53,7 @@ interface GitCardProps {
   onFocus: () => void
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
-  onResizeStart: (e: React.MouseEvent, id: string) => void
+  onResizeStart: ResizeStart
 }
 
 export const GitCard: React.FC<GitCardProps> = ({
@@ -270,15 +271,7 @@ export const GitCard: React.FC<GitCardProps> = ({
         </div>
       )}
 
-      <div
-        onMouseDown={(e) => onResizeStart(e, card.id)}
-        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
-        title="Redimensionar tarjeta"
-      >
-        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-          <polygon points="6 0, 6 6, 0 6" />
-        </svg>
-      </div>
+      <CardResizeHandles cardId={card.id} onResizeStart={onResizeStart} />
     </div>
   )
 }

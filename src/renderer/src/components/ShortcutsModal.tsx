@@ -42,8 +42,23 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
       category: 'Navegación & Workspaces'
     },
     {
-      keys: ['Ctrl', 'Shift', 'F'],
-      description: 'Alternar entre vista Cuadrícula (Grid) y Canvas Libre',
+      keys: ['Doble clic', 'cabecera'],
+      description: 'Enfocar una tarjeta; repetir vuelve a la vista anterior',
+      category: 'Vistas & Layout'
+    },
+    {
+      keys: ['Shift', 'clic'],
+      description: 'Añadir o quitar una tarjeta de la selección',
+      category: 'Vistas & Layout'
+    },
+    {
+      keys: ['Shift', 'arrastrar'],
+      description: 'Seleccionar varias tarjetas desde el lienzo',
+      category: 'Vistas & Layout'
+    },
+    {
+      keys: ['Supr'],
+      description: 'Eliminar las tarjetas seleccionadas',
       category: 'Vistas & Layout'
     },
     {

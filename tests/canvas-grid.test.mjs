@@ -3,9 +3,11 @@ import { test } from 'node:test'
 import {
   GRID,
   alignmentGuides,
+  boundsOf,
   findSpot,
+  fitCamera,
+  resizeBox,
   snapPosition,
-  snapSize,
   travelToShow
 } from '../src/renderer/src/utils/canvasGrid.ts'
 
@@ -111,12 +113,51 @@ test('edges further than the tolerance do not pull', () => {
   assert.equal(snapPosition(box(152, 500), [box(143, 91, 550, 360)], 8).x, 152)
 })
 
-test('resizing is free until the far edge reaches a card beside it', () => {
-  assert.deepEqual(snapSize(box(32, 32, 590, 400), [], 8), { width: 590, height: 400 })
-  assert.deepEqual(snapSize(box(32, 32, 590, 400), [box(626, 3000, 100, 100)], 8), { width: 590, height: 400 })
-  assert.equal(snapSize(box(32, 32, 590, 400), [box(626, 460, 100, 100)], 8).width, 594)
-  assert.equal(snapSize(box(32, 32, 590, 400), [box(100, 460, 526, 100)], 8).width, 594)
-  assert.equal(snapSize(box(32, 32, 590, 400), [box(650, 32, 100, 100)], 8).width, 586)
+test('resizing is free until the dragged edge reaches a card beside it', () => {
+  const corner = { right: true, bottom: true }
+  const start = box(32, 32, 580, 390)
+  assert.deepEqual(resizeBox(start, corner, 10, 10, [], 8), box(32, 32, 590, 400))
+  assert.deepEqual(resizeBox(start, corner, 10, 10, [box(626, 3000, 100, 100)], 8), box(32, 32, 590, 400))
+  assert.equal(resizeBox(start, corner, 10, 10, [box(626, 460, 100, 100)], 8).width, 594)
+  assert.equal(resizeBox(start, corner, 10, 10, [box(100, 460, 526, 100)], 8).width, 594)
+  assert.equal(resizeBox(start, corner, 10, 10, [box(650, 32, 100, 100)], 8).width, 586)
+})
+
+test('each edge moves on its own and the opposite one stays put', () => {
+  const start = box(100, 100, 500, 400)
+  assert.deepEqual(resizeBox(start, { right: true }, 30, 99, [], 8), box(100, 100, 530, 400))
+  assert.deepEqual(resizeBox(start, { bottom: true }, 99, 30, [], 8), box(100, 100, 500, 430))
+  assert.deepEqual(resizeBox(start, { left: true }, -30, 99, [], 8), box(70, 100, 530, 400))
+  assert.deepEqual(resizeBox(start, { top: true }, 99, -30, [], 8), box(100, 70, 500, 430))
+  assert.deepEqual(resizeBox(start, { top: true, left: true }, 20, 20, [], 8), box(120, 120, 480, 380))
+})
+
+test('the left and top edges stick to a card beside them too', () => {
+  const neighbour = box(0, 100, 68, 400)
+  assert.equal(resizeBox(box(120, 100, 500, 400), { left: true }, -15, 0, [neighbour], 8).x, 100)
+})
+
+test('a card never shrinks below the minimum, whichever edge is pulled', () => {
+  const start = box(100, 100, 500, 400)
+  assert.deepEqual(resizeBox(start, { right: true, bottom: true }, -900, -900, [], 8), box(100, 100, 320, 220))
+  assert.deepEqual(resizeBox(start, { left: true, top: true }, 900, 900, [], 8), box(280, 280, 320, 220))
+})
+
+test('the bounds of a group wrap every card', () => {
+  assert.deepEqual(boundsOf([box(100, 50, 200, 100), box(-20, 300, 50, 50)]), box(-20, 50, 320, 300))
+})
+
+test('framing a card centres it and fills the view', () => {
+  const { pan, zoom } = fitCamera(box(100, 100, 400, 300), 1264, 964)
+  assert.equal(zoom, 2.2)
+  assert.deepEqual(pan, { x: 1264 / 2 - 300 * 2.2, y: 964 / 2 - 250 * 2.2 })
+  assert.equal(fitCamera(box(0, 0, 1200, 300), 1264, 964).zoom, 1)
+  assert.equal(fitCamera(box(0, 0, 300, 900), 1264, 964).zoom, 1)
+})
+
+test('framing never goes past the zoom limits', () => {
+  assert.equal(fitCamera(box(0, 0, 100, 100), 3000, 3000).zoom, 2.2)
+  assert.equal(fitCamera(box(0, 0, 90000, 90000), 1000, 1000).zoom, 0.35)
 })
 
 test('guides appear only for edges really shared with a card beside it', () => {

@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react'
 import { CanvasCard } from '../types'
+import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 import { cleanUrl, openExternalUrl } from '../utils/url'
 
 interface BrowserCardProps {
@@ -25,7 +26,7 @@ interface BrowserCardProps {
   onUpdate: (updates: Partial<CanvasCard>) => void
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
-  onResizeStart: (e: React.MouseEvent, id: string) => void
+  onResizeStart: ResizeStart
 }
 
 type ViewportMode = 'full' | 'tablet' | 'mobile'
@@ -633,16 +634,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
         </div>
       </div>
 
-      {/* Resize Handle (Bottom Right) */}
-      <div
-        onMouseDown={(e) => onResizeStart(e, card.id)}
-        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
-        title="Redimensionar nodo"
-      >
-        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-          <polygon points="6 0, 6 6, 0 6" />
-        </svg>
-      </div>
+      <CardResizeHandles cardId={card.id} onResizeStart={onResizeStart} />
     </div>
   )
 }

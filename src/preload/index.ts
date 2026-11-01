@@ -136,6 +136,7 @@ export interface AgentStatus {
   title: string
   at: number
   notify: boolean
+  log: boolean
 }
 
 export type NeoAPI = typeof neoAPI
@@ -209,8 +210,11 @@ export const neoAPI = {
     }
   },
 
-  onAgentOpen: (callback: (workspaceId: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string): void => callback(workspaceId)
+  onAgentOpen: (callback: (target: { workspaceId: string; panelId: string }) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      target: { workspaceId: string; panelId: string }
+    ): void => callback(target)
     ipcRenderer.on('agent:open', handler)
     return () => {
       ipcRenderer.removeListener('agent:open', handler)

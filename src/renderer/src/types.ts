@@ -143,6 +143,7 @@ export interface AgentStatus {
   title: string
   at: number
   notify: boolean
+  log: boolean
 }
 
 export interface ProcessMetrics {

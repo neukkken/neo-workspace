@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ArrowDownToLine, Copy, FileText, Palette, Send, Trash2, X } from 'lucide-react'
 import { AgentStatus, CanvasCard, NoteColor } from '../types'
+import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 import { terminalPool } from '../services/terminal-pool'
 import { openExternalUrl } from '../utils/url'
 import {
@@ -34,7 +35,7 @@ interface NoteCardProps {
   onLinkTerminal: (terminalId: string) => void
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
-  onResizeStart: (e: React.MouseEvent, id: string) => void
+  onResizeStart: ResizeStart
 }
 
 const COLOR_VARIANTS: Record<
@@ -401,6 +402,10 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             />
           ) : (
             <span
+              onMouseDown={(e) => {
+                // The second click belongs to editing the title, not to the header
+                if (e.detail > 1) e.stopPropagation()
+              }}
               onDoubleClick={(e) => {
                 e.stopPropagation()
                 setIsEditingTitle(true)
@@ -563,16 +568,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         {progress.total > 0 && <span className="shrink-0 tabular-nums">{progress.done}/{progress.total}</span>}
       </div>
 
-      {/* Resize Handle */}
-      <div
-        onMouseDown={(e) => onResizeStart(e, card.id)}
-        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
-        title="Redimensionar tarjeta"
-      >
-        <svg className="w-2.5 h-2.5" viewBox="0 0 6 6">
-          <path d="M6 6H5V5H6V6ZM6 4H5V3H6V4ZM4 6H3V5H4V6ZM6 2H5V1H6V2ZM2 6H1V5H2V6Z" fill="currentColor" />
-        </svg>
-      </div>
+      <CardResizeHandles cardId={card.id} onResizeStart={onResizeStart} />
     </div>
   )
 }

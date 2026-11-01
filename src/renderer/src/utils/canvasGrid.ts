@@ -6,11 +6,24 @@ export const SNAP_DISTANCE = 12
 // Cards closer than this are side by side; it has to reach past the gutter between them
 const BESIDE_DISTANCE = 2 * GRID
 
+const MIN_WIDTH = 320
+const MIN_HEIGHT = 220
+
+export const MIN_ZOOM = 0.35
+export const MAX_ZOOM = 2.2
+
 export interface Box {
   x: number
   y: number
   width: number
   height: number
+}
+
+export interface Edges {
+  top?: boolean
+  right?: boolean
+  bottom?: boolean
+  left?: boolean
 }
 
 type Point = Pick<Box, 'x' | 'y'>
@@ -19,7 +32,7 @@ type Span = [from: number, to: number]
 const spansX = (boxes: Box[]): Span[] => boxes.map((b) => [b.x, b.x + b.width])
 const spansY = (boxes: Box[]): Span[] => boxes.map((b) => [b.y, b.y + b.height])
 
-const within = (a: Box, b: Box, margin: number): boolean =>
+export const within = (a: Box, b: Box, margin: number): boolean =>
   a.x < b.x + b.width + margin &&
   a.x + a.width + margin > b.x &&
   a.y < b.y + b.height + margin &&
@@ -81,11 +94,56 @@ export const snapPosition = (box: Box, others: Box[], tolerance: number): Point 
   }
 }
 
-export const snapSize = (box: Box, others: Box[], tolerance: number): Pick<Box, 'width' | 'height'> => {
-  const near = beside(box, others)
+// The dragged edges follow the mouse and stick to cards beside them; the opposite ones stay put
+export const resizeBox = (
+  start: Box,
+  edges: Edges,
+  dx: number,
+  dy: number,
+  others: Box[],
+  tolerance: number
+): Box => {
+  const startRight = start.x + start.width
+  const startBottom = start.y + start.height
+  const rawLeft = edges.left ? start.x + dx : start.x
+  const rawRight = edges.right ? startRight + dx : startRight
+  const rawTop = edges.top ? start.y + dy : start.y
+  const rawBottom = edges.bottom ? startBottom + dy : startBottom
+
+  const near = beside({ x: rawLeft, y: rawTop, width: rawRight - rawLeft, height: rawBottom - rawTop }, others)
+  const x = edges.left ? Math.min(snap(rawLeft, 0, spansX(near), tolerance), startRight - MIN_WIDTH) : start.x
+  const y = edges.top ? Math.min(snap(rawTop, 0, spansY(near), tolerance), startBottom - MIN_HEIGHT) : start.y
+  const right = edges.right ? Math.max(snap(rawRight, 0, spansX(near), tolerance), x + MIN_WIDTH) : startRight
+  const bottom = edges.bottom ? Math.max(snap(rawBottom, 0, spansY(near), tolerance), y + MIN_HEIGHT) : startBottom
+
+  return { x, y, width: right - x, height: bottom - y }
+}
+
+export const boundsOf = (boxes: Box[]): Box => {
+  const left = Math.min(...boxes.map((b) => b.x))
+  const top = Math.min(...boxes.map((b) => b.y))
   return {
-    width: snap(box.x + box.width, 0, spansX(near), tolerance) - box.x,
-    height: snap(box.y + box.height, 0, spansY(near), tolerance) - box.y
+    x: left,
+    y: top,
+    width: Math.max(...boxes.map((b) => b.x + b.width)) - left,
+    height: Math.max(...boxes.map((b) => b.y + b.height)) - top
+  }
+}
+
+// The pan and zoom that fill a viewport with `box`, centred, with a gutter around it
+export const fitCamera = (
+  box: Box,
+  viewportWidth: number,
+  viewportHeight: number
+): { pan: Point; zoom: number } => {
+  const fit = Math.min((viewportWidth - 2 * GRID) / box.width, (viewportHeight - 2 * GRID) / box.height)
+  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fit))
+  return {
+    zoom,
+    pan: {
+      x: viewportWidth / 2 - (box.x + box.width / 2) * zoom,
+      y: viewportHeight / 2 - (box.y + box.height / 2) * zoom
+    }
   }
 }
 

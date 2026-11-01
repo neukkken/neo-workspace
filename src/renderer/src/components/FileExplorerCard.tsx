@@ -21,6 +21,7 @@ import {
   Table
 } from 'lucide-react'
 import { CanvasCard, FileEntry } from '../types'
+import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 
 interface FileExplorerCardProps {
   card: CanvasCard
@@ -29,7 +30,7 @@ interface FileExplorerCardProps {
   onUpdate: (updates: Partial<CanvasCard>) => void
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
-  onResizeStart: (e: React.MouseEvent, id: string) => void
+  onResizeStart: ResizeStart
   onOpenInBrowser?: (url: string) => void
 }
 
@@ -542,15 +543,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
         )}
       </div>
 
-      {/* Resize Handle */}
-      <div
-        onMouseDown={(e) => onResizeStart(e, card.id)}
-        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-nwse-resize z-20 flex items-end justify-end p-0.5 text-zinc-600 hover:text-zinc-100"
-      >
-        <svg viewBox="0 0 6 6" width="6" height="6" fill="currentColor">
-          <polygon points="6 0, 6 6, 0 6" />
-        </svg>
-      </div>
+      <CardResizeHandles cardId={card.id} onResizeStart={onResizeStart} />
     </div>
   )
 }

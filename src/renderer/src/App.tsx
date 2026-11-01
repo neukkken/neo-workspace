@@ -10,6 +10,7 @@ import { ShortcutsModal } from './components/ShortcutsModal'
 import { CommandPaletteModal } from './components/CommandPaletteModal'
 import { UpdateNotificationToast } from './components/UpdateNotificationToast'
 import { AgentToasts } from './components/AgentToasts'
+import { ActivityCenter } from './components/ActivityCenter'
 import {
   AgentStatus,
   Workspace,
@@ -27,6 +28,8 @@ import {
 import { terminalPool } from './services/terminal-pool'
 import { createCard, openingView } from './utils/cards'
 import { applyPalette, DEFAULT_WALLPAPER, readWallpaperPalette, wallpaperUrl } from './wallpapers'
+
+const ACTIVITY_LIMIT = 30
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -47,6 +50,8 @@ export const App: React.FC = () => {
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({})
   const [attentionWorkspaceIds, setAttentionWorkspaceIds] = useState<string[]>([])
   const [agentToasts, setAgentToasts] = useState<AgentStatus[]>([])
+  const [activityLog, setActivityLog] = useState<AgentStatus[]>([])
+  const [revealRequest, setRevealRequest] = useState<{ panelId: string; at: number } | null>(null)
 
   const appStateRef = useRef<AppState | null>(null)
   appStateRef.current = appState
@@ -59,6 +64,7 @@ export const App: React.FC = () => {
   // Listeners registered once on mount go through this: the first render returns before the handlers exist
   const handlersRef = useRef<{
     selectWorkspace: (id: string) => void
+    openPanel: (workspaceId: string, panelId: string) => void
     newWorkspace: () => void
     saveAll: () => Promise<void>
     restartWorkspace: (id: string) => Promise<void>
@@ -129,14 +135,15 @@ export const App: React.FC = () => {
         const others = prev.filter((t) => t.panelId !== status.panelId)
         return status.notify ? [...others, status].slice(-4) : others
       })
+      if (status.log) setActivityLog((prev) => [status, ...prev].slice(0, ACTIVITY_LIMIT))
       if (status.notify) {
         setAttentionWorkspaceIds((prev) =>
           prev.includes(status.workspaceId) ? prev : [...prev, status.workspaceId]
         )
       }
     })
-    const unsubscribeOpen = window.neoAPI.onAgentOpen((workspaceId) => {
-      handlersRef.current?.selectWorkspace(workspaceId)
+    const unsubscribeOpen = window.neoAPI.onAgentOpen(({ workspaceId, panelId }) => {
+      handlersRef.current?.openPanel(workspaceId, panelId)
     })
     return () => {
       unsubscribeStatus()
@@ -571,8 +578,14 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleOpenPanel = (workspaceId: string, panelId: string): void => {
+    handleSelectWorkspace(workspaceId)
+    setRevealRequest({ panelId, at: Date.now() })
+  }
+
   handlersRef.current = {
     selectWorkspace: handleSelectWorkspace,
+    openPanel: handleOpenPanel,
     newWorkspace: handleNewWorkspace,
     saveAll: handleSaveAll,
     restartWorkspace: handleRestartWorkspace
@@ -672,6 +685,7 @@ export const App: React.FC = () => {
                     agentStatuses={agentStatuses}
                     isVisible={isSelected}
                     addCardRef={isSelected ? addCanvasCardRef : undefined}
+                    revealRequest={isSelected ? revealRequest : null}
                     onSaveCanvasCards={(cards, connectors) => handleSaveCanvasCards(ws.id, cards, connectors)}
                   />
                 </div>
@@ -864,6 +878,12 @@ export const App: React.FC = () => {
       <TitleBar
         systemMetrics={telemetry?.system}
         workspaceActions={workspaceActions}
+        activity={
+          <ActivityCenter
+            events={activityLog}
+            onOpen={(status) => handleOpenPanel(status.workspaceId, status.panelId)}
+          />
+        }
         workspaceFolders={(activeWorkspace?.panels || []).map((p) => p.cwd).filter((cwd): cwd is string => !!cwd)}
         updateAvailable={updateStatus?.state === 'available' || updateStatus?.state === 'downloaded'}
         onSave={handleSaveAll}
@@ -974,7 +994,11 @@ export const App: React.FC = () => {
         }}
       />
 
-      <AgentToasts toasts={agentToasts} onOpen={handleSelectWorkspace} onDismiss={dismissAgentToast} />
+      <AgentToasts
+        toasts={agentToasts}
+        onOpen={(status) => handleOpenPanel(status.workspaceId, status.panelId)}
+        onDismiss={dismissAgentToast}
+      />
 
       {/* Floating Update Notification Toast */}
       <UpdateNotificationToast

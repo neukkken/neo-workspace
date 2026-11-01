@@ -6,7 +6,7 @@ const VISIBLE_MS = 12000
 
 interface AgentToastProps {
   status: AgentStatus
-  onOpen: (workspaceId: string) => void
+  onOpen: (status: AgentStatus) => void
   onDismiss: (panelId: string) => void
 }
 
@@ -19,7 +19,7 @@ const AgentToast: React.FC<AgentToastProps> = ({ status, onOpen, onDismiss }) =>
   return (
     <div className="island flex items-start gap-2.5 p-3 text-xs select-none animate-in slide-in-from-bottom-5 duration-200">
       <BellRing size={14} className="text-signal shrink-0 mt-0.5" />
-      <button onClick={() => onOpen(status.workspaceId)} className="flex-1 min-w-0 text-left cursor-pointer">
+      <button onClick={() => onOpen(status)} className="flex-1 min-w-0 text-left cursor-pointer">
         <span className="block font-medium text-zinc-100 truncate">
           {status.title} · {status.workspaceName}
         </span>
@@ -42,7 +42,7 @@ const AgentToast: React.FC<AgentToastProps> = ({ status, onOpen, onDismiss }) =>
 
 interface AgentToastsProps {
   toasts: AgentStatus[]
-  onOpen: (workspaceId: string) => void
+  onOpen: (status: AgentStatus) => void
   onDismiss: (panelId: string) => void
 }
 
