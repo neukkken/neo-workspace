@@ -4,6 +4,7 @@ export interface WorkspaceTime {
   elapsedMs: number
   totalMs: number
   weekMs: number
+  paused: boolean
 }
 
 interface Banked {
@@ -15,6 +16,7 @@ interface Banked {
 interface Session {
   startedAt: number
   countedTo: number
+  paused: boolean
 }
 
 // Running workspaces are banked every minute, so a longer gap means the computer slept
@@ -49,9 +51,17 @@ export class WorkspaceClock {
       this.sessions.delete(id)
     }
     for (const id of ids) {
-      if (!this.sessions.has(id)) this.sessions.set(id, { startedAt: now, countedTo: now })
+      if (!this.sessions.has(id)) this.sessions.set(id, { startedAt: now, countedTo: now, paused: false })
     }
     if (stopped.length > 0) this.save()
+  }
+
+  // A paused workspace stands still: neither the stopwatch nor its totals move
+  public pauseWhere(isPaused: (id: string) => boolean, now: number): void {
+    for (const [id, session] of this.sessions) {
+      this.bank(id, now)
+      session.paused = isPaused(id)
+    }
   }
 
   // Run periodically, so a crash costs a minute at most
@@ -68,7 +78,8 @@ export class WorkspaceClock {
     return {
       elapsedMs: session ? now - session.startedAt : 0,
       totalMs: banked?.totalMs ?? 0,
-      weekMs: banked?.weekStart === weekStartOf(now) ? banked.weekMs : 0
+      weekMs: banked?.weekStart === weekStartOf(now) ? banked.weekMs : 0,
+      paused: session?.paused ?? false
     }
   }
 
@@ -77,7 +88,7 @@ export class WorkspaceClock {
     if (!session) return
     const gap = now - session.countedTo
     session.countedTo = now
-    if (gap < 0 || gap > MAX_GAP_MS) {
+    if (session.paused || gap < 0 || gap > MAX_GAP_MS) {
       session.startedAt += gap
       return
     }

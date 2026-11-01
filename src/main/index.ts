@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session, protocol, net as electronNet, Notification } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session, protocol, net as electronNet, Notification, powerMonitor } from 'electron'
 import { join, extname, basename } from 'path'
 import { pathToFileURL } from 'url'
 import * as fs from 'fs'
@@ -16,6 +16,10 @@ import { findRepos, readGitBranches } from './git-branches'
 import { GitSession } from './git-session'
 import { WallpaperStore } from './wallpapers'
 import { WorkspaceClock } from './workspace-clock'
+import { TerminalHistory } from './terminal-history'
+
+// With no input for this long, only workspaces with an agent at work keep counting
+const AWAY_AFTER_SECONDS = 5 * 60
 
 // Dev runs keep their own data: sharing the file with an installed release lets
 // the older app overwrite settings it doesn't know about. Seeded once from the live file.
@@ -47,6 +51,7 @@ const remoteGateway = new RemoteGateway(ptyManager, store)
 const vscodeManager = new VSCodeManager()
 const gitSession = new GitSession()
 const workspaceClock = new WorkspaceClock(join(app.getPath('userData'), 'workspace-time.json'))
+const terminalHistory = new TerminalHistory(join(app.getPath('userData'), 'terminal-history'))
 let telemetryMonitor: TelemetryMonitor | null = null
 let appUpdater: AppUpdater | null = null
 
@@ -116,9 +121,21 @@ const agentActivity = new AgentActivity((change) => {
   }
 })
 
-ptyManager.subscribeData((panelId, data) => agentActivity.onOutput(panelId, data, Date.now()))
+const unsavedHistory = new Set<string>()
+const saveTerminalHistory = (): void => {
+  for (const panelId of unsavedHistory) terminalHistory.save(panelId, ptyManager.getBuffer(panelId))
+  unsavedHistory.clear()
+}
+
+ptyManager.subscribeData((panelId, data) => {
+  agentActivity.onOutput(panelId, data, Date.now())
+  unsavedHistory.add(panelId)
+})
 setInterval(() => agentActivity.tick(Date.now()), 1000)
-setInterval(() => workspaceClock.flush(Date.now()), 60000)
+setInterval(() => {
+  workspaceClock.flush(Date.now())
+  saveTerminalHistory()
+}, 60000)
 
 function cleanUrl(raw: string): string {
   if (!raw) return ''
@@ -169,7 +186,7 @@ function createWindow(): void {
     icon: join(__dirname, '../../build/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       nodeIntegration: false,
       contextIsolation: true,
       webviewTag: true
@@ -182,6 +199,23 @@ function createWindow(): void {
 
   mainWindow.on('focus', () => {
     mainWindow?.flashFrame(false)
+  })
+
+  // Closing kills every terminal, and an agent's run can't be picked up again
+  mainWindow.on('close', (event) => {
+    const working = agentActivity.workingPanels().flatMap((panelId) => findPanelOwner(panelId) ?? [])
+    if (working.length === 0 || !mainWindow) return
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      title: 'NeoWork',
+      message: working.length === 1 ? 'Hay un agente trabajando' : `Hay ${working.length} agentes trabajando`,
+      detail: `Si cierras se detendrán:\n${working.map((o) => `${o.title} · ${o.workspace.name}`).join('\n')}`,
+      buttons: ['Seguir trabajando', 'Cerrar de todas formas'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
+    })
+    if (choice === 0) event.preventDefault()
   })
 
   mainWindow.webContents.on('console-message', (event: any, level?: any, message?: any) => {
@@ -284,6 +318,21 @@ const migrateLegacyWallpaper = (): void => {
 
 app.whenReady().then(() => {
   migrateLegacyWallpaper()
+
+  terminalHistory.prune(
+    new Set(
+      store.getState().workspaces.flatMap((w) => [
+        ...w.panels.map((p) => p.id),
+        ...(w.canvasCards ?? []).map((c) => c.id)
+      ])
+    )
+  )
+
+  setInterval(() => {
+    const away = powerMonitor.getSystemIdleTime() >= AWAY_AFTER_SECONDS
+    const busy = new Set(agentActivity.workingPanels().map((panelId) => findPanelOwner(panelId)?.workspace.id))
+    workspaceClock.pauseWhere((id) => away && !busy.has(id), Date.now())
+  }, 15000)
 
   protocol.handle('nws-wallpaper', async (request) => {
     const file = wallpapers.resolve(new URL(request.url).pathname.slice(1))
@@ -503,6 +552,15 @@ app.whenReady().then(() => {
     // The session starts here, before the terminal can change anything
     for (const repo of findRepos(options.cwd)) void gitSession.ensureBaseline(repo)
     const shell = options.shell ?? store.getState().settings?.defaultShell
+
+    const past = terminalHistory.take(options.panelId)
+    if (past) {
+      // A new shell starts by clearing the screen: the blank lines push the past into the scrollback
+      const replay = `${past}\x1b[0m\r\n\x1b[2m── sesión anterior ──\x1b[0m${'\r\n'.repeat(options.rows ?? 24)}`
+      ptyManager.appendBuffer(options.panelId, replay)
+      mainWindow.webContents.send(`pty:data:${options.panelId}`, replay)
+    }
+
     return ptyManager.spawn(
       { ...options, shell },
       resolveShell(getShells(), shell),
@@ -926,6 +984,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   workspaceClock.setRunning([], Date.now())
+  saveTerminalHistory()
   telemetryMonitor?.stop()
   remoteGateway.stop()
   ptyManager.killAll()

@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process'
+import { randomBytes } from 'crypto'
 import * as net from 'net'
 import * as fs from 'fs'
 
@@ -75,11 +76,15 @@ export class VSCodeManager {
 
     try {
       const port = await this.getFreePort()
+      // Without a token any local program, or web page, could drive this editor
+      const token = randomBytes(16).toString('hex')
+      const url = `http://127.0.0.1:${port}?tkn=${token}`
       const args = [
         'serve-web',
         '--port',
         port.toString(),
-        '--without-connection-token',
+        '--connection-token',
+        token,
         '--accept-server-license-terms',
         '--disable-telemetry',
         '--default-folder',
@@ -97,7 +102,6 @@ export class VSCodeManager {
           if (!isResolved) {
             isResolved = true
             // If it hasn't outputted yet, we still return the url as it typically starts within 1-2s
-            const url = `http://127.0.0.1:${port}`
             this.instances.set(port, {
               folderPath: cleanFolder,
               port,
@@ -114,7 +118,6 @@ export class VSCodeManager {
             clearTimeout(timeout)
             if (!isResolved) {
               isResolved = true
-              const url = `http://127.0.0.1:${port}`
               this.instances.set(port, {
                 folderPath: cleanFolder,
                 port,

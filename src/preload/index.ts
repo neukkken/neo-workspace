@@ -123,6 +123,7 @@ export interface WorkspaceTime {
   elapsedMs: number
   totalMs: number
   weekMs: number
+  paused: boolean
 }
 
 export interface AgentStatus {

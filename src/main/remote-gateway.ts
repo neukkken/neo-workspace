@@ -7,6 +7,7 @@ import path from 'path'
 import QRCode from 'qrcode'
 import { PtyManager } from './pty-manager'
 import { StoreManager } from './store'
+import { isPrivateAddress, isSameToken } from './remote-access'
 
 export interface NetworkInterfaceInfo {
   name: string
@@ -74,7 +75,7 @@ export class RemoteGateway {
     private ptyManager: PtyManager,
     private store: StoreManager
   ) {
-    this.token = crypto.randomBytes(8).toString('hex')
+    this.token = crypto.randomBytes(16).toString('hex')
     this.activeWorkspaceId = this.store.getState().activeWorkspaceId || ''
   }
 
@@ -171,7 +172,7 @@ export class RemoteGateway {
   }
 
   public async regenerateToken(): Promise<RemoteGatewayStatus> {
-    this.token = crypto.randomBytes(8).toString('hex')
+    this.token = crypto.randomBytes(16).toString('hex')
     // Disconnect existing clients with old token
     for (const client of this.clients) {
       client.close(4001, 'Token Regenerated')
@@ -205,8 +206,9 @@ export class RemoteGateway {
       this.server.on('upgrade', (request, socket, head) => {
         const url = new URL(request.url || '', `http://${request.headers.host}`)
         if (url.pathname === '/ws') {
-          const reqToken = url.searchParams.get('token')
-          if (reqToken !== this.token) {
+          const authorized =
+            isPrivateAddress(request.socket.remoteAddress) && isSameToken(url.searchParams.get('token'), this.token)
+          if (!authorized) {
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
             socket.destroy()
             return
@@ -394,9 +396,18 @@ export class RemoteGateway {
   }
 
   private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const url = new URL(req.url || '/', `http://${req.headers.host}`)
+    // Listening on every interface is what lets a phone in; a public one has no business here
+    if (!isPrivateAddress(req.socket.remoteAddress)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' })
+      res.end('Forbidden')
+      return
+    }
 
-    if (url.pathname === '/manifest.json') {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`)
+    const authorized = isSameToken(url.searchParams.get('token'), this.token)
+
+    // Its start_url carries the token, so this file is as secret as the token itself
+    if (url.pathname === '/manifest.json' && authorized) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(
         JSON.stringify({
@@ -463,7 +474,7 @@ export class RemoteGateway {
       return
     }
 
-    if (url.pathname === '/api/status') {
+    if (url.pathname === '/api/status' && authorized) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(
         JSON.stringify({
@@ -476,8 +487,7 @@ export class RemoteGateway {
     }
 
     // Main App HTML
-    const token = url.searchParams.get('token')
-    if (token !== this.token) {
+    if (!authorized) {
       res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(`
         <!DOCTYPE html>
@@ -516,7 +526,7 @@ export class RemoteGateway {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>NeoWork Mobile</title>
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="/manifest.json?token=${this.token}">
   <link rel="stylesheet" href="/xterm.css">
   <script src="/xterm.js"></script>
   <script src="/addon-fit.js"></script>

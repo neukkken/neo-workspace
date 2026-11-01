@@ -34,15 +34,18 @@ const WorkspaceStopwatch: React.FC<{ workspaceId: string; isRunning: boolean }> 
     }
   }, [workspaceId, isRunning])
 
+  const isCounting = isRunning && !time?.paused
+  const totals = `Total: ${formatHours(time?.totalMs ?? 0)} · Esta semana: ${formatHours(time?.weekMs ?? 0)}`
+
   return (
-    <Tooltip label={`Total: ${formatHours(time?.totalMs ?? 0)} · Esta semana: ${formatHours(time?.weekMs ?? 0)}`}>
+    <Tooltip label={time?.paused ? `En pausa por inactividad · ${totals}` : totals}>
       <span
         role="timer"
         className={`flex items-center space-x-1 px-1.5 py-1 text-[11px] tabular-nums ${
-          isRunning ? 'text-zinc-200' : 'text-zinc-500'
+          isCounting ? 'text-zinc-200' : 'text-zinc-500'
         }`}
       >
-        <Timer size={13} className={isRunning ? 'text-signal' : undefined} />
+        <Timer size={13} className={isCounting ? 'text-signal' : undefined} />
         <span>{formatElapsed(time?.elapsedMs ?? 0)}</span>
       </span>
     </Tooltip>

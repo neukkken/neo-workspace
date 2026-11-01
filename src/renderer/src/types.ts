@@ -14,6 +14,7 @@ export interface WorkspaceTime {
   elapsedMs: number
   totalMs: number
   weekMs: number
+  paused: boolean
 }
 
 export type NoteColor = 'emerald' | 'amber' | 'cyan' | 'purple' | 'zinc'

@@ -25,6 +25,15 @@ test('sustained output then silence is one finished run', () => {
   assert.equal(changes[1].startedAt, 0)
 })
 
+test('only panels at work right now are listed', () => {
+  const { activity } = setup()
+  assert.deepEqual(activity.workingPanels(), [])
+  const end = stream(activity, 0, 20)
+  assert.deepEqual(activity.workingPanels(), ['p'])
+  activity.tick(end + QUIET_MS)
+  assert.deepEqual(activity.workingPanels(), [])
+})
+
 test('short bursts and occasional logs never count as work', () => {
   const { activity, states } = setup()
   activity.onOutput('p', 'dir output', 0)

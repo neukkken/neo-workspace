@@ -80,8 +80,6 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
   const [isLoading, setIsLoading] = useState(false)
 
   const webviewRef = useRef<any>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [useIframeFallback, setUseIframeFallback] = useState(false)
 
   // Smart URL formatter: handles search queries, local ports, and direct URLs
   const formatUrl = (raw: string): string => {
@@ -130,7 +128,8 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             webview.src = formatted
           }
         } catch {
-          setUseIframeFallback(true)
+          // loadURL throws until the webview's first dom-ready
+          webview.src = formatted
         }
       }
     },
@@ -211,8 +210,6 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
     const webview = webviewRef.current
     if (webview && typeof webview.reload === 'function') {
       webview.reload()
-    } else if (iframeRef.current) {
-      iframeRef.current.src = activeTab.url
     }
   }
 
@@ -616,26 +613,16 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             viewport !== 'full' ? 'border-x border-zinc-800/60 ' : ''
           }`}
         >
-          {useIframeFallback ? (
-            <iframe
-              ref={iframeRef}
-              src={activeTab.url}
-              title={activeTab.title}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-              className="w-full h-full border-0 select-auto"
-            />
-          ) : (
-            <webview
-              ref={webviewRef}
-              key={activeTab.id}
-              src={activeTab.url}
-              allowpopups={true}
-              partition="persist:neowork-browser"
-              useragent={CHROME_USER_AGENT}
-              className="w-full h-full border-0 select-auto"
-              style={{ width: '100%', height: '100%' }}
-            />
-          )}
+          <webview
+            ref={webviewRef}
+            key={activeTab.id}
+            src={activeTab.url}
+            allowpopups={true}
+            partition="persist:neowork-browser"
+            useragent={CHROME_USER_AGENT}
+            className="w-full h-full border-0 select-auto"
+            style={{ width: '100%', height: '100%' }}
+          />
 
           {/* Loading bar */}
           {isLoading && (

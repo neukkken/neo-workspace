@@ -22,9 +22,9 @@ test('counts from the start, and keeps the totals once stopped', () => {
   const clock = new WorkspaceClock(file())
   clock.setRunning(['a'], MONDAY)
   clock.setRunning(['a'], MONDAY + MINUTE)
-  assert.deepEqual(clock.read('a', MONDAY + 2 * MINUTE), { elapsedMs: 2 * MINUTE, totalMs: 2 * MINUTE, weekMs: 2 * MINUTE })
+  assert.deepEqual(clock.read('a', MONDAY + 2 * MINUTE), { elapsedMs: 2 * MINUTE, totalMs: 2 * MINUTE, weekMs: 2 * MINUTE, paused: false })
   clock.setRunning([], MONDAY + 3 * MINUTE)
-  assert.deepEqual(clock.read('a', MONDAY + HOUR), { elapsedMs: 0, totalMs: 3 * MINUTE, weekMs: 3 * MINUTE })
+  assert.deepEqual(clock.read('a', MONDAY + HOUR), { elapsedMs: 0, totalMs: 3 * MINUTE, weekMs: 3 * MINUTE, paused: false })
 })
 
 test('each session adds to the total, and the stopwatch starts over', () => {
@@ -32,7 +32,7 @@ test('each session adds to the total, and the stopwatch starts over', () => {
   clock.setRunning(['a'], MONDAY)
   clock.setRunning([], MONDAY + 2 * MINUTE)
   clock.setRunning(['a'], MONDAY + HOUR)
-  assert.deepEqual(clock.read('a', MONDAY + HOUR + MINUTE), { elapsedMs: MINUTE, totalMs: 3 * MINUTE, weekMs: 3 * MINUTE })
+  assert.deepEqual(clock.read('a', MONDAY + HOUR + MINUTE), { elapsedMs: MINUTE, totalMs: 3 * MINUTE, weekMs: 3 * MINUTE, paused: false })
 })
 
 test('workspaces count on their own', () => {
@@ -49,21 +49,48 @@ test('a crash keeps everything up to the last flush', () => {
   const clock = new WorkspaceClock(path)
   clock.setRunning(['a'], MONDAY)
   clock.flush(MONDAY + MINUTE)
-  assert.deepEqual(new WorkspaceClock(path).read('a', MONDAY + HOUR), { elapsedMs: 0, totalMs: MINUTE, weekMs: MINUTE })
+  assert.deepEqual(new WorkspaceClock(path).read('a', MONDAY + HOUR), { elapsedMs: 0, totalMs: MINUTE, weekMs: MINUTE, paused: false })
 })
 
 test('a session crossing into Monday only counts this week from midnight', () => {
   const sundayNight = new Date(2026, 9, 25, 23, 59).getTime()
   const clock = new WorkspaceClock(file())
   clock.setRunning(['a'], sundayNight)
-  assert.deepEqual(clock.read('a', sundayNight + 3 * MINUTE), { elapsedMs: 3 * MINUTE, totalMs: 3 * MINUTE, weekMs: 2 * MINUTE })
+  assert.deepEqual(clock.read('a', sundayNight + 3 * MINUTE), { elapsedMs: 3 * MINUTE, totalMs: 3 * MINUTE, weekMs: 2 * MINUTE, paused: false })
 })
 
 test('a new week starts at zero and keeps the total', () => {
   const clock = new WorkspaceClock(file())
   clock.setRunning(['a'], MONDAY)
   clock.setRunning([], MONDAY + 2 * MINUTE)
-  assert.deepEqual(clock.read('a', MONDAY + 7 * 24 * HOUR), { elapsedMs: 0, totalMs: 2 * MINUTE, weekMs: 0 })
+  assert.deepEqual(clock.read('a', MONDAY + 7 * 24 * HOUR), { elapsedMs: 0, totalMs: 2 * MINUTE, weekMs: 0, paused: false })
+})
+
+test('a paused workspace stands still, then carries on from where it was', () => {
+  const clock = new WorkspaceClock(file())
+  clock.setRunning(['a'], MONDAY)
+  clock.pauseWhere(() => true, MONDAY + 2 * MINUTE)
+  assert.deepEqual(clock.read('a', MONDAY + 2 * MINUTE + 30000), { elapsedMs: 2 * MINUTE, totalMs: 2 * MINUTE, weekMs: 2 * MINUTE, paused: true })
+  clock.pauseWhere(() => true, MONDAY + 3 * HOUR)
+  clock.pauseWhere(() => false, MONDAY + 3 * HOUR)
+  assert.deepEqual(clock.read('a', MONDAY + 3 * HOUR + MINUTE), { elapsedMs: 3 * MINUTE, totalMs: 3 * MINUTE, weekMs: 3 * MINUTE, paused: false })
+})
+
+test('pausing one workspace leaves the others counting', () => {
+  const clock = new WorkspaceClock(file())
+  clock.setRunning(['a', 'b'], MONDAY)
+  clock.pauseWhere((id) => id === 'a', MONDAY)
+  assert.equal(clock.read('a', MONDAY + MINUTE).totalMs, 0)
+  assert.equal(clock.read('b', MONDAY + MINUTE).totalMs, MINUTE)
+})
+
+test('flushing while paused adds nothing', () => {
+  const clock = new WorkspaceClock(file())
+  clock.setRunning(['a'], MONDAY)
+  clock.pauseWhere(() => true, MONDAY)
+  clock.flush(MONDAY + MINUTE)
+  clock.flush(MONDAY + 2 * MINUTE)
+  assert.equal(clock.read('a', MONDAY + 3 * MINUTE).totalMs, 0)
 })
 
 test('time asleep or a clock moved back counts for nothing', () => {
@@ -71,8 +98,8 @@ test('time asleep or a clock moved back counts for nothing', () => {
   clock.setRunning(['a'], MONDAY)
   clock.flush(MONDAY + MINUTE)
   const wake = MONDAY + MINUTE + MAX_GAP_MS + 8 * HOUR
-  assert.deepEqual(clock.read('a', wake), { elapsedMs: MINUTE, totalMs: MINUTE, weekMs: MINUTE })
-  assert.deepEqual(clock.read('a', wake - HOUR), { elapsedMs: MINUTE, totalMs: MINUTE, weekMs: MINUTE })
+  assert.deepEqual(clock.read('a', wake), { elapsedMs: MINUTE, totalMs: MINUTE, weekMs: MINUTE, paused: false })
+  assert.deepEqual(clock.read('a', wake - HOUR), { elapsedMs: MINUTE, totalMs: MINUTE, weekMs: MINUTE, paused: false })
 })
 
 test('a damaged file starts from zero', () => {

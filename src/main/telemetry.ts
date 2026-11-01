@@ -1,6 +1,9 @@
 import pidusage from 'pidusage'
+import { execFile } from 'child_process'
 import { freemem, totalmem, cpus } from 'os'
+import { promisify } from 'util'
 import { PtyManager } from './pty-manager'
+import { measureTree, parseProcessList, ProcessSample } from './process-tree'
 
 export interface ProcessMetrics {
   cpu: number
@@ -27,10 +30,26 @@ const readCpuTimes = (): { idle: number; total: number } =>
     { idle: 0, total: 0 }
   )
 
+const LIST_PROCESSES =
+  "Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,WorkingSetSize,KernelModeTime,UserModeTime | ForEach-Object { '{0} {1} {2} {3}' -f $_.ProcessId,$_.ParentProcessId,$_.WorkingSetSize,($_.KernelModeTime+$_.UserModeTime) }"
+
+const run = promisify(execFile)
+
+const listProcesses = async (): Promise<ProcessSample[]> => {
+  const { stdout } = await run('powershell', ['-NoProfile', '-NonInteractive', '-Command', LIST_PROCESSES], {
+    windowsHide: true,
+    timeout: 10000,
+    maxBuffer: 4 * 1024 * 1024
+  })
+  return parseProcessList(stdout)
+}
+
 export class TelemetryMonitor {
   private timer: NodeJS.Timeout | null = null
   private collecting = false
   private lastCpu = readCpuTimes()
+  private lastProcessCpuMs = new Map<number, number>()
+  private lastProcessReadAt = 0
 
   constructor(
     private ptyManager: PtyManager,
@@ -56,23 +75,47 @@ export class TelemetryMonitor {
     }
   }
 
-  private async collect(): Promise<void> {
-    const pidsMap = this.ptyManager.getPids()
-    const panelsMetrics: Record<string, ProcessMetrics> = {}
+  private async measureTrees(pids: Map<string, number>): Promise<Record<string, ProcessMetrics>> {
+    const metrics: Record<string, ProcessMetrics> = {}
+    try {
+      const processes = await listProcesses()
+      const now = Date.now()
+      for (const [panelId, pid] of pids) {
+        metrics[panelId] = measureTree(pid, processes, this.lastProcessCpuMs, now - this.lastProcessReadAt)
+      }
+      this.lastProcessCpuMs = new Map(processes.map((p) => [p.pid, p.cpuMs]))
+      this.lastProcessReadAt = now
+    } catch (err) {
+      console.warn('[Telemetry] Could not list processes:', err)
+    }
+    return metrics
+  }
 
+  // shortcut: only the shell itself outside Windows, list the tree with `ps` when that matters
+  private async measureShells(pids: Map<string, number>): Promise<Record<string, ProcessMetrics>> {
+    const metrics: Record<string, ProcessMetrics> = {}
     let stats: Awaited<ReturnType<typeof pidusage>> = {}
     try {
-      if (pidsMap.size > 0) stats = await pidusage([...pidsMap.values()])
+      if (pids.size > 0) stats = await pidusage([...pids.values()])
     } catch {
       // All processes exited or none is tracked yet
     }
 
-    for (const [panelId, pid] of pidsMap.entries()) {
+    for (const [panelId, pid] of pids.entries()) {
       const stat = stats[pid]
-      panelsMetrics[panelId] = {
+      metrics[panelId] = {
         cpu: stat ? Math.round(stat.cpu * 10) / 10 : 0,
         memoryMb: stat ? Math.round((stat.memory / (1024 * 1024)) * 10) / 10 : 0
       }
+    }
+    return metrics
+  }
+
+  private async collect(): Promise<void> {
+    const pidsMap = this.ptyManager.getPids()
+    let panelsMetrics: Record<string, ProcessMetrics> = {}
+    if (pidsMap.size > 0) {
+      panelsMetrics = process.platform === 'win32' ? await this.measureTrees(pidsMap) : await this.measureShells(pidsMap)
     }
 
     // System overview

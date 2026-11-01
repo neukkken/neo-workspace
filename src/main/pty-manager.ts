@@ -21,7 +21,7 @@ export class PtyManager {
   private dataSubscribers = new Set<(panelId: string, data: string) => void>()
   private readonly MAX_BUFFER_SIZE = 120 * 1024 // 120 KB
 
-  private appendBuffer(panelId: string, chunk: string): void {
+  public appendBuffer(panelId: string, chunk: string): void {
     let chunks = this.buffers.get(panelId)
     if (!chunks) {
       chunks = []

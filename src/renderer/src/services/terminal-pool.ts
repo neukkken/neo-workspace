@@ -305,6 +305,9 @@ class TerminalPool {
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
 
+      // Ctrl + K opens the command palette from inside a terminal too
+      if (isCtrlOrCmd && !event.shiftKey && (event.key === 'k' || event.key === 'K')) return false
+
       // Ctrl + Shift + C (or Ctrl + C when text is selected): Copy selection
       if (isCtrlOrCmd && (event.key === 'c' || event.key === 'C')) {
         if (event.shiftKey || term.hasSelection()) {

@@ -98,6 +98,10 @@ export class AgentActivity {
     this.onChange({ panelId, state: 'exited', startedAt, exitCode })
   }
 
+  public workingPanels(): string[] {
+    return [...this.panels].filter(([, panel]) => panel.working).map(([panelId]) => panelId)
+  }
+
   // The user killed or restarted it: nothing to report as finished
   public forget(panelId: string): void {
     const panel = this.panels.get(panelId)
