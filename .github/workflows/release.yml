@@ -37,7 +37,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # The tests import .ts files directly, which Node runs on its own from 22.18
+          node-version: 24
           cache: 'npm'
 
       - name: Install Linux Build Essentials
@@ -51,6 +52,11 @@ jobs:
 
       - name: Check TypeScript Types
         run: npm run typecheck
+
+      # shortcut: Windows only, the one system they have run on, drop the condition once they pass on Linux
+      - name: Run Tests
+        if: runner.os == 'Windows'
+        run: npm test
 
       - name: Build and Package Executables
         run: ${{ matrix.build_cmd }}

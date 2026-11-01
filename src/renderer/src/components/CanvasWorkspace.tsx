@@ -1,22 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo } from 'react'
-import {
-  Terminal,
-  Globe,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  Layers,
-  FileText,
-  Scan,
-  Sparkles,
-  FolderOpen,
-  Activity,
-  GitBranch,
-  GitCompare,
-  MapPin,
-  X,
-  Code2
-} from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle } from 'react'
 import { AgentStatus, CanvasCard, CanvasConnector, NodeKind, ProcessMetrics, Workspace, PanelConfig } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
@@ -25,7 +7,9 @@ import { NoteCard, NoteTerminal } from './NoteCard'
 import { FileExplorerCard } from './FileExplorerCard'
 import { PortMonitorCard } from './PortMonitorCard'
 import { GitCard } from './GitCard'
-import { Tooltip } from './Tooltip'
+import { CanvasConnectors } from './CanvasConnectors'
+import { CanvasMinimap } from './CanvasMinimap'
+import { CanvasToolbar } from './CanvasToolbar'
 import { terminalPool } from '../services/terminal-pool'
 import { createCard, openingView, panelCards } from '../utils/cards'
 import {
@@ -639,106 +623,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     if (cards.length > 0) frame(boundsOf(cards))
   }
 
-  const minimapBoxRef = useRef<HTMLDivElement>(null)
-  const isMinimapDraggingRef = useRef(false)
-
-  // Dynamic Minimap calculation based on actual card positions & viewport
-  const minimapData = useMemo(() => {
-    if (cards.length === 0) return null
-
-    const containerW = containerRef.current?.clientWidth || window.innerWidth
-    const containerH = containerRef.current?.clientHeight || window.innerHeight
-
-    // Current viewport in world coordinates
-    const viewX1 = -pan.x / zoom
-    const viewY1 = -pan.y / zoom
-    const viewW = containerW / zoom
-    const viewH = containerH / zoom
-    const viewX2 = viewX1 + viewW
-    const viewY2 = viewY1 + viewH
-
-    // Bounding box encompassing both cards and camera viewport
-    let minX = viewX1
-    let maxX = viewX2
-    let minY = viewY1
-    let maxY = viewY2
-
-    for (const c of cards) {
-      if (c.x < minX) minX = c.x
-      if (c.x + c.width > maxX) maxX = c.x + c.width
-      if (c.y < minY) minY = c.y
-      if (c.y + c.height > maxY) maxY = c.y + c.height
-    }
-
-    // Margin padding
-    const pad = 140
-    const worldMinX = minX - pad
-    const worldMaxX = maxX + pad
-    const worldMinY = minY - pad
-    const worldMaxY = maxY + pad
-
-    const worldW = Math.max(worldMaxX - worldMinX, 600)
-    const worldH = Math.max(worldMaxY - worldMinY, 400)
-
-    // Minimap display dimensions
-    const mapW = 208
-    const mapH = 112
-
-    const scale = Math.min(mapW / worldW, mapH / worldH)
-    const contentW = worldW * scale
-    const contentH = worldH * scale
-    const offsetX = (mapW - contentW) / 2
-    const offsetY = (mapH - contentH) / 2
-
-    return {
-      containerW,
-      containerH,
-      worldMinX,
-      worldMinY,
-      scale,
-      offsetX,
-      offsetY,
-      viewportRect: {
-        x: offsetX + (viewX1 - worldMinX) * scale,
-        y: offsetY + (viewY1 - worldMinY) * scale,
-        w: Math.max(10, viewW * scale),
-        h: Math.max(8, viewH * scale)
-      }
-    }
-  }, [cards, pan, zoom])
-
-  const panFromMinimap = useCallback(
-    (clientX: number, clientY: number): void => {
-      if (!minimapData || !minimapBoxRef.current) return
-      const rect = minimapBoxRef.current.getBoundingClientRect()
-      const clickX = Math.max(0, Math.min(rect.width, clientX - rect.left))
-      const clickY = Math.max(0, Math.min(rect.height, clientY - rect.top))
-
-      const { worldMinX, worldMinY, scale, offsetX, offsetY, containerW, containerH } = minimapData
-
-      const targetWorldX = worldMinX + (clickX - offsetX) / scale
-      const targetWorldY = worldMinY + (clickY - offsetY) / scale
-
-      setPan({
-        x: containerW / 2 - targetWorldX * zoom,
-        y: containerH / 2 - targetWorldY * zoom
-      })
-    },
-    [minimapData, zoom]
-  )
-
-  const handleMinimapMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
-    e.stopPropagation()
-    isMinimapDraggingRef.current = true
-    panFromMinimap(e.clientX, e.clientY)
-  }
-
   // Global mouse move & mouse up
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent): void => {
-      if (isMinimapDraggingRef.current) {
-        panFromMinimap(e.clientX, e.clientY)
-      } else if (marquee) {
+      if (marquee) {
         const { x, y } = toWorld(e.clientX, e.clientY)
         setMarquee({ ...marquee, toX: x, toY: y })
       } else if (isPanning) {
@@ -779,9 +667,6 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     }
 
     const handleMouseUp = (): void => {
-      if (isMinimapDraggingRef.current) {
-        isMinimapDraggingRef.current = false
-      }
       if (marquee) {
         const band = marqueeBox(marquee)
         setSelectedIds(cards.filter((c) => within(c, band, 0)).map((c) => c.id))
@@ -803,7 +688,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isPanning, marquee, draggingCardId, resizingCardId, zoom, pan, cards, connectors, onSaveCanvasCards, panFromMinimap])
+  }, [isPanning, marquee, draggingCardId, resizingCardId, zoom, pan, cards, connectors, onSaveCanvasCards])
 
   const handleZoomCenter = (factor: number): void => {
     const rect = containerRef.current?.getBoundingClientRect()
@@ -833,122 +718,22 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   return (
     <div className="flex-1 relative h-full w-full min-h-0 select-none">
-      {/* Floating Toolbar: the one violet fill is the primary action */}
-      <div
-        onWheel={(e) => e.stopPropagation()}
-        style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
-        className="canvas-toolbar absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center space-x-1 island rounded-full px-2 py-1.5 text-xs whitespace-nowrap"
-      >
-        <Tooltip label="Nueva consola" side="top">
-          <button onClick={() => addCard('terminal')} className="p-1.5 rounded-full bg-signal hover:bg-signal/85 text-zinc-950 transition-colors cursor-pointer">
-            <Terminal size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Nuevo navegador" side="top">
-          <button onClick={() => addCard('browser')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <Globe size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Nuevo VS Code" side="top">
-          <button onClick={() => addCard('vscode')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <Code2 size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Nueva nota" side="top">
-          <button onClick={() => addCard('note')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <FileText size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Nuevo explorador" side="top">
-          <button onClick={() => addCard('explorer')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <FolderOpen size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Nuevo monitor de puertos" side="top">
-          <button onClick={() => addCard('port-monitor')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <Activity size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Cambios de la sesión (git)" side="top">
-          <button onClick={() => addCard('git')} className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer">
-            <GitCompare size={14} />
-          </button>
-        </Tooltip>
-
-        <div className="h-4 w-px bg-zinc-800 mx-1" />
-
-        <Tooltip
-          label={
-            isConnectMode
-              ? connectStartId
-                ? 'Conectar: elige destino (clic en otra tarjeta)'
-                : 'Conectar: elige origen'
-              : 'Modo conectar / desconectar tarjetas'
-          }
-          side="top"
-        >
-          <button
-            onClick={() => {
-              setIsConnectMode(!isConnectMode)
-              setConnectStartId(null)
-            }}
-            className={`p-1.5 rounded-button transition-colors cursor-pointer ${
-              isConnectMode
-                ? 'bg-zinc-100 text-zinc-950 '
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-            }`}
-          >
-            <GitBranch size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label={showMinimap ? 'Ocultar minimapa' : 'Mostrar minimapa'} side="top">
-          <button
-            onClick={() => setShowMinimap(!showMinimap)}
-            className={`p-1.5 rounded-control transition-colors cursor-pointer ${
-              showMinimap ? 'text-zinc-100 bg-zinc-800' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-            }`}
-          >
-            <MapPin size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Ver todas las tarjetas" side="top">
-          <button onClick={handleFitAll} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">
-            <Scan size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Auto-organizar cuadrícula" side="top">
-          <button onClick={handleAutoArrange} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">
-            <Sparkles size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Acercar (Ctrl + rueda)" side="top">
-          <button onClick={() => handleZoomCenter(1.15)} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-            <ZoomIn size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label="Alejar (Ctrl + rueda)" side="top">
-          <button onClick={() => handleZoomCenter(0.85)} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-            <ZoomOut size={14} />
-          </button>
-        </Tooltip>
-
-        <Tooltip label={`Restablecer vista a 100% (actual ${Math.round(zoom * 100)}%)`} side="top">
-          <button onClick={handleResetView} className="p-1.5 rounded-control hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-            <RotateCcw size={14} />
-          </button>
-        </Tooltip>
-      </div>
+      <CanvasToolbar
+        zoom={zoom}
+        isConnectMode={isConnectMode}
+        connectStartId={connectStartId}
+        showMinimap={showMinimap}
+        onAddCard={addCard}
+        onToggleConnect={() => {
+          setIsConnectMode(!isConnectMode)
+          setConnectStartId(null)
+        }}
+        onToggleMinimap={() => setShowMinimap(!showMinimap)}
+        onFitAll={handleFitAll}
+        onArrange={handleAutoArrange}
+        onZoom={handleZoomCenter}
+        onResetView={handleResetView}
+      />
 
       {lastDeleted && (
         <div
@@ -1005,108 +790,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             pointerEvents: 'none'
           }}
         >
-          {/* Connector SVG Layer */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
-            <defs>
-              <marker
-                id="canvas-arrow"
-                viewBox="0 0 10 10"
-                refX="7"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 1 L 10 5 L 0 9 z" fill="#828384" />
-              </marker>
-            </defs>
-            {connectors.map((conn) => {
-              const fromCard = cards.find((c) => c.id === conn.fromId)
-              const toCard = cards.find((c) => c.id === conn.toId)
-              if (!fromCard || !toCard) return null
-
-              const x1 = fromCard.x + fromCard.width
-              const y1 = fromCard.y + fromCard.height / 2
-              const x2 = toCard.x
-              const y2 = toCard.y + toCard.height / 2
-              const dx = Math.abs(x2 - x1) * 0.5
-
-              const pathData = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
-              const midX = (x1 + x2) / 2
-              const midY = (y1 + y2) / 2
-
-              return (
-                <g key={conn.id} className="group/conn">
-                  {/* Invisible wide path for easy clicking / hovering to disconnect */}
-                  <path
-                    d={pathData}
-                    stroke="transparent"
-                    strokeWidth="24"
-                    fill="none"
-                    className="cursor-pointer pointer-events-auto"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteConnector(conn.id)
-                    }}
-                  >
-                    <title>Haz clic para desconectar</title>
-                  </path>
-
-                  {/* Flow line */}
-                  <path
-                    d={pathData}
-                    stroke="#828384"
-                    strokeWidth="2.5"
-                    strokeDasharray="6 3"
-                    fill="none"
-                    opacity="0.85"
-                    markerEnd="url(#canvas-arrow)"
-                    className="group-hover/conn:stroke-rose-400 group-hover/conn:opacity-100 transition-colors pointer-events-none"
-                  />
-
-                  {/* Midpoint Interactive Delete / Disconnect Badge */}
-                  <g
-                    className="cursor-pointer pointer-events-auto"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteConnector(conn.id)
-                    }}
-                  >
-                    <title>Desconectar enlace</title>
-                    {/* Circle badge */}
-                    <circle
-                      cx={midX}
-                      cy={midY}
-                      r="12"
-                      className="fill-void stroke-zinc-700 group-hover/conn:stroke-rose-500 group-hover/conn:fill-rose-950/90 transition-all"
-                      strokeWidth="1.5"
-                    />
-                    {/* Cross icon */}
-                    <line
-                      x1={midX - 3.5}
-                      y1={midY - 3.5}
-                      x2={midX + 3.5}
-                      y2={midY + 3.5}
-                      stroke="#a1a1aa"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      className="group-hover/conn:stroke-rose-300 transition-colors"
-                    />
-                    <line
-                      x1={midX + 3.5}
-                      y1={midY - 3.5}
-                      x2={midX - 3.5}
-                      y2={midY + 3.5}
-                      stroke="#a1a1aa"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      className="group-hover/conn:stroke-rose-300 transition-colors"
-                    />
-                  </g>
-                </g>
-              )
-            })}
-          </svg>
+          <CanvasConnectors cards={cards} connectors={connectors} onDisconnect={handleDeleteConnector} />
 
           {/* Selection, rubber band and alignment guides, above every card */}
           {(heldCard || marquee || selectedCards.length > 0) && (
@@ -1281,106 +965,17 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Floating Minimap (Bottom Right) */}
-        {showMinimap && cards.length > 0 && minimapData && (
-          <div
-            onWheel={(e) => e.stopPropagation()}
-            className="minimap-container island absolute bottom-4 right-4 z-40 w-56 p-2.5 select-none"
-          >
-            <div className="flex items-center justify-between text-[10px] text-zinc-400 border-b border-zinc-800/80 pb-1 mb-1.5">
-              <span className="font-medium text-zinc-100 flex items-center space-x-1">
-                <MapPin size={11} />
-                <span className="stamp text-[10px]">MINIMAP</span>
-              </span>
-              <div className="flex items-center space-x-2">
-                <span className="text-[9px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
-                  {Math.round(zoom * 100)}%
-                </span>
-                <span className="text-zinc-500">{cards.length} nodos</span>
-                <button
-                  onClick={() => setShowMinimap(false)}
-                  className="p-0.5 text-zinc-500 hover:text-zinc-300 rounded-control hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title="Ocultar minimapa"
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={minimapBoxRef}
-              onMouseDown={handleMinimapMouseDown}
-              className="relative w-full h-28 bg-void rounded-control border border-zinc-800/80 cursor-crosshair overflow-hidden"
-            >
-              {/* Connector lines in minimap */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
-                {connectors.map((conn) => {
-                  const fromCard = cards.find((c) => c.id === conn.fromId)
-                  const toCard = cards.find((c) => c.id === conn.toId)
-                  if (!fromCard || !toCard) return null
-
-                  const x1 = minimapData.offsetX + (fromCard.x + fromCard.width / 2 - minimapData.worldMinX) * minimapData.scale
-                  const y1 = minimapData.offsetY + (fromCard.y + fromCard.height / 2 - minimapData.worldMinY) * minimapData.scale
-                  const x2 = minimapData.offsetX + (toCard.x + toCard.width / 2 - minimapData.worldMinX) * minimapData.scale
-                  const y2 = minimapData.offsetY + (toCard.y + toCard.height / 2 - minimapData.worldMinY) * minimapData.scale
-
-                  return (
-                    <line
-                      key={conn.id}
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="#828384"
-                      strokeWidth="1"
-                      strokeDasharray="2 2"
-                      opacity="0.6"
-                    />
-                  )
-                })}
-              </svg>
-
-              {/* Cards in minimap */}
-              {cards.map((c) => {
-                const cardX = minimapData.offsetX + (c.x - minimapData.worldMinX) * minimapData.scale
-                const cardY = minimapData.offsetY + (c.y - minimapData.worldMinY) * minimapData.scale
-                const cardW = Math.max(5, c.width * minimapData.scale)
-                const cardH = Math.max(4, c.height * minimapData.scale)
-
-                let color = 'bg-zinc-500'
-                                                                                
-                const isFocused = c.id === focusedCardId
-
-                return (
-                  <div
-                    key={c.id}
-                    style={{
-                      left: `${cardX}px`,
-                      top: `${cardY}px`,
-                      width: `${cardW}px`,
-                      height: `${cardH}px`
-                    }}
-                    className={`absolute rounded-[1.5px] ${color} pointer-events-none transition-all ${
-                      isFocused
-                        ? 'ring-1 ring-white opacity-100 shadow-[0_0_6px_rgba(255,255,255,0.9)] z-10'
-                        : 'opacity-70'
-                    }`}
-                  />
-                )
-              })}
-
-              {/* Viewport Camera Box */}
-              <div
-                style={{
-                  left: `${minimapData.viewportRect.x}px`,
-                  top: `${minimapData.viewportRect.y}px`,
-                  width: `${minimapData.viewportRect.w}px`,
-                  height: `${minimapData.viewportRect.h}px`
-                }}
-                className="absolute border border-white/15 bg-white/5 rounded-[2px] pointer-events-none shadow-[0_0_10px_rgb(var(--signal-rgb)/0.35)] transition-all duration-75"
-              />
-            </div>
-          </div>
+        {showMinimap && (
+          <CanvasMinimap
+            cards={cards}
+            connectors={connectors}
+            pan={pan}
+            zoom={zoom}
+            focusedCardId={focusedCardId}
+            containerRef={containerRef}
+            onPan={setPan}
+            onHide={() => setShowMinimap(false)}
+          />
         )}
       </div>
     </div>

@@ -12,7 +12,6 @@ import { UpdateNotificationToast } from './components/UpdateNotificationToast'
 import { AgentToasts } from './components/AgentToasts'
 import { ActivityCenter } from './components/ActivityCenter'
 import {
-  AgentStatus,
   Workspace,
   AppState,
   TelemetryPayload,
@@ -28,8 +27,8 @@ import {
 import { terminalPool } from './services/terminal-pool'
 import { createCard, openingView } from './utils/cards'
 import { applyPalette, DEFAULT_WALLPAPER, readWallpaperPalette, wallpaperUrl } from './wallpapers'
-
-const ACTIVITY_LIMIT = 30
+import { useAgentActivity } from './hooks/useAgentActivity'
+import { AppHandlers, useGlobalShortcuts } from './hooks/useGlobalShortcuts'
 
 export const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState | null>(null)
@@ -47,10 +46,6 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
-  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({})
-  const [attentionWorkspaceIds, setAttentionWorkspaceIds] = useState<string[]>([])
-  const [agentToasts, setAgentToasts] = useState<AgentStatus[]>([])
-  const [activityLog, setActivityLog] = useState<AgentStatus[]>([])
   const [revealRequest, setRevealRequest] = useState<{ panelId: string; at: number } | null>(null)
 
   const appStateRef = useRef<AppState | null>(null)
@@ -62,13 +57,12 @@ export const App: React.FC = () => {
   const addCanvasCardRef = useRef<((kind: NodeKind) => void) | null>(null)
 
   // Listeners registered once on mount go through this: the first render returns before the handlers exist
-  const handlersRef = useRef<{
-    selectWorkspace: (id: string) => void
-    openPanel: (workspaceId: string, panelId: string) => void
-    newWorkspace: () => void
-    saveAll: () => Promise<void>
-    restartWorkspace: (id: string) => Promise<void>
-  } | null>(null)
+  const handlersRef = useRef<AppHandlers | null>(null)
+
+  const { agentStatuses, attentionWorkspaceIds, agentToasts, activityLog, dismissAgentToast, clearAttention } =
+    useAgentActivity((workspaceId, panelId) => handlersRef.current?.openPanel(workspaceId, panelId))
+
+  useGlobalShortcuts(handlersRef, appStateRef)
 
   // 1. Load initial workspaces from store once on mount
   useEffect(() => {
@@ -121,120 +115,6 @@ export const App: React.FC = () => {
     return () => {
       unsubscribe()
       unsubRemoteWs?.()
-    }
-  }, [])
-
-  // Agent runs across every workspace; finished ones elsewhere ask for attention
-  useEffect(() => {
-    const unsubscribeStatus = window.neoAPI.onAgentStatus((status) => {
-      setAgentStatuses((prev) => {
-        const { [status.panelId]: _previous, ...rest } = prev
-        return status.state === 'stopped' ? rest : { ...rest, [status.panelId]: status }
-      })
-      setAgentToasts((prev) => {
-        const others = prev.filter((t) => t.panelId !== status.panelId)
-        return status.notify ? [...others, status].slice(-4) : others
-      })
-      if (status.log) setActivityLog((prev) => [status, ...prev].slice(0, ACTIVITY_LIMIT))
-      if (status.notify) {
-        setAttentionWorkspaceIds((prev) =>
-          prev.includes(status.workspaceId) ? prev : [...prev, status.workspaceId]
-        )
-      }
-    })
-    const unsubscribeOpen = window.neoAPI.onAgentOpen(({ workspaceId, panelId }) => {
-      handlersRef.current?.openPanel(workspaceId, panelId)
-    })
-    return () => {
-      unsubscribeStatus()
-      unsubscribeOpen()
-    }
-  }, [])
-
-  const dismissAgentToast = useCallback((panelId: string): void => {
-    setAgentToasts((prev) => prev.filter((t) => t.panelId !== panelId))
-  }, [])
-
-  // 3. Global Keyboard Shortcuts Listener
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent): void => {
-      const isInput =
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement)?.isContentEditable
-
-      // Help modal with ? (Shift + /)
-      if (!isInput && e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault()
-        setIsShortcutsModalOpen((prev) => !prev)
-        return
-      }
-
-      // Escape closes open modals
-      if (e.key === 'Escape') {
-        setIsCommandPaletteOpen(false)
-        setIsShortcutsModalOpen(false)
-        setIsSettingsModalOpen(false)
-        setIsWorkspaceModalOpen(false)
-        return
-      }
-
-      const isCtrlOrCmd = e.ctrlKey || e.metaKey
-
-      // Ctrl + K or Ctrl + P: Command Palette
-      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'k' || e.key === 'K' || e.key === 'p' || e.key === 'P')) {
-        e.preventDefault()
-        setIsCommandPaletteOpen((prev) => !prev)
-        return
-      }
-
-      // Ctrl + N: Create new workspace
-      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
-        e.preventDefault()
-        handlersRef.current?.newWorkspace()
-        return
-      }
-
-      // Ctrl + B: Toggle sidebar visibility
-      if (isCtrlOrCmd && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault()
-        setIsSidebarVisible((prev) => !prev)
-        return
-      }
-
-      // Ctrl + S: Save all workspaces
-      if (isCtrlOrCmd && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault()
-        handlersRef.current?.saveAll()
-        return
-      }
-
-      const current = appStateRef.current
-      if (!current) return
-
-      // Ctrl + Shift + R: Restart active workspace
-      if (isCtrlOrCmd && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
-        e.preventDefault()
-        if (current.activeWorkspaceId) {
-          handlersRef.current?.restartWorkspace(current.activeWorkspaceId)
-        }
-        return
-      }
-
-      // Ctrl + 1..9: Quick switch workspaces
-      if (isCtrlOrCmd && !e.shiftKey && e.key >= '1' && e.key <= '9') {
-        const index = parseInt(e.key, 10) - 1
-        if (current.workspaces[index]) {
-          e.preventDefault()
-          handlersRef.current?.selectWorkspace(current.workspaces[index].id)
-        }
-        return
-      }
-    }
-
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleGlobalKeyDown)
     }
   }, [])
 
@@ -340,8 +220,7 @@ export const App: React.FC = () => {
   }
 
   const handleSelectWorkspace = (id: string): void => {
-    setAttentionWorkspaceIds((prev) => prev.filter((wId) => wId !== id))
-    setAgentToasts((prev) => prev.filter((t) => t.workspaceId !== id))
+    clearAttention(id)
     if (id === appState.activeWorkspaceId) return
 
     const updated: AppState = { ...appState, activeWorkspaceId: id }
@@ -588,7 +467,16 @@ export const App: React.FC = () => {
     openPanel: handleOpenPanel,
     newWorkspace: handleNewWorkspace,
     saveAll: handleSaveAll,
-    restartWorkspace: handleRestartWorkspace
+    restartWorkspace: handleRestartWorkspace,
+    toggleCommandPalette: () => setIsCommandPaletteOpen((prev) => !prev),
+    toggleShortcuts: () => setIsShortcutsModalOpen((prev) => !prev),
+    toggleSidebar: () => setIsSidebarVisible((prev) => !prev),
+    closeModals: () => {
+      setIsCommandPaletteOpen(false)
+      setIsShortcutsModalOpen(false)
+      setIsSettingsModalOpen(false)
+      setIsWorkspaceModalOpen(false)
+    }
   }
 
   const handleResetDefaults = async (): Promise<void> => {
