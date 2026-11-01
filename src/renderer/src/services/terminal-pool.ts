@@ -31,6 +31,7 @@ export interface ManagedTerminal {
   clearSearch: () => void
   getBufferText: () => string
   lastDetectedUrl?: string
+  glyphWidthsStale: boolean
   onUrlDetected: (cb: (url: string) => void) => () => void
 }
 
@@ -228,6 +229,14 @@ class TerminalPool {
       managed.term.options.fontSize = fontSize
       managed.fit()
     }
+  }
+
+  // Widths measured before a web font arrived belong to its fallback
+  public handleFontsLoaded(): void {
+    for (const managed of this.terminals.values()) {
+      managed.glyphWidthsStale = true
+    }
+    this.refreshAllMetrics()
   }
 
   public refreshAllMetrics(): void {
@@ -481,6 +490,11 @@ class TerminalPool {
     const fit = (): void => {
       try {
         if (container.clientWidth > 40 && container.clientHeight > 40) {
+          // xterm measures glyphs once, and gets 0 while detached or hidden, so redo it when visible
+          if (managed.glyphWidthsStale) {
+            managed.glyphWidthsStale = false
+            core?._renderService?.handleDevicePixelRatioChange()
+          }
           fitAddon.fit()
           if (!ptySpawned) {
             ensurePtySpawned()
@@ -632,6 +646,7 @@ class TerminalPool {
       clearSearch,
       getBufferText,
       lastDetectedUrl: lastUrl,
+      glyphWidthsStale: true,
       onUrlDetected
     }
 
@@ -706,10 +721,10 @@ export const terminalPool = new TerminalPool()
 // Listen to web fonts ready/loadingdone to fix font metrics desync bugs
 if (typeof document !== 'undefined' && 'fonts' in document) {
   document.fonts.ready.then(() => {
-    terminalPool.refreshAllMetrics()
+    terminalPool.handleFontsLoaded()
   })
   document.fonts.addEventListener('loadingdone', () => {
-    terminalPool.refreshAllMetrics()
+    terminalPool.handleFontsLoaded()
   })
 }
 
