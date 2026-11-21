@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowDownToLine, Copy, FileText, Palette, Send, Trash2, X } from 'lucide-react'
+import { ArrowDownToLine, Copy, FileText, Palette, Monitor, Send, Trash2, X } from 'lucide-react'
 import { AgentStatus, CanvasCard, NoteColor } from '../types'
 import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 import { terminalPool } from '../services/terminal-pool'
@@ -15,6 +15,7 @@ import {
   taskProgress,
   toggleTask
 } from '../utils/noteMarkup'
+import { confirmDialog } from './Dialogs'
 
 const SAVE_DELAY_MS = 400
 const CAPTURE_LINES = 40
@@ -36,6 +37,8 @@ interface NoteCardProps {
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 const COLOR_VARIANTS: Record<
@@ -129,7 +132,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   onLinkTerminal,
   onDelete,
   onDragStart,
-  onResizeStart
+  onResizeStart,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleText, setTitleText] = useState(card.title || 'NOTAS DEL PROYECTO')
@@ -194,20 +199,20 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     setSentTasks(({ [text]: _sent, ...rest }) => rest)
   }
 
-  const sendText = (text: string): boolean => {
+  const sendText = async (text: string): Promise<boolean> => {
     if (!target) return false
     if (
       text.includes('\n') &&
       !terminalPool.pastesAsOneBlock(target.id) &&
-      !confirm(`En "${target.title}" cada línea se ejecutará por separado. ¿Enviar de todas formas?`)
+      !(await confirmDialog(`En "${target.title}" cada línea se ejecutará por separado. ¿Enviar de todas formas?`))
     ) {
       return false
     }
     return terminalPool.submitText(target.id, text)
   }
 
-  const handleSendTask = (text: string): void => {
-    if (sendText(text)) setSentTasks((prev) => ({ ...prev, [text]: 'running' }))
+  const handleSendTask = async (text: string): Promise<void> => {
+    if (await sendText(text)) setSentTasks((prev) => ({ ...prev, [text]: 'running' }))
   }
 
   const readSelection = (): string => {
@@ -290,7 +295,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               {renderInline(block.text)}
             </span>
             {sent && !block.checked && (
-              <span className={`shrink-0 text-[10px] ${sent === 'running' ? 'text-signal animate-pulse' : 'text-zinc-100'}`}>
+              <span className={`shrink-0 text-[11px] ${sent === 'running' ? 'text-signal animate-pulse' : 'text-zinc-100'}`}>
                 {sent === 'running' ? 'en curso' : 'revisar'}
               </span>
             )}
@@ -426,7 +431,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               flushSave()
               setIsEditing((prev) => !prev)
             }}
-            className={`px-1.5 py-0.5 rounded-control text-[10px] transition-colors cursor-pointer ${
+            className={`px-1.5 py-0.5 rounded-control text-[11px] transition-colors cursor-pointer ${
               isEditing ? 'bg-white/10 text-zinc-100 border border-white/15' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'
             }`}
             title={isEditing ? 'Ver la nota' : 'Editar el texto'}
@@ -440,7 +445,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
             title="Copiar texto de la nota"
           >
-            <span className="text-[10px]">{copied ? '✓' : '⧉'}</span>
+            <span className="text-[11px]">{copied ? '✓' : '⧉'}</span>
           </button>
 
           <button
@@ -451,6 +456,17 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           >
             <Palette size={12} className={`pointer-events-none ${styleConfig.dot.replace('bg-', 'text-')}`} />
           </button>
+
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+          <button
+            type="button"
+            onClick={onMoveToNextDisplay}
+            className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            title={card.x >= 1920 ? 'Mover a Monitor 1' : 'Mover a Monitor 2'}
+          >
+            <Monitor size={11} className="pointer-events-none" />
+          </button>
+          )}
 
           <button
             type="button"
@@ -511,7 +527,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
       <div
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
-        className="h-7 pl-2.5 pr-4 bg-white/[0.04] border-t border-zinc-800/80 flex items-center gap-1.5 text-[10px] text-zinc-500 select-none shrink-0"
+        className="h-7 pl-2.5 pr-4 bg-white/[0.04] border-t border-zinc-800/80 flex items-center gap-1.5 text-[11px] text-zinc-500 select-none shrink-0"
       >
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${target ? `bg-signal ${isWorking ? 'animate-pulse' : ''}` : styleConfig.dot}`} />
         <select
@@ -519,7 +535,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           disabled={terminals.length === 0}
           onChange={(e) => handleTargetChange(e.target.value)}
           aria-label="Consola conectada a esta nota"
-          className="min-w-0 max-w-[45%] bg-void text-zinc-300 rounded-control text-[10px] focus:outline-none cursor-pointer disabled:cursor-default"
+          className="min-w-0 max-w-[45%] bg-void text-zinc-300 rounded-control text-[11px] focus:outline-none cursor-pointer disabled:cursor-default"
         >
           {!target && <option value="">{terminals.length ? 'Conectar a consola…' : 'Sin consolas'}</option>}
           {linked.map((t) => (

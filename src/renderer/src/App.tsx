@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { Play } from 'lucide-react'
+import { Play, Power, Terminal, Minus, Square, X } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Launchpad } from './components/Launchpad'
 import { WorkspaceHeader } from './components/WorkspaceHeader'
@@ -10,6 +10,9 @@ import { ShortcutsModal } from './components/ShortcutsModal'
 import { CommandPaletteModal } from './components/CommandPaletteModal'
 import { UpdateNotificationToast } from './components/UpdateNotificationToast'
 import { AgentToasts } from './components/AgentToasts'
+import { Dialogs, notify, confirmDialog } from './components/Dialogs'
+import { TitleTooltips } from './components/TitleTooltips'
+import { moveItem } from './utils/reorder'
 import { ActivityCenter } from './components/ActivityCenter'
 import {
   Workspace,
@@ -104,7 +107,7 @@ export const App: React.FC = () => {
     }
   }, [])
 
-  // 3. Listen to auto-updater status updates
+  // 3. Listen to auto-updater status updates and multi-window store sync
   useEffect(() => {
     const unsubscribe = window.neoAPI.onUpdaterStatus((status) => {
       setUpdateStatus(status)
@@ -112,9 +115,15 @@ export const App: React.FC = () => {
     const unsubRemoteWs = window.neoAPI.onRemoteWorkspaceSelect?.((wsId) => {
       handlersRef.current?.selectWorkspace(wsId)
     })
+    const unsubStoreSynced = window.neoAPI.onStoreSynced?.((syncedState) => {
+      if (syncedState) {
+        setAppState(syncedState)
+      }
+    })
     return () => {
       unsubscribe()
       unsubRemoteWs?.()
+      unsubStoreSynced?.()
     }
   }, [])
 
@@ -187,7 +196,7 @@ export const App: React.FC = () => {
       <div className="flex h-screen w-screen items-center justify-center bg-void text-zinc-400 text-xs">
         <div className="flex items-center space-x-2">
           <span className="w-2 h-2 rounded-full bg-signal animate-ping"></span>
-          <span>INITIALIZING NEO-WORKSPACE ORCHESTRATOR...</span>
+          <span>INICIANDO NEO-WORKSPACE...</span>
         </div>
       </div>
     )
@@ -517,7 +526,7 @@ export const App: React.FC = () => {
       {!activeWorkspace ? (
         <div className="flex-1 flex items-center justify-center p-8 select-none">
           <div className="island flex flex-col items-center text-center p-10 max-w-xl">
-          <span className="stamp text-[10px] text-zinc-400 mb-4">NWS</span>
+          <span className="stamp text-[11px] text-zinc-400 mb-4">NWS</span>
           <h2 className="display-serif text-6xl text-zinc-100 mb-4">Tu nuevo espacio</h2>
           <p className="text-sm font-light text-zinc-400 max-w-md mb-8 leading-relaxed">
             Crea tu primer entorno de trabajo con tus terminales, rutas de proyecto y comandos de inicio.
@@ -536,7 +545,7 @@ export const App: React.FC = () => {
           {!isCurrentWorkspaceRunning && (
             <div className="flex-1 flex items-center justify-center p-6 select-none">
               <div className="island flex flex-col items-center text-center p-10 max-w-xl">
-              <span className="stamp text-[10px] text-zinc-400 mb-4">Workspace detenido</span>
+              <span className="stamp text-[11px] text-zinc-400 mb-4">Workspace detenido</span>
               <h3 className="display-serif text-5xl text-zinc-100 mb-4">{activeWorkspace.name}</h3>
               <p className="text-sm font-light text-zinc-400 max-w-sm mb-8 leading-relaxed">
                 Las {activeWorkspace.panels.length} terminales de este workspace no se están ejecutando.
@@ -606,26 +615,32 @@ export const App: React.FC = () => {
     persistState(nextState)
   }
 
+  const handleReorderWorkspaces = (fromId: string, toId: string): void => {
+    if (!appState) return
+    const workspaces = moveItem(appState.workspaces, fromId, toId)
+    if (workspaces !== appState.workspaces) persistState({ ...appState, workspaces })
+  }
+
   const handleExportWorkspaces = async (): Promise<void> => {
     if (!appState) return
     const jsonStr = JSON.stringify(appState.workspaces, null, 2)
     await window.neoAPI.writeClipboard(jsonStr)
-    alert('¡Configuración de workspaces copiada al portapapeles en formato JSON!')
+    notify('Configuración de workspaces copiada al portapapeles en formato JSON')
   }
 
   const handleImportWorkspaces = async (): Promise<void> => {
     if (!appState) return
     const text = await window.neoAPI.readClipboard()
-    let raw = text
+    const raw = text
+    // Electron has no window.prompt, so the clipboard is the only way in
     if (!raw || !raw.trim().startsWith('[')) {
-      const input = prompt('Pega aquí el contenido JSON de los workspaces:')
-      if (!input) return
-      raw = input
+      notify('Copia primero el JSON de los workspaces al portapapeles y vuelve a importar', 'error')
+      return
     }
     try {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        if (confirm(`¿Importar ${parsed.length} workspaces y añadirlos a tu lista actual?`)) {
+        if (await confirmDialog(`¿Importar ${parsed.length} workspaces y añadirlos a tu lista actual?`)) {
           const imported = parsed.map((w: Workspace, i: number) => ({
             ...w,
             id: `ws-${Date.now()}-${i + 1}`
@@ -633,13 +648,13 @@ export const App: React.FC = () => {
           const nextWorkspaces = [...appState.workspaces, ...imported]
           const nextState = { ...appState, workspaces: nextWorkspaces }
           persistState(nextState)
-          alert(`¡${imported.length} workspaces importados con éxito!`)
+          notify(`${imported.length} workspaces importados`)
         }
       } else {
-        alert('El texto pegado no es una lista de workspaces válida.')
+        notify('El texto del portapapeles no es una lista de workspaces válida', 'error')
       }
     } catch (e) {
-      alert(`Error al analizar JSON: ${e}`)
+      notify(`Error al analizar JSON: ${e}`, 'error')
     }
   }
 
@@ -733,6 +748,7 @@ export const App: React.FC = () => {
       onNewWorkspace={handleNewWorkspace}
       onEditWorkspace={handleEditWorkspace}
       onDuplicateWorkspace={handleDuplicateWorkspace}
+      onReorderWorkspaces={handleReorderWorkspaces}
       onDeleteWorkspace={handleDeleteWorkspace}
       onStopWorkspace={handleStopWorkspace}
     />
@@ -748,6 +764,113 @@ export const App: React.FC = () => {
 
   const handleQuitAndInstallUpdate = (): void => {
     window.neoAPI.quitAndInstallUpdate()
+  }
+
+  const isSecondaryWindow = typeof window !== 'undefined' && window.location.search.includes('windowType=secondary')
+
+  if (isSecondaryWindow) {
+    return (
+      <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#07090c] text-zinc-200">
+        {/* Tier 1: Matching 40px Frameless TitleBar */}
+        <header className="h-10 bg-[#0d0f12] border-b border-zinc-800/80 flex items-center justify-between px-3 text-xs text-zinc-300 drag-region select-none shrink-0">
+          <div className="flex items-center space-x-2.5 no-drag">
+            <div className="flex items-center justify-center w-5 h-5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <Terminal size={12} strokeWidth={2.5} />
+            </div>
+            <div className="flex items-center space-x-1.5 font-mono text-[11px] tracking-wide">
+              <span className="font-semibold text-zinc-100">NEO-WORKSPACE</span>
+              <span className="text-zinc-500">::</span>
+              <span className="text-emerald-400 font-medium">CANVAS_EXTENDIDO</span>
+              <span className="text-[11px] text-zinc-400 bg-zinc-800/80 px-1.5 py-0.5 rounded font-mono ml-1">
+                MONITOR 2
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3 no-drag">
+            {activeWorkspace && (
+              <div className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800/70 text-zinc-400 font-mono text-[11px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>WORKSPACE:</span>
+                <span className="text-zinc-100 font-medium">{activeWorkspace.name}</span>
+              </div>
+            )}
+            <div className="hidden sm:flex items-center space-x-1.5 px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/50 text-emerald-400 font-mono text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>CONTINUIDAD TOTAL ACTIVA</span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-1 no-drag">
+            <button
+              onClick={() => window.neoAPI.minimizeWindow()}
+              className="w-7 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Minimizar"
+            >
+              <Minus size={12} />
+            </button>
+            <button
+              onClick={() => window.neoAPI.maximizeWindow()}
+              className="w-7 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Maximizar"
+            >
+              <Square size={11} />
+            </button>
+            <button
+              onClick={() => window.neoAPI.closeWindow()}
+              className="w-7 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-red-300 hover:bg-red-500/20 transition-colors cursor-pointer"
+              title="Cerrar lienzo extendido"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </header>
+
+        {/* Tier 2: Matching 40px Sub-header bar (Aligns canvas horizon with Primary window) */}
+        <div className="h-10 px-3 bg-[#0d0f13] border-b border-zinc-800/80 flex items-center justify-between select-none shrink-0 font-mono text-xs">
+          <div className="flex items-center space-x-2 text-zinc-400">
+            <span className="text-emerald-400 font-bold">⟵ CONTINUACIÓN FÍSICA</span>
+            <span className="text-zinc-600">//</span>
+            <span className="text-[11px] text-zinc-300">ESPACIO MONITOR 2 (x ≥ 1920)</span>
+          </div>
+          <div className="flex items-center space-x-2 text-[11px] text-zinc-500">
+            <span>Arrastra tarjetas hacia la izquierda para pasarlas al Monitor 1</span>
+          </div>
+        </div>
+
+        {/* Pure Canvas Viewport */}
+        <div className="flex-1 relative overflow-hidden bg-[#07090c]">
+          {activeWorkspace ? (
+            <CanvasWorkspace
+              key={`${activeWorkspace.id}-secondary-canvas`}
+              workspace={activeWorkspace}
+              panelsMetrics={telemetry?.panels || {}}
+              agentStatuses={agentStatuses}
+              isVisible
+              onSaveCanvasCards={(cards, connectors) => handleSaveCanvasCards(activeWorkspace.id, cards, connectors)}
+              isSecondaryWindow={true}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-zinc-500 font-mono text-xs">
+              Esperando workspace...
+            </div>
+          )}
+        </div>
+
+        {/* Matching 32px Footer StatusBar */}
+        <footer className="h-8 bg-[#090b0e] border-t border-zinc-800/80 px-3 flex items-center justify-between text-[11px] font-mono text-zinc-400 select-none shrink-0">
+          <div className="flex items-center space-x-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span className="text-zinc-300 font-medium">NEOWORK DUAL-SCREEN CORE</span>
+            <span className="text-zinc-600">//</span>
+            <span className="text-zinc-500">CANVAS COMPANION ACTIVO</span>
+          </div>
+          <div className="text-[11px] text-zinc-500">
+            MONITOR 2 VIEWPORT (1920x1080)
+          </div>
+        </footer>
+      </div>
+    )
   }
 
   return (
@@ -882,6 +1005,8 @@ export const App: React.FC = () => {
         }}
       />
 
+      <Dialogs />
+      <TitleTooltips />
       <AgentToasts
         toasts={agentToasts}
         onOpen={(status) => handleOpenPanel(status.workspaceId, status.panelId)}

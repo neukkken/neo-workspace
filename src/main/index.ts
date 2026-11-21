@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session, protocol, net as electronNet, Notification, powerMonitor } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, clipboard, session, protocol, net as electronNet, Notification, powerMonitor, screen } from 'electron'
 import { join, extname, basename } from 'path'
 import { pathToFileURL } from 'url'
 import * as fs from 'fs'
@@ -43,7 +43,29 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'nws-wallpaper', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
 ])
 
+export interface DisplayBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface DisplayInfo {
+  id: number
+  label: string
+  bounds: DisplayBounds
+  workArea: DisplayBounds
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+export interface MultiMonitorStatus {
+  displays: DisplayInfo[]
+  isSecondaryOpen: boolean
+}
+
 let mainWindow: BrowserWindow | null = null
+let secondaryWindow: BrowserWindow | null = null
 const store = new StoreManager()
 const wallpapers = new WallpaperStore(join(app.getPath('userData'), 'wallpapers'))
 const ptyManager = new PtyManager()
@@ -176,6 +198,149 @@ function cleanUrl(raw: string): string {
   return cleaned
 }
 
+function getDisplaysInfo(): DisplayInfo[] {
+  // Sort displays from left to right so Monitor 1 is always the leftmost display in physical space
+  const displays = [...screen.getAllDisplays()].sort((a, b) => a.bounds.x - b.bounds.x)
+  const primaryId = screen.getPrimaryDisplay().id
+
+  return displays.map((d, index) => {
+    const isPrimary = d.id === primaryId
+    const fallbackLabel = isPrimary ? `Monitor ${index + 1} (Principal)` : `Monitor ${index + 1}`
+    return {
+      id: d.id,
+      label: d.label ? `${d.label}${isPrimary ? ' (Principal)' : ''}` : fallbackLabel,
+      bounds: { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height },
+      workArea: { x: d.workArea.x, y: d.workArea.y, width: d.workArea.width, height: d.workArea.height },
+      scaleFactor: d.scaleFactor,
+      isPrimary
+    }
+  })
+}
+
+function getMultiMonitorStatus(): MultiMonitorStatus {
+  return {
+    displays: getDisplaysInfo(),
+    isSecondaryOpen: !!(secondaryWindow && !secondaryWindow.isDestroyed())
+  }
+}
+
+function broadcastMultiMonitorStatus(): void {
+  const status = getMultiMonitorStatus()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('screen:status-changed', status)
+  }
+  if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+    secondaryWindow.webContents.send('screen:status-changed', status)
+  }
+}
+
+function openSecondaryWindow(displayIndex?: number): boolean {
+  if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+    secondaryWindow.focus()
+    return true
+  }
+
+  // Sort displays from left to right
+  const displays = [...screen.getAllDisplays()].sort((a, b) => a.bounds.x - b.bounds.x)
+  if (displays.length < 2) return false
+
+  // Detect which display mainWindow currently resides on
+  const mainWindowDisplay = mainWindow && !mainWindow.isDestroyed()
+    ? screen.getDisplayMatching(mainWindow.getBounds())
+    : screen.getPrimaryDisplay()
+
+  // Target is the other display where mainWindow is NOT (or explicitly requested displayIndex)
+  const targetDisplay =
+    typeof displayIndex === 'number' && displays[displayIndex]
+      ? displays[displayIndex]
+      : displays.find((d) => d.id !== mainWindowDisplay.id) ||
+        displays.find((d) => d.id !== screen.getPrimaryDisplay().id) ||
+        displays[1] ||
+        displays[0]
+
+  if (!targetDisplay) return false
+
+  secondaryWindow = new BrowserWindow({
+    x: targetDisplay.workArea.x,
+    y: targetDisplay.workArea.y,
+    width: targetDisplay.workArea.width,
+    height: targetDisplay.workArea.height,
+    minWidth: 800,
+    minHeight: 500,
+    frame: false,
+    show: false, // Hidden initially so window manager placement doesn't hijack it
+    backgroundColor: '#090a0c',
+    icon: join(__dirname, '../../build/icon.png'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      webviewTag: true
+    }
+  })
+
+  const enforceTargetBounds = (): void => {
+    if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+      secondaryWindow.setBounds({
+        x: targetDisplay.workArea.x,
+        y: targetDisplay.workArea.y,
+        width: targetDisplay.workArea.width,
+        height: targetDisplay.workArea.height
+      })
+    }
+  }
+
+  secondaryWindow.once('ready-to-show', () => {
+    if (!secondaryWindow || secondaryWindow.isDestroyed()) return
+    secondaryWindow.show()
+    enforceTargetBounds()
+    // KWin / XWayland applies window placement rules on the initial map event.
+    // Repeating setBounds at short intervals overrides window manager placement and locks it to targetDisplay.
+    setTimeout(enforceTargetBounds, 50)
+    setTimeout(enforceTargetBounds, 150)
+    setTimeout(enforceTargetBounds, 350)
+    setTimeout(enforceTargetBounds, 600)
+  })
+
+  // Load renderer with windowType=secondary
+  if (process.env.ELECTRON_RENDERER_URL) {
+    secondaryWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}?windowType=secondary&displayId=${targetDisplay.id}`)
+  } else {
+    secondaryWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: { windowType: 'secondary', displayId: String(targetDisplay.id) }
+    })
+  }
+
+  secondaryWindow.on('closed', () => {
+    secondaryWindow = null
+    broadcastMultiMonitorStatus()
+  })
+
+  broadcastMultiMonitorStatus()
+  return true
+}
+
+function closeSecondaryWindow(): boolean {
+  if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+    secondaryWindow.close()
+    secondaryWindow = null
+    broadcastMultiMonitorStatus()
+    return true
+  }
+  return false
+}
+
+function setupScreenListeners(): void {
+  const notifyDisplaysChanged = (): void => {
+    broadcastMultiMonitorStatus()
+  }
+
+  screen.on('display-added', notifyDisplaysChanged)
+  screen.on('display-removed', notifyDisplaysChanged)
+  screen.on('display-metrics-changed', notifyDisplaysChanged)
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -250,6 +415,9 @@ function createWindow(): void {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('telemetry:update', data)
     }
+    if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+      secondaryWindow.webContents.send('telemetry:update', data)
+    }
   })
   telemetryMonitor.start(1800)
 
@@ -267,6 +435,10 @@ function createWindow(): void {
   }
 
   mainWindow.on('closed', () => {
+    if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+      secondaryWindow.close()
+    }
+    secondaryWindow = null
     telemetryMonitor?.stop()
     ptyManager.killAll()
     vscodeManager.cleanupAll()
@@ -347,6 +519,8 @@ app.whenReady().then(() => {
     })
   })
 
+  setupScreenListeners()
+
   // Configure session interceptors for default session, browser partition, and vscode partition
   setupSessionInterceptors(session.defaultSession)
   setupSessionInterceptors(session.fromPartition('persist:neowork-browser'))
@@ -365,11 +539,19 @@ app.whenReady().then(() => {
     return store.getState()
   })
 
-  ipcMain.handle('store:save', (_event, state: AppState) => {
+  ipcMain.handle('store:save', (event, state: AppState) => {
     if (state.activeWorkspaceId) {
       remoteGateway.setActiveWorkspace(state.activeWorkspaceId)
     }
-    return store.saveState(state)
+    const res = store.saveState(state)
+    // Synchronize state with other active window
+    if (mainWindow && !mainWindow.isDestroyed() && event.sender !== mainWindow.webContents) {
+      mainWindow.webContents.send('store:synced', state)
+    }
+    if (secondaryWindow && !secondaryWindow.isDestroyed() && event.sender !== secondaryWindow.webContents) {
+      secondaryWindow.webContents.send('store:synced', state)
+    }
+    return res
   })
 
   // Remote Mobile Gateway IPC
@@ -560,6 +742,7 @@ app.whenReady().then(() => {
       const replay = `${past}\x1b[0m\r\n\x1b[2m── sesión anterior ──\x1b[0m${'\r\n'.repeat(options.rows ?? 24)}`
       ptyManager.appendBuffer(options.panelId, replay)
       mainWindow.webContents.send(`pty:data:${options.panelId}`, replay)
+      if (secondaryWindow && !secondaryWindow.isDestroyed()) secondaryWindow.webContents.send(`pty:data:${options.panelId}`, replay)
     }
 
     return ptyManager.spawn(
@@ -569,11 +752,17 @@ app.whenReady().then(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(`pty:data:${options.panelId}`, data)
         }
+        if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+          secondaryWindow.webContents.send(`pty:data:${options.panelId}`, data)
+        }
       },
       (code: number, signal?: number) => {
         agentActivity.onExit(options.panelId, code)
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(`pty:exit:${options.panelId}`, { code, signal })
+        }
+        if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+          secondaryWindow.webContents.send(`pty:exit:${options.panelId}`, { code, signal })
         }
       }
     )
@@ -938,29 +1127,89 @@ app.whenReady().then(() => {
     return false
   })
 
-  // Window controls
-  ipcMain.on('window:minimize', () => {
-    mainWindow?.minimize()
+  // Multi-Monitor & Multi-Window IPC
+  ipcMain.handle('screen:get-displays', () => {
+    return getDisplaysInfo()
   })
 
-  ipcMain.on('window:maximize', () => {
-    if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize()
+  ipcMain.handle('screen:get-status', () => {
+    return getMultiMonitorStatus()
+  })
+
+  ipcMain.handle('screen:open-secondary', (_event, displayIndex?: number) => {
+    return openSecondaryWindow(displayIndex)
+  })
+
+  ipcMain.handle('screen:close-secondary', () => {
+    return closeSecondaryWindow()
+  })
+
+  ipcMain.handle('screen:move-window-to-display', (event, displayIndex: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (!win || win.isDestroyed()) return false
+    const displays = [...screen.getAllDisplays()].sort((a, b) => a.bounds.x - b.bounds.x)
+    const target = displays[displayIndex]
+    if (target) {
+      if (win.isMaximized()) {
+        win.unmaximize()
+      }
+      const isSec = win === secondaryWindow
+      const targetBounds = {
+        x: target.workArea.x + (isSec ? 0 : 30),
+        y: target.workArea.y + (isSec ? 0 : 30),
+        width: isSec ? target.workArea.width : Math.min(win.getBounds().width, target.workArea.width),
+        height: isSec ? target.workArea.height : Math.min(win.getBounds().height, target.workArea.height)
+      }
+      const enforce = (): void => {
+        if (!win.isDestroyed()) {
+          win.setBounds(targetBounds)
+        }
+      }
+      enforce()
+      setTimeout(enforce, 50)
+      setTimeout(enforce, 150)
+      setTimeout(enforce, 350)
+      broadcastMultiMonitorStatus()
+      return true
+    }
+    return false
+  })
+
+  // Window controls (per-window sender resolution)
+  ipcMain.on('window:minimize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    win?.minimize()
+  })
+
+  ipcMain.on('window:maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (!win || win.isDestroyed()) return
+    if (win.isMaximized()) {
+      win.unmaximize()
     } else {
-      mainWindow?.maximize()
+      const currentDisp = screen.getDisplayMatching(win.getBounds())
+      const primaryDisp = screen.getPrimaryDisplay()
+      // On multi-monitor Linux XWayland, standard win.maximize() can pull a window on secondary monitor back to screen 0.
+      if (process.platform === 'linux' && currentDisp.id !== primaryDisp.id) {
+        win.setBounds(currentDisp.workArea)
+      } else {
+        win.maximize()
+      }
     }
   })
 
-  ipcMain.handle('window:isMaximized', () => {
-    return mainWindow?.isMaximized() ?? false
+  ipcMain.handle('window:isMaximized', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    return win?.isMaximized() ?? false
   })
 
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion()
   })
 
-  ipcMain.on('window:close', () => {
-    mainWindow?.close()
+  ipcMain.on('window:close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    win?.close()
   })
 
   const gotTheLock = app.requestSingleInstanceLock()

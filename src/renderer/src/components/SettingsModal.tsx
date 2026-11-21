@@ -25,6 +25,7 @@ import {
 import { SidebarPosition, UpdateStatusPayload, TerminalThemeName } from '../types'
 import { BUILTIN_WALLPAPERS, NO_WALLPAPER, userWallpaperId, wallpaperUrl } from '../wallpapers'
 import { Tooltip } from './Tooltip'
+import { confirmDialog } from './Dialogs'
 
 const thumbClass = (selected: boolean): string =>
   `block w-full aspect-video rounded-button overflow-hidden border transition-colors cursor-pointer ${
@@ -170,15 +171,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const fontSizes = [11, 12, 13, 14, 16]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
+    <div role="dialog" aria-modal="true" aria-label="Ajustes" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
       <div className="bg-void border border-zinc-700/80 rounded-button w-[80vw] h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
         {/* Header */}
         <div className="px-5 py-3.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-sm font-medium text-zinc-100">
             <Sliders size={15} className="text-zinc-100" />
-            <span className="stamp text-[10px]">CONFIGURACIÓN DEL SISTEMA</span>
+            <span className="stamp text-[11px]">CONFIGURACIÓN DEL SISTEMA</span>
           </div>
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
           >
@@ -228,12 +229,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex items-center justify-between">
                           <span className="text-xs stamp">{pos.label}</span>
                           {isSelected && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-control bg-white/10 text-zinc-100 border border-white/15">
+                            <span className="text-[11px] px-1.5 py-0.2 rounded-control bg-white/10 text-zinc-100 border border-white/15">
                               ACTIVO
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">{pos.desc}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug">{pos.desc}</p>
                       </div>
                     </button>
                   )
@@ -245,11 +246,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="bg-void border border-zinc-800 rounded-button p-3.5 space-y-3">
               <div className="flex items-center space-x-2 text-zinc-200 font-medium">
                 <Palette size={13} className="text-zinc-100" />
-                <span className="stamp text-[10px]">PERSONALIZACIÓN DE TERMINAL</span>
+                <span className="stamp text-[11px]">PERSONALIZACIÓN DE TERMINAL</span>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] text-zinc-400">TEMA DE COLOR DE CONSOLA</label>
+                <label className="text-[11px] text-zinc-400">TEMA DE COLOR DE CONSOLA</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {themes.map((th) => {
                     const isCurrent = terminalTheme === th.id
@@ -284,7 +285,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       key={size}
                       onClick={() => onFontSizeChange?.(size)}
-                      className={`px-2 py-1 rounded-control text-[10px] transition-colors ${
+                      className={`px-2 py-1 rounded-control text-[11px] transition-colors ${
                         terminalFontSize === size
                           ? 'bg-zinc-100 text-zinc-950 font-medium'
                           : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
@@ -313,7 +314,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </select>
               </div>
-              <p className="text-[10px] text-zinc-500">
+              <p className="text-[11px] text-zinc-500">
                 Vale para las terminales nuevas o reiniciadas. Cada terminal puede usar otro motor en su configuración.
               </p>
             </div>
@@ -322,7 +323,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="bg-void border border-zinc-800 rounded-button p-3.5 space-y-3">
               <div className="flex items-center space-x-2 text-zinc-200 font-medium">
                 <Sparkles size={13} className="text-zinc-100" />
-                <span className="stamp text-[10px]">APARIENCIA</span>
+                <span className="stamp text-[11px]">APARIENCIA</span>
               </div>
               {[
                 {
@@ -385,7 +386,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between text-zinc-200">
                 <div className="flex items-center space-x-2">
                   <ImageIcon size={13} className="text-zinc-100" />
-                  <span className="stamp text-[10px]">FONDO DE PANTALLA</span>
+                  <span className="stamp text-[11px]">FONDO DE PANTALLA</span>
                 </div>
                 <button
                   onClick={handleImportWallpapers}
@@ -448,7 +449,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="bg-void border border-zinc-800 rounded-button p-3.5 space-y-3">
               <div className="flex items-center space-x-2 text-zinc-200 font-medium">
                 <FileDown size={13} className="text-zinc-300" />
-                <span className="stamp text-[10px]">RESPALDO Y PORTABILIDAD</span>
+                <span className="stamp text-[11px]">RESPALDO Y PORTABILIDAD</span>
               </div>
               <p className="text-[11px] text-zinc-400 leading-relaxed">
                 Exporta tu configuración de workspaces en formato JSON para respaldar o compartir con tu equipo, o importa una configuración existente.
@@ -480,9 +481,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-zinc-200 font-medium">
                   <DownloadCloud size={13} className="text-zinc-100" />
-                  <span className="stamp text-[10px]">ACTUALIZACIONES DEL SISTEMA</span>
+                  <span className="stamp text-[11px]">ACTUALIZACIONES DEL SISTEMA</span>
                 </div>
-                <span className="text-[10px] text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-control border border-zinc-800">
+                <span className="text-[11px] text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-control border border-zinc-800">
                   v{appVersion}
                 </span>
               </div>
@@ -521,7 +522,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <button
                       onClick={onCheckForUpdates}
-                      className="px-2.5 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                      className="px-2.5 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors"
                     >
                       Revisar
                     </button>
@@ -535,7 +536,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>¡Nueva versión disponible: v{updateStatus.info?.version}!</span>
                     </div>
                     {updateStatus.info?.releaseNotes && (
-                      <div className="text-[10px] text-zinc-400 bg-zinc-950 p-2 rounded-control border border-zinc-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                      <div className="text-[11px] text-zinc-400 bg-zinc-950 p-2 rounded-control border border-zinc-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
                         {updateStatus.info.releaseNotes}
                       </div>
                     )}
@@ -566,7 +567,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         style={{ width: `${updateStatus.progress?.percent || 0}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[10px] text-zinc-500">
+                    <div className="flex justify-between text-[11px] text-zinc-500">
                       <span>
                         {updateStatus.progress
                           ? `${updateStatus.progress.transferredMb}MB de ${updateStatus.progress.totalMb}MB`
@@ -587,7 +588,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <CheckCircle2 size={14} />
                       <span>¡Descarga completa! Versión v{updateStatus.info?.version} lista para instalar.</span>
                     </div>
-                    <p className="text-[10px] text-zinc-400">
+                    <p className="text-[11px] text-zinc-400">
                       Haz clic en el botón para reiniciar NeoWork y aplicar la actualización automáticamente.
                     </p>
                     <div className="flex justify-end pt-1">
@@ -609,7 +610,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>Error al verificar o descargar actualizaciones.</span>
                     </div>
                     {updateStatus.error && (
-                      <p className="text-[10px] text-zinc-500 bg-zinc-950 p-2 rounded-control border border-zinc-800">
+                      <p className="text-[11px] text-zinc-500 bg-zinc-950 p-2 rounded-control border border-zinc-800">
                         {updateStatus.error}
                       </p>
                     )}
@@ -630,10 +631,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="bg-void border border-zinc-800 rounded-button p-3 space-y-1.5 text-[11px]">
               <div className="flex items-center space-x-1.5 text-zinc-300 font-medium mb-1">
                 <ShieldCheck size={12} className="text-zinc-100" />
-                <span>Runtime Environment</span>
+                <span>Entorno de ejecución</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Terminal Engine:</span>
+                <span>Motor de terminal:</span>
                 <span className="text-zinc-200">node-pty / xterm.js v6</span>
               </div>
               <div className="flex justify-between text-zinc-400">
@@ -641,8 +642,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <span className="text-zinc-200">24-bit TrueColor</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Telemetry:</span>
-                <span className="text-zinc-200">Process PID polling (1.8s)</span>
+                <span>Telemetría:</span>
+                <span className="text-zinc-200">Sondeo de PID de procesos (1.8s)</span>
               </div>
             </div>
           </div>
@@ -651,8 +652,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Actions */}
         <div className="px-5 py-3 border-t border-zinc-800 flex items-center justify-between">
           <button
-            onClick={() => {
-              if (confirm('¿Estás seguro de que quieres restablecer los workspaces por defecto?')) {
+            onClick={async () => {
+              if (await confirmDialog('¿Estás seguro de que quieres restablecer los workspaces por defecto?')) {
                 onResetDefaults()
                 onClose()
               }

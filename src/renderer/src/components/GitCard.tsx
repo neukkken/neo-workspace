@@ -184,7 +184,7 @@ export const GitCard: React.FC<GitCardProps> = ({
               value={repo ?? ''}
               onChange={(e) => setRepo(e.target.value)}
               onMouseDown={(e) => e.stopPropagation()}
-              className="min-w-0 bg-void border border-zinc-700/80 rounded-control px-1.5 py-0.5 text-zinc-200 text-[10px] focus:outline-none cursor-pointer"
+              className="min-w-0 bg-void border border-zinc-700/80 rounded-control px-1.5 py-0.5 text-zinc-200 text-[11px] focus:outline-none cursor-pointer"
             >
               {repos.map((r) => (
                 <option key={r} value={r}>
@@ -193,9 +193,9 @@ export const GitCard: React.FC<GitCardProps> = ({
               ))}
             </select>
           ) : (
-            changes && <span className="text-[10px] text-zinc-400 truncate">{changes.name}</span>
+            changes && <span className="text-[11px] text-zinc-400 truncate">{changes.name}</span>
           )}
-          {changes?.branch && <span className="text-[10px] text-zinc-100 truncate">{changes.branch}</span>}
+          {changes?.branch && <span className="text-[11px] text-zinc-100 truncate">{changes.branch}</span>}
         </div>
 
         <div className="flex items-center space-x-1 shrink-0" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -216,7 +216,7 @@ export const GitCard: React.FC<GitCardProps> = ({
       ) : (
         <div className="flex-1 min-h-0 flex text-xs bg-void/70">
           <div className="w-2/5 min-w-0 border-r border-zinc-800 flex flex-col">
-            <div className="h-7 px-2.5 border-b border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400 shrink-0">
+            <div className="h-7 px-2.5 border-b border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400 shrink-0">
               <span>{changes?.truncated ? `Primeros ${files.length} archivos` : `${files.length} ${files.length === 1 ? 'archivo' : 'archivos'}`}</span>
               <span className="tabular-nums">
                 <span className="text-emerald-300">+{totalAdded}</span> <span className="text-rose-300">−{totalRemoved}</span>
@@ -239,10 +239,10 @@ export const GitCard: React.FC<GitCardProps> = ({
                     <span className={`w-2.5 shrink-0 font-mono ${style.className}`}>{file.status}</span>
                     <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
                       <span className="truncate shrink-0 max-w-full">{file.path.slice(slash + 1)}</span>
-                      {slash >= 0 && <span className="truncate text-[10px] text-zinc-500">{file.path.slice(0, slash)}</span>}
+                      {slash >= 0 && <span className="truncate text-[11px] text-zinc-500">{file.path.slice(0, slash)}</span>}
                     </span>
                     {file.added !== null && (
-                      <span className="shrink-0 tabular-nums text-[10px] text-zinc-500">+{file.added} −{file.removed}</span>
+                      <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">+{file.added} −{file.removed}</span>
                     )}
                   </button>
                 )
@@ -251,7 +251,7 @@ export const GitCard: React.FC<GitCardProps> = ({
             {changes && changes.commits.length > 0 && (
               <div className="max-h-[30%] overflow-y-auto no-scrollbar border-t border-zinc-800 py-1 shrink-0">
                 {changes.commits.map((commit) => (
-                  <div key={commit.hash} title={commit.subject} className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] text-zinc-400">
+                  <div key={commit.hash} title={commit.subject} className="flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] text-zinc-400">
                     <GitCommitHorizontal size={11} className="shrink-0 text-zinc-500" />
                     <span className="font-mono shrink-0">{commit.hash}</span>
                     <span className="truncate">{commit.subject}</span>

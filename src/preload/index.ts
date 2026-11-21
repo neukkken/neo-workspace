@@ -139,6 +139,27 @@ export interface AgentStatus {
   log: boolean
 }
 
+export interface DisplayBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface DisplayInfo {
+  id: number
+  label: string
+  bounds: DisplayBounds
+  workArea: DisplayBounds
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+export interface MultiMonitorStatus {
+  displays: DisplayInfo[]
+  isSecondaryOpen: boolean
+}
+
 export type NeoAPI = typeof neoAPI
 export const neoAPI = {
   getStore: (): Promise<AppState> => ipcRenderer.invoke('store:get'),
@@ -248,6 +269,30 @@ export const neoAPI = {
   closeWindow: (): void => ipcRenderer.send('window:close'),
   isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+
+  // Multi-Monitor & Multi-Window API
+  getDisplays: (): Promise<DisplayInfo[]> => ipcRenderer.invoke('screen:get-displays'),
+  getMultiMonitorStatus: (): Promise<MultiMonitorStatus> => ipcRenderer.invoke('screen:get-status'),
+  openSecondaryWindow: (displayIndex?: number): Promise<boolean> =>
+    ipcRenderer.invoke('screen:open-secondary', displayIndex),
+  closeSecondaryWindow: (): Promise<boolean> => ipcRenderer.invoke('screen:close-secondary'),
+  moveWindowToDisplay: (displayIndex: number): Promise<boolean> =>
+    ipcRenderer.invoke('screen:move-window-to-display', displayIndex),
+  onMultiMonitorStatus: (callback: (status: MultiMonitorStatus) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: MultiMonitorStatus): void =>
+      callback(status)
+    ipcRenderer.on('screen:status-changed', handler)
+    return () => {
+      ipcRenderer.removeListener('screen:status-changed', handler)
+    }
+  },
+  onStoreSynced: (callback: (state: AppState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AppState): void => callback(state)
+    ipcRenderer.on('store:synced', handler)
+    return () => {
+      ipcRenderer.removeListener('store:synced', handler)
+    }
+  },
 
   // File System & Project Intelligence
   listDirectory: (dirPath?: string): Promise<{ dir: string; entries: any[]; error?: string }> =>

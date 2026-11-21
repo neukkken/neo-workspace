@@ -13,7 +13,8 @@ import {
   Download,
   Settings,
   FolderOpen,
-  X
+  X,
+  Monitor
 } from 'lucide-react'
 import { AgentStatus, CanvasCard, ProcessMetrics } from '../types'
 import { XTermView, XTermViewHandle } from './XTermView'
@@ -21,6 +22,7 @@ import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
 import { terminalPool } from '../services/terminal-pool'
 import { cleanUrl, openExternalUrl } from '../utils/url'
 import { formatElapsed, useNow } from '../utils/time'
+import { notify } from './Dialogs'
 
 interface TerminalCanvasCardProps {
   card: CanvasCard
@@ -33,6 +35,8 @@ interface TerminalCanvasCardProps {
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
   onOpenInBrowser?: (url: string) => void
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
@@ -45,7 +49,9 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
   onDelete,
   onDragStart,
   onResizeStart,
-  onOpenInBrowser
+  onOpenInBrowser,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const termRef = useRef<XTermViewHandle>(null)
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
@@ -153,7 +159,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
   const handleExportLog = (): void => {
     const text = terminalPool.exportLog(card.id)
     if (!text) {
-      alert('La terminal no contiene registros para exportar.')
+      notify('La terminal no contiene registros para exportar', 'error')
       return
     }
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
@@ -209,7 +215,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
           </span>
 
           {(isWorking || isDone) && elapsed !== null && (
-            <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">
+            <span className="text-[11px] text-zinc-400 tabular-nums shrink-0">
               {isWorking ? 'trabajando' : 'lista'} {formatElapsed(elapsed)}
             </span>
           )}
@@ -224,7 +230,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
                   openExternalUrl(target)
                 }
               }}
-              className="flex items-center space-x-1 px-1.5 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/15 text-[10px] transition-colors cursor-pointer animate-in fade-in"
+              className="flex items-center space-x-1 px-1.5 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/15 text-[11px] transition-colors cursor-pointer animate-in fade-in"
               title={`Abrir ${cleanUrl(detectedUrl)}`}
             >
               <Globe size={10} className="text-zinc-300 shrink-0" />
@@ -236,7 +242,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
         {/* Right: Metrics & Controls */}
         <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {metrics && (
-            <div className="hidden sm:flex items-center space-x-1 text-[10px] text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-1.5 py-0.5 rounded-control">
+            <div className="hidden sm:flex items-center space-x-1 text-[11px] text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-1.5 py-0.5 rounded-control">
               <span>{metrics.cpu}%</span>
               <span className="text-zinc-600">|</span>
               <span>{metrics.memoryMb}MB</span>
@@ -299,7 +305,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
             }}
             onMouseDown={(e) => e.stopPropagation()}
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="Restart Terminal Process"
+            title="Reiniciar proceso de la terminal"
           >
             <RotateCw size={11} className="pointer-events-none" />
           </button>
@@ -311,10 +317,25 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
             }}
             onMouseDown={(e) => e.stopPropagation()}
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="Clear Console"
+            title="Limpiar consola"
           >
             <Eraser size={11} className="pointer-events-none" />
           </button>
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveToNextDisplay()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title={card.x >= 1920 ? "Mover a Monitor 1" : "Mover a Monitor 2"}
+            >
+              <Monitor size={11} className="pointer-events-none" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={(e) => {
@@ -354,9 +375,9 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <span className="font-medium text-zinc-200 text-xs flex items-center space-x-1.5">
                 <Settings size={13} className="text-zinc-100" />
-                <span className="stamp text-[10px]">CONFIGURAR TERMINAL</span>
+                <span className="stamp text-[11px]">CONFIGURAR TERMINAL</span>
               </span>
-              <button
+              <button aria-label="Cerrar"
                 type="button"
                 onClick={() => setIsConfigOpen(false)}
                 className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
@@ -367,7 +388,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
 
             <div className="flex-1 overflow-y-auto py-3 space-y-3">
               <div>
-                <label className="text-[10px] text-zinc-500 stamp block mb-1">
+                <label className="text-[11px] text-zinc-500 stamp block mb-1">
                   TÍTULO
                 </label>
                 <input
@@ -380,7 +401,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 stamp block mb-1">
+                <label className="text-[11px] text-zinc-500 stamp block mb-1">
                   DIRECTORIO DE TRABAJO (PATH)
                 </label>
                 <div className="flex items-center space-x-1.5">
@@ -397,13 +418,13 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
                     className="px-2.5 py-1.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs flex items-center space-x-1 transition-colors shrink-0 cursor-pointer"
                   >
                     <FolderOpen size={12} className="text-zinc-400" />
-                    <span>Browse</span>
+                    <span>Examinar</span>
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 stamp block mb-1">
+                <label className="text-[11px] text-zinc-500 stamp block mb-1">
                   MOTOR DE TERMINAL
                 </label>
                 <select
@@ -418,14 +439,14 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
                     </option>
                   ))}
                 </select>
-                <span className="text-[9px] text-zinc-500 block mt-0.5">
+                <span className="text-[11px] text-zinc-500 block mt-0.5">
                   Se aplica al reiniciar la terminal
                 </span>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] text-zinc-500 stamp block">
+                  <label className="text-[11px] text-zinc-500 stamp block">
                     SECUENCIA DE COMANDOS (AUTO-RUN)
                   </label>
                   {(() => {
@@ -435,7 +456,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
                       .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
                     if (steps.length > 1) {
                       return (
-                        <span className="px-1.5 py-0.2 rounded-control bg-white/5 text-zinc-300 border border-white/15 text-[9px] font-medium">
+                        <span className="px-1.5 py-0.2 rounded-control bg-white/5 text-zinc-300 border border-white/15 text-[11px] font-medium">
                           {steps.length} pasos en secuencia
                         </span>
                       )
@@ -451,7 +472,7 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
                   className="w-full bg-white/[0.04] border border-zinc-700/80 rounded-control px-2.5 py-1.5 text-zinc-100 text-xs font-mono focus:border-white/40 focus:outline-none placeholder:text-zinc-600 leading-relaxed resize-y min-h-[64px]"
                   spellCheck={false}
                 />
-                <span className="text-[9px] text-zinc-500 block mt-0.5">
+                <span className="text-[11px] text-zinc-500 block mt-0.5">
                   1 comando por línea (# para comentarios)
                 </span>
               </div>

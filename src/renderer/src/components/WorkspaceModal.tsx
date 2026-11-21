@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { X, Plus, Trash2, FolderOpen, Terminal, Check, Sparkles } from 'lucide-react'
 import { Workspace, PanelConfig, CanvasConnector } from '../types'
 import { openingView, panelCards } from '../utils/cards'
+import { WORKSPACE_ICONS } from '../utils/workspaceIcons'
+import { notify } from './Dialogs'
 
 interface PresetTemplate {
   name: string
@@ -72,6 +74,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
 
   const [name, setName] = useState(workspace?.name || '')
   const [code, setCode] = useState(workspace?.code || '01')
+  const [icon, setIcon] = useState(workspace?.icon || 'folder')
   const [panels, setPanels] = useState<PanelConfig[]>(
     workspace?.panels || [
       {
@@ -108,6 +111,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     if (isOpen) {
       setName(workspace?.name || '')
       setCode(workspace?.code || '01')
+      setIcon(workspace?.icon || 'folder')
       const initialPanels =
         workspace?.panels && workspace.panels.length > 0
           ? workspace.panels.map((p) => ({
@@ -189,7 +193,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   const handleExportNeoworkJson = async (): Promise<void> => {
     const targetDir = panels[0]?.cwd
     if (!targetDir) {
-      alert('Configura primero una carpeta para el primer panel para guardar .neowork.json')
+      notify('Configura primero una carpeta para el primer panel para guardar .neowork.json', 'error')
       return
     }
     const wsToSave = {
@@ -212,9 +216,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
     }
     const success = await window.neoAPI.writeNeoworkConfig(targetDir, wsToSave)
     if (success) {
-      alert(`¡Archivo .neowork.json guardado con éxito en ${targetDir}!`)
+      notify(`Archivo .neowork.json guardado en ${targetDir}`)
     } else {
-      alert('No se pudo guardar el archivo .neowork.json')
+      notify('No se pudo guardar el archivo .neowork.json', 'error')
     }
   }
 
@@ -243,9 +247,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           })
         )
       }
-      alert('¡Configuración .neowork.json cargada con éxito!')
+      notify('Configuración .neowork.json cargada')
     } else {
-      alert(`No se encontró un archivo .neowork.json en ${selectedDir}`)
+      notify(`No se encontró un archivo .neowork.json en ${selectedDir}`, 'error')
     }
   }
 
@@ -336,6 +340,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
       id: workspace?.id || `ws-${Date.now()}`,
       name: name.trim(),
       code: code.trim() || '01',
+      icon,
       panels: updatedPanels,
       ...(updatedCanvasCards !== undefined ? { canvasCards: updatedCanvasCards } : {}),
       ...(updatedConnectors !== undefined ? { canvasConnectors: updatedConnectors } : {})
@@ -345,7 +350,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none">
+    <div role="dialog" aria-modal="true" aria-label="Configurar workspace" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none">
       <div className="bg-void border border-zinc-700/80 rounded-button w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-5 py-3.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
@@ -353,7 +358,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             <Terminal size={15} className="text-zinc-100" />
             <span>{isEditing ? 'EDIT WORKSPACE' : 'CREATE NEW WORKSPACE'}</span>
           </div>
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
           >
@@ -392,7 +397,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                     <div className="font-medium text-zinc-200 group-hover:text-zinc-100 text-[11px] truncate">
                       {tpl.name}
                     </div>
-                    <div className="text-[10px] text-zinc-500 truncate mt-0.5">
+                    <div className="text-[11px] text-zinc-500 truncate mt-0.5">
                       {tpl.description}
                     </div>
                   </button>
@@ -404,18 +409,18 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
           {/* Workspace General Info */}
           <div className="grid grid-cols-4 gap-3">
             <div className="col-span-3 space-y-1">
-              <label className="text-[11px] font-medium text-zinc-400">WORKSPACE NAME</label>
+              <label className="text-[11px] font-medium text-zinc-400">NOMBRE DEL WORKSPACE</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. EFAStack, BackendAPI"
+                placeholder="Ej: EFAStack, BackendAPI"
                 className="w-full bg-void border border-zinc-800 focus:border-white/40 focus:outline-none rounded-control px-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 transition-colors"
               />
             </div>
             <div className="col-span-1 space-y-1">
-              <label className="text-[11px] font-medium text-zinc-400">CODE / TAG</label>
+              <label className="text-[11px] font-medium text-zinc-400">CÓDIGO</label>
               <input
                 type="text"
                 value={code}
@@ -426,10 +431,32 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
             </div>
           </div>
 
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-zinc-400">ICONO</label>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(WORKSPACE_ICONS).map(([key, { Icon, label }]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setIcon(key)}
+                  aria-pressed={icon === key}
+                  title={label}
+                  className={`w-7 h-7 rounded-control flex items-center justify-center border transition-colors cursor-pointer ${
+                    icon === key
+                      ? 'bg-white/10 border-white/40 text-zinc-100'
+                      : 'border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:border-zinc-600'
+                  }`}
+                >
+                  <Icon size={14} />
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Panels Header */}
           <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
             <div className="text-[11px] text-zinc-400 stamp">
-              TERMINAL PANELS ({panels.length})
+              PANELES DE TERMINAL ({panels.length})
             </div>
             <button
               type="button"
@@ -437,7 +464,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
               className="flex items-center space-x-1 px-2.5 py-1 rounded-control bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 hover:text-white text-xs transition-colors"
             >
               <Plus size={12} className="text-zinc-100" />
-              <span>Add Panel</span>
+              <span>Añadir panel</span>
             </button>
           </div>
 
@@ -460,7 +487,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       type="button"
                       onClick={() => handleRemovePanel(idx)}
                       className="p-1 rounded-control text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Remove panel"
+                      title="Quitar panel"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -470,19 +497,19 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {/* Panel Title */}
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500">TITLE</label>
+                    <label className="text-[11px] text-zinc-500">TÍTULO</label>
                     <input
                       type="text"
                       value={p.title}
                       onChange={(e) => handleUpdatePanel(idx, 'title', e.target.value)}
-                      placeholder="e.g. FRONTEND-DEV"
+                      placeholder="Ej: FRONTEND-DEV"
                       className="w-full bg-white/[0.04] border border-zinc-800/90 focus:border-zinc-700 rounded-control px-2.5 py-1 text-xs font-mono text-zinc-200"
                     />
                   </div>
 
                   {/* Directory Selection */}
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500">WORKING DIRECTORY (PATH)</label>
+                    <label className="text-[11px] text-zinc-500">CARPETA DE TRABAJO</label>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="text"
@@ -500,7 +527,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                         className="flex items-center space-x-1 px-2.5 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors shrink-0"
                       >
                         <FolderOpen size={12} className="text-zinc-400" />
-                        <span>Browse</span>
+                        <span>Examinar</span>
                       </button>
                     </div>
                   </div>
@@ -515,15 +542,15 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                   return (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] text-zinc-500 flex items-center space-x-1.5">
+                        <label className="text-[11px] text-zinc-500 flex items-center space-x-1.5">
                           <span>SECUENCIA DE COMANDOS (AUTO-RUN)</span>
                           {cmdSteps.length > 1 && (
-                            <span className="px-1.5 py-0.2 rounded-control bg-white/5 text-zinc-300 border border-white/15 text-[9px] font-medium">
+                            <span className="px-1.5 py-0.2 rounded-control bg-white/5 text-zinc-300 border border-white/15 text-[11px] font-medium">
                               {cmdSteps.length} pasos en secuencia
                             </span>
                           )}
                         </label>
-                        <span className="text-[9px] text-zinc-500">
+                        <span className="text-[11px] text-zinc-500">
                           1 comando por línea (# comentarios)
                         </span>
                       </div>
@@ -537,7 +564,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       />
                       {panelSuggestions[idx] && panelSuggestions[idx].length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1 items-center">
-                          <span className="text-[9px] text-zinc-500">Sugerencias:</span>
+                          <span className="text-[11px] text-zinc-500">Sugerencias:</span>
                           {panelSuggestions[idx].slice(0, 5).map((s) => (
                             <button
                               key={s.command}
@@ -547,7 +574,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                                 const next = cur ? `${cur}\n${s.command}` : s.command
                                 handleUpdatePanel(idx, 'command', next)
                               }}
-                              className="px-1.5 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-100 border border-white/15 text-[10px] transition-colors cursor-pointer"
+                              className="px-1.5 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-100 border border-white/15 text-[11px] transition-colors cursor-pointer"
                               title="Click para añadir a la secuencia"
                             >
                               + {s.label}
@@ -568,13 +595,13 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                       onChange={(e) => handleUpdatePanel(idx, 'autoStart', e.target.checked)}
                       className="rounded-control border-zinc-700 text-zinc-100 focus:ring-0 bg-zinc-900"
                     />
-                    <span>Execute command automatically on workspace load</span>
+                    <span>Ejecutar el comando automáticamente al abrir el workspace</span>
                   </label>
 
                   <button
                     type="button"
                     onClick={() => setShowEnvMap((prev) => ({ ...prev, [idx]: !prev[idx] }))}
-                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
                   >
                     {showEnvMap[idx] ? 'Ocultar ENV ▲' : '+ Variables ENV ▼'}
                   </button>
@@ -583,7 +610,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 {/* Environment variables textarea */}
                 {showEnvMap[idx] && (
                   <div className="pt-1.5">
-                    <label className="text-[10px] text-zinc-500 block mb-1">
+                    <label className="text-[11px] text-zinc-500 block mb-1">
                       VARIABLES DE ENTORNO (KEY=VALUE, un par por línea)
                     </label>
                     <textarea
@@ -633,7 +660,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
                 className="flex items-center space-x-1.5 px-4 py-1.5 rounded-control bg-signal hover:bg-signal/85 text-zinc-950 font-medium text-xs transition-colors cursor-pointer"
               >
                 <Check size={13} strokeWidth={2.5} />
-                <span>Save Workspace</span>
+                <span>Guardar workspace</span>
               </button>
             </div>
           </div>

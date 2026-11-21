@@ -19,7 +19,10 @@ export const Tooltip: React.FC<TooltipProps> = ({ label, side = 'bottom', childr
   return (
     <>
       <span className="inline-flex" onMouseEnter={show} onMouseLeave={() => setPos(null)}>
-        {children}
+        {/* The label is the only name an icon-only button has, so it goes on the control too */}
+        {React.isValidElement<{ 'aria-label'?: string }>(children)
+          ? React.cloneElement(children, { 'aria-label': label })
+          : children}
       </span>
       {pos &&
         createPortal(

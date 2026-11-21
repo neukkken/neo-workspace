@@ -87,6 +87,7 @@ export interface Workspace {
   id: string
   name: string
   code: string
+  icon?: string // key of WORKSPACE_ICONS
   panels: PanelConfig[]
   layoutMode?: WorkspaceLayoutMode
   canvasCards?: CanvasCard[]
@@ -149,6 +150,27 @@ export interface AgentStatus {
 export interface ProcessMetrics {
   cpu: number
   memoryMb: number
+}
+
+export interface DisplayBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface DisplayInfo {
+  id: number
+  label: string
+  bounds: DisplayBounds
+  workArea: DisplayBounds
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+export interface MultiMonitorStatus {
+  displays: DisplayInfo[]
+  isSecondaryOpen: boolean
 }
 
 export interface SystemMetrics {

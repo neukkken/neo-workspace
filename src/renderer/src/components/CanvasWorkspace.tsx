@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle } from 'react'
-import { AgentStatus, CanvasCard, CanvasConnector, NodeKind, ProcessMetrics, Workspace, PanelConfig } from '../types'
+import { ArrowLeftRight, Link, Monitor, Unlink } from 'lucide-react'
+import { AgentStatus, CanvasCard, CanvasConnector, NodeKind, ProcessMetrics, Workspace, PanelConfig, DisplayInfo } from '../types'
 import { TerminalCanvasCard } from './TerminalCanvasCard'
 import { BrowserCard } from './BrowserCard'
 import { VSCodeCard } from './VSCodeCard'
@@ -28,6 +29,7 @@ import {
   travelToShow,
   within
 } from '../utils/canvasGrid'
+import { confirmDialog } from './Dialogs'
 
 // Screen pixels the bottom toolbar takes from the canvas
 const TOOLBAR_CLEARANCE = 72
@@ -49,6 +51,7 @@ interface CanvasWorkspaceProps {
   addCardRef?: React.Ref<(kind: NodeKind) => void>
   revealRequest?: { panelId: string; at: number } | null
   onSaveCanvasCards: (cards: CanvasCard[], connectors?: CanvasConnector[]) => void
+  isSecondaryWindow?: boolean
 }
 
 export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
@@ -58,7 +61,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   isVisible,
   addCardRef,
   revealRequest,
-  onSaveCanvasCards
+  onSaveCanvasCards,
+  isSecondaryWindow = false
 }) => {
   // Initialize cards from workspace panels or canvasCards
   const [cards, setCards] = useState<CanvasCard[]>(() => {
@@ -218,11 +222,119 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     })
   }, [workspace.panels, onSaveCanvasCards, connectors])
 
+  // Camera & Linked Viewport State
+  const [isCameraLinked, setIsCameraLinked] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('neowork-camera-linked')
+      return saved !== null ? saved === 'true' : true
+    } catch {
+      return true
+    }
+  })
+  const isCameraLinkedRef = useRef(isCameraLinked)
+  isCameraLinkedRef.current = isCameraLinked
+
+  // Multi-Monitor & Multi-Window Companion State
+  const [displays, setDisplays] = useState<DisplayInfo[]>([])
+  const displaysRef = useRef<DisplayInfo[]>([])
+  displaysRef.current = displays
+  const [isSecondaryOpen, setIsSecondaryOpen] = useState(false)
+
   // Pan & Zoom state
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  // If secondary window, start pan.x offset by -1920 (Monitor 1 width) so it begins exactly where Monitor 1 ends
+  const [pan, setPan] = useState<{ x: number; y: number }>(() => {
+    if (isSecondaryWindow) {
+      return { x: -1920, y: 0 }
+    }
+    return { x: 0, y: 0 }
+  })
   const [zoom, setZoom] = useState(1)
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 })
+  const dragRafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (window.neoAPI.getMultiMonitorStatus) {
+      window.neoAPI.getMultiMonitorStatus().then((status) => {
+        if (status) {
+          setDisplays(status.displays || [])
+          setIsSecondaryOpen(status.isSecondaryOpen || false)
+          if (isSecondaryWindow && status.displays?.[0]?.bounds?.width) {
+            const w = status.displays[0].bounds.width
+            setPan((prev) => (prev.x === -1920 ? { ...prev, x: -w } : prev))
+          }
+        }
+      }).catch(() => {})
+    }
+
+    const unsubStatus = window.neoAPI.onMultiMonitorStatus?.((status) => {
+      setDisplays(status.displays || [])
+      setIsSecondaryOpen(status.isSecondaryOpen || false)
+    })
+
+    return () => {
+      unsubStatus?.()
+    }
+  }, [isSecondaryWindow])
+
+  // Cross-Window real-time canvas synchronization via BroadcastChannel
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null
+    try {
+      channel = new BroadcastChannel('neowork-canvas-sync')
+      channel.onmessage = (event) => {
+        const {
+          type,
+          cards: incomingCards,
+          connectors: incomingConnectors,
+          pan: incomingPan,
+          zoom: incomingZoom,
+          sender,
+          linked
+        } = event.data || {}
+
+        if (type === 'cards:sync' && Array.isArray(incomingCards)) {
+          const json = JSON.stringify(incomingCards)
+          if (json !== lastSavedCardsJsonRef.current) {
+            lastSavedCardsJsonRef.current = json
+            cardsRef.current = incomingCards
+            setCards(incomingCards)
+          }
+        }
+
+        if (type === 'connectors:sync' && Array.isArray(incomingConnectors)) {
+          connectorsRef.current = incomingConnectors
+          setConnectors(incomingConnectors)
+        }
+
+        if (type === 'camera:sync' && isCameraLinkedRef.current && incomingPan && typeof incomingZoom === 'number') {
+          const primaryW = displaysRef.current[0]?.bounds?.width || 1920
+          remoteCameraRef.current = true
+          if (isSecondaryWindow && sender === 'primary') {
+            setPan({
+              x: incomingPan.x - primaryW,
+              y: incomingPan.y
+            })
+            setZoom(incomingZoom)
+          } else if (!isSecondaryWindow && sender === 'secondary') {
+            setPan({
+              x: incomingPan.x + primaryW,
+              y: incomingPan.y
+            })
+            setZoom(incomingZoom)
+          }
+        }
+
+        if (type === 'camera:link_toggle' && typeof linked === 'boolean') {
+          setIsCameraLinked(linked)
+        }
+      }
+    } catch {}
+
+    return () => {
+      channel?.close()
+    }
+  }, [isSecondaryWindow])
 
   const [focusedCardId, setFocusedCardId] = useState<string | null>(null)
 
@@ -257,7 +369,68 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
 
-  // Sync to parent on card change
+  // Broadcast camera position to peer window when cameras are linked
+  const broadcastCamera = useCallback(
+    (nextPan: { x: number; y: number }, nextZoom: number) => {
+      if (!isCameraLinkedRef.current) return
+      try {
+        const channel = new BroadcastChannel('neowork-canvas-sync')
+        channel.postMessage({
+          type: 'camera:sync',
+          pan: nextPan,
+          zoom: nextZoom,
+          sender: isSecondaryWindow ? 'secondary' : 'primary'
+        })
+        channel.close()
+      } catch {}
+    },
+    [isSecondaryWindow]
+  )
+
+  // Camera moves from the peer window are applied here, not echoed back
+  const remoteCameraRef = useRef(false)
+  useEffect(() => {
+    if (remoteCameraRef.current) {
+      remoteCameraRef.current = false
+      return
+    }
+    broadcastCamera(pan, zoom)
+  }, [pan, zoom, broadcastCamera])
+
+  // The peer window follows a drag or resize live, at most once per frame
+  const broadcastCardsPreview = (): void => {
+    if (dragRafRef.current) return
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null
+      try {
+        const channel = new BroadcastChannel('neowork-canvas-sync')
+        channel.postMessage({ type: 'cards:sync', cards: cardsRef.current })
+        channel.close()
+      } catch {}
+    })
+  }
+
+  // Toggle Camera Linkage between screens
+  const handleToggleCameraLink = (): void => {
+    const next = !isCameraLinked
+    setIsCameraLinked(next)
+    try {
+      localStorage.setItem('neowork-camera-linked', String(next))
+      const channel = new BroadcastChannel('neowork-canvas-sync')
+      channel.postMessage({ type: 'camera:link_toggle', linked: next })
+      channel.close()
+    } catch {}
+  }
+
+  // Quick camera viewport jump to Monitor 1 or Monitor 2
+  const handleFocusMonitor = (monitorNum: 1 | 2): void => {
+    const primaryW = displaysRef.current[0]?.bounds?.width || 1920
+    const targetPan = monitorNum === 1 ? { x: 0, y: 0 } : { x: -primaryW, y: 0 }
+    setPan(targetPan)
+    setZoom(1)
+  }
+
+  // Sync to parent on card change and broadcast across windows
   const updateCardsAndNotify = useCallback(
     (updater: (prev: CanvasCard[]) => CanvasCard[]) => {
       setCards((prev) => {
@@ -265,6 +438,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         cardsRef.current = next
         lastSavedCardsJsonRef.current = JSON.stringify(next)
         onSaveCanvasCards(next, connectorsRef.current)
+        try {
+          const channel = new BroadcastChannel('neowork-canvas-sync')
+          channel.postMessage({ type: 'cards:sync', cards: next })
+          channel.close()
+        } catch {}
         return next
       })
     },
@@ -277,11 +455,79 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         const next = updater(prev)
         connectorsRef.current = next
         onSaveCanvasCards(cardsRef.current, next)
+        try {
+          const channel = new BroadcastChannel('neowork-canvas-sync')
+          channel.postMessage({ type: 'connectors:sync', connectors: next })
+          channel.close()
+        } catch {}
         return next
       })
     },
     [onSaveCanvasCards]
   )
+
+  const handleToggleSecondary = async (): Promise<void> => {
+    if (isSecondaryOpen) {
+      await window.neoAPI.closeSecondaryWindow()
+      setIsSecondaryOpen(false)
+    } else {
+      const opened = await window.neoAPI.openSecondaryWindow()
+      if (opened) setIsSecondaryOpen(true)
+    }
+  }
+
+  const handleMoveWindow = async (displayIndex = 1): Promise<void> => {
+    await window.neoAPI.moveWindowToDisplay(displayIndex)
+  }
+
+  // Seamless Card Transfer between Monitor 1 and Monitor 2
+  const handleMoveCardToDisplay = async (cardId: string): Promise<void> => {
+    const card = cardsRef.current.find((c) => c.id === cardId)
+    if (!card) return
+
+    if (!isSecondaryOpen && window.neoAPI.openSecondaryWindow) {
+      const opened = await window.neoAPI.openSecondaryWindow()
+      if (opened) setIsSecondaryOpen(true)
+    }
+
+    const primaryW = displaysRef.current[0]?.bounds?.width || 1920
+    const isCurrentlyOnMonitor2 = card.x >= primaryW
+    const nextX = isCurrentlyOnMonitor2
+      ? Math.max(60, card.x - primaryW)
+      : card.x + primaryW
+
+    updateCardsAndNotify((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, x: Math.round(nextX) } : c))
+    )
+    setFocusedCardId(cardId)
+  }
+
+  // Multi-Monitor Keyboard Shortcuts (Ctrl+Alt+2, Ctrl+Alt+M)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      if (isInput) return
+
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey
+      if (isCtrlOrCmd && e.altKey) {
+        if (e.key === '2') {
+          e.preventDefault()
+          handleToggleSecondary()
+          return
+        }
+        if (e.key === 'm' || e.key === 'M') {
+          e.preventDefault()
+          handleMoveWindow(1)
+          return
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [displays, isSecondaryOpen])
 
   // The part of the screen cards can use, clear of the bottom toolbar
   const canvasSize = (): { width: number; height: number } => ({
@@ -404,12 +650,12 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     setZoom(1)
   }
 
-  const handleDeleteCards = (ids: string[]): void => {
+  const handleDeleteCards = async (ids: string[]): Promise<void> => {
     const targets = cardsRef.current.filter((c) => ids.includes(c.id))
     if (targets.length === 0) return
 
     const working = targets.filter((c) => agentStatuses[c.id]?.state === 'working').map((c) => c.title)
-    if (working.length > 0 && !confirm(`${working.join(', ')} sigue trabajando. Si lo eliminas, se detendrá. ¿Eliminar?`)) {
+    if (working.length > 0 && !(await confirmDialog(`${working.join(', ')} sigue trabajando. Si lo eliminas, se detendrá. ¿Eliminar?`))) {
       return
     }
 
@@ -442,7 +688,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)))
   }
 
-  const handleDeleteCard = (id: string): void => handleDeleteCards([id])
+  const handleDeleteCard = (id: string): void => void handleDeleteCards([id])
 
   const handleUndoDelete = (): void => {
     if (!lastDeleted) return
@@ -462,7 +708,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     const handleKeyDown = (e: KeyboardEvent): void => {
       if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return
       if (e.key === 'Escape') setSelectedIds([])
-      if (e.key === 'Delete' && selectedIds.length > 0) handleDeleteCards(selectedIds)
+      if (e.key === 'Delete' && selectedIds.length > 0) void handleDeleteCards(selectedIds)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -632,10 +878,11 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       } else if (isPanning) {
         const dx = e.clientX - panStartRef.current.mouseX
         const dy = e.clientY - panStartRef.current.mouseY
-        setPan({
+        const nextPan = {
           x: panStartRef.current.panX + dx,
           y: panStartRef.current.panY + dy
-        })
+        }
+        setPan(nextPan)
       } else if (draggingCardId) {
         const dx = (e.clientX - dragStartRef.current.mouseX) / zoom
         const dy = (e.clientY - dragStartRef.current.mouseY) / zoom
@@ -653,6 +900,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             return start ? { ...c, x: start.x + snapped.x - cardX, y: start.y + snapped.y - cardY } : c
           })
         })
+        broadcastCardsPreview()
       } else if (resizingCardId) {
         const { mouseX, mouseY, box, edges } = resizeStartRef.current
         const dx = Math.round((e.clientX - mouseX) / zoom)
@@ -663,6 +911,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             c.id === resizingCardId ? { ...c, ...resizeBox(box, edges, dx, dy, others, SNAP_DISTANCE / zoom) } : c
           )
         })
+        broadcastCardsPreview()
       }
     }
 
@@ -678,7 +927,13 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       if (draggingCardId || resizingCardId) {
         setDraggingCardId(null)
         setResizingCardId(null)
-        onSaveCanvasCards(cards, connectors)
+        const finalCards = cardsRef.current
+        onSaveCanvasCards(finalCards, connectorsRef.current)
+        try {
+          const channel = new BroadcastChannel('neowork-canvas-sync')
+          channel.postMessage({ type: 'cards:sync', cards: finalCards })
+          channel.close()
+        } catch {}
       }
     }
 
@@ -707,7 +962,9 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   const handleResetView = (): void => {
     viewBeforeFocusRef.current = null
-    setPan({ x: 0, y: 0 })
+    const primaryW = displaysRef.current[0]?.bounds?.width || 1920
+    const targetPan = isSecondaryWindow ? { x: -primaryW, y: 0 } : { x: 0, y: 0 }
+    setPan(targetPan)
     setZoom(1)
   }
 
@@ -734,6 +991,50 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         onZoom={handleZoomCenter}
         onResetView={handleResetView}
       />
+
+      {displays.length > 1 && (
+        <div
+          onWheel={(e) => e.stopPropagation()}
+          style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
+          className="canvas-toolbar absolute bottom-4 left-4 z-40 flex items-center space-x-1 island rounded-full px-2 py-1.5 text-xs whitespace-nowrap"
+        >
+          <button
+            onClick={handleToggleSecondary}
+            title={isSecondaryOpen ? 'Cerrar ventana del Monitor 2' : `Abrir ventana en ${displays[1]?.label || 'Monitor 2'}`}
+            className={`p-1.5 rounded-button transition-colors cursor-pointer ${
+              isSecondaryOpen ? 'text-emerald-300 bg-emerald-500/15' : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/10'
+            }`}
+          >
+            <Monitor size={14} />
+          </button>
+          <button
+            onClick={handleToggleCameraLink}
+            title={isCameraLinked ? 'Cámaras vinculadas entre monitores' : 'Cámaras independientes'}
+            className={`p-1.5 rounded-button transition-colors cursor-pointer ${
+              isCameraLinked ? 'text-zinc-100 bg-white/10' : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/10'
+            }`}
+          >
+            {isCameraLinked ? <Link size={14} /> : <Unlink size={14} />}
+          </button>
+          {([1, 2] as const).map((n) => (
+            <button
+              key={n}
+              onClick={() => handleFocusMonitor(n)}
+              title={`Centrar vista en Monitor ${n}`}
+              className="px-1.5 py-1 rounded-button text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              M{n}
+            </button>
+          ))}
+          <button
+            onClick={() => handleMoveWindow(1)}
+            title="Mover esta ventana al Monitor 2"
+            className="p-1.5 rounded-button text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <ArrowLeftRight size={14} />
+          </button>
+        </div>
+      )}
 
       {lastDeleted && (
         <div
@@ -790,6 +1091,37 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             pointerEvents: 'none'
           }}
         >
+          {/* Dual Monitor Seam Boundary Line (Shows physical bezel connection at x = primaryMonitorWidth) */}
+          {displays.length > 1 && (
+            <div
+              className="absolute pointer-events-none select-none z-10"
+              style={{
+                left: displays[0]?.bounds?.width || 1920,
+                top: -10000,
+                width: 2,
+                height: 20000
+              }}
+            >
+              {/* Glowing vertical seam */}
+              <div className="w-full h-full border-l-2 border-dashed border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.35)]" />
+
+              {/* Seam Markers along the vertical axis */}
+              {[-500, 40, 600, 1200, 1800, 2400].map((yOffset) => (
+                <div
+                  key={yOffset}
+                  className="absolute flex items-center -translate-x-1/2 whitespace-nowrap bg-zinc-950/95 border border-emerald-500/40 rounded-full px-3 py-1 shadow-2xl backdrop-blur-md"
+                  style={{ top: 10000 + yOffset }}
+                >
+                  <div className="flex items-center space-x-2 text-[11px] font-mono">
+                    <span className="text-zinc-400 font-medium">◀ {displays[0]?.label || 'MONITOR 1'}</span>
+                    <span className="text-emerald-400 font-bold">|</span>
+                    <span className="text-emerald-400 font-medium">{displays[1]?.label || 'MONITOR 2'} ▶</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <CanvasConnectors cards={cards} connectors={connectors} onDisconnect={handleDeleteConnector} />
 
           {/* Selection, rubber band and alignment guides, above every card */}
@@ -850,6 +1182,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     onDelete={handleDeleteCard}
                     onDragStart={handleDragStart}
                     onResizeStart={handleResizeStart}
+                    displaysCount={displays.length}
+                    onMoveToNextDisplay={() => handleMoveCardToDisplay(card.id)}
                   />
                 )
               }
@@ -900,6 +1234,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     onDragStart={handleDragStart}
                     onResizeStart={handleResizeStart}
                     onOpenInBrowser={(url) => handleAddBrowser(url)}
+                    displaysCount={displays.length}
+                    onMoveToNextDisplay={() => handleMoveCardToDisplay(card.id)}
                   />
                 )
               }
@@ -916,6 +1252,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     onDragStart={handleDragStart}
                     onResizeStart={handleResizeStart}
                     onOpenInBrowser={(url) => handleAddBrowser(url)}
+                    displaysCount={displays.length}
+                    onMoveToNextDisplay={() => handleMoveCardToDisplay(card.id)}
                   />
                 )
               }
@@ -932,6 +1270,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     onDelete={handleDeleteCard}
                     onDragStart={handleDragStart}
                     onResizeStart={handleResizeStart}
+                    displaysCount={displays.length}
+                    onMoveToNextDisplay={() => handleMoveCardToDisplay(card.id)}
                   />
                 )
               }
@@ -949,6 +1289,8 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   onDragStart={handleDragStart}
                   onResizeStart={handleResizeStart}
                   onOpenInBrowser={(url) => handleAddBrowser(url)}
+                  displaysCount={displays.length}
+                  onMoveToNextDisplay={() => handleMoveCardToDisplay(card.id)}
                 />
               )
             })}

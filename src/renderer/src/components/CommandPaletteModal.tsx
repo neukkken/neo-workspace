@@ -16,7 +16,8 @@ import {
   Download,
   RotateCw,
   Code2,
-  GitCompare
+  GitCompare,
+  Monitor
 } from 'lucide-react'
 import { Workspace, AppState, NodeKind } from '../types'
 
@@ -111,6 +112,38 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     }
   })
 
+
+  items.push({
+    id: 'act-toggle-secondary',
+    title: 'Multimonitor: Abrir / Cerrar Ventana en Monitor 2',
+    subtitle: 'Abre una ventana complementaria nativa y sincronizada en el segundo monitor (Ctrl+Alt+2)',
+    category: 'Canvas',
+    icon: <Monitor size={15} className="text-emerald-400" />,
+    action: () => {
+      if (window.neoAPI.getMultiMonitorStatus && window.neoAPI.openSecondaryWindow) {
+        window.neoAPI.getMultiMonitorStatus().then((s) => {
+          if (s.isSecondaryOpen) {
+            window.neoAPI.closeSecondaryWindow()
+          } else {
+            window.neoAPI.openSecondaryWindow()
+          }
+        })
+      }
+      onClose()
+    }
+  })
+
+  items.push({
+    id: 'act-move-display',
+    title: 'Multimonitor: Mover Ventana al Monitor 2',
+    subtitle: 'Traslada la ventana actual directamente al Monitor 2 (Ctrl+Alt+M)',
+    category: 'Canvas',
+    icon: <Monitor size={15} className="text-cyan-400" />,
+    action: () => {
+      window.neoAPI.moveWindowToDisplay?.(1)
+      onClose()
+    }
+  })
 
   items.push({
     id: 'act-toggle-sidebar',
@@ -251,7 +284,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/70 backdrop-blur-xs select-none"
+      role="dialog" aria-modal="true" aria-label="Paleta de comandos" className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/70 backdrop-blur-xs select-none"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -272,7 +305,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
             placeholder="Escribe un comando o busca un workspace... (↑↓ para navegar, Enter para ejecutar)"
             className="flex-1 bg-transparent text-sm font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none"
           />
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="p-1 rounded-control text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
           >
@@ -312,14 +345,14 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                     <div className="truncate">
                       <div className="text-xs font-medium">{item.title}</div>
                       {item.subtitle && (
-                        <div className="text-[10px] text-zinc-500 truncate mt-0.5">
+                        <div className="text-[11px] text-zinc-500 truncate mt-0.5">
                           {item.subtitle}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <span className="text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-control shrink-0">
+                  <span className="text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-control shrink-0">
                     {item.category}
                   </span>
                 </div>
@@ -329,7 +362,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="px-4 py-2 bg-white/[0.04] border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-500">
+        <div className="px-4 py-2 bg-white/[0.04] border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-500">
           <div className="flex items-center space-x-3">
             <span>↑↓ Navegar</span>
             <span>↵ Ejecutar</span>

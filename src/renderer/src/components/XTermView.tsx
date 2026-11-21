@@ -427,7 +427,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
 
             {searchQuery && (
               <span
-                className={`text-[10px] px-1 rounded-control ${
+                className={`text-[11px] px-1 rounded-control ${
                   matchStatus === false
                     ? 'text-rose-400 bg-rose-500/10'
                     : 'text-zinc-100 bg-white/5'
@@ -511,7 +511,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                   <Copy size={13} className={contextMenu.hasSelection ? 'text-zinc-100' : 'text-zinc-600'} />
                   <span>Copiar</span>
                 </div>
-                <span className="text-[10px] text-zinc-500">Ctrl+Shift+C</span>
+                <span className="text-[11px] text-zinc-500">Ctrl+Shift+C</span>
               </button>
 
               <button
@@ -522,7 +522,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                   <Clipboard size={13} className="text-zinc-400" />
                   <span>Pegar</span>
                 </div>
-                <span className="text-[10px] text-zinc-500">Ctrl+Shift+V</span>
+                <span className="text-[11px] text-zinc-500">Ctrl+Shift+V</span>
               </button>
 
               <button
@@ -536,7 +536,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                   <Search size={13} className="text-zinc-400" />
                   <span>Buscar</span>
                 </div>
-                <span className="text-[10px] text-zinc-500">Ctrl+F</span>
+                <span className="text-[11px] text-zinc-500">Ctrl+F</span>
               </button>
 
               <div className="h-px bg-zinc-800 my-1" />
@@ -549,7 +549,7 @@ export const XTermView = forwardRef<XTermViewHandle, XTermViewProps>(
                   <CheckSquare size={13} className="text-zinc-400" />
                   <span>Seleccionar Todo</span>
                 </div>
-                <span className="text-[10px] text-zinc-500">Ctrl+Shift+A</span>
+                <span className="text-[11px] text-zinc-500">Ctrl+Shift+A</span>
               </button>
 
               <button

@@ -62,6 +62,16 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
       category: 'Vistas & Layout'
     },
     {
+      keys: ['Ctrl', 'Alt', '2'],
+      description: 'Abrir / Cerrar ventana complementaria en el Monitor 2',
+      category: 'Vistas & Layout'
+    },
+    {
+      keys: ['Ctrl', 'Alt', 'M'],
+      description: 'Mover la ventana activa al Monitor 2',
+      category: 'Vistas & Layout'
+    },
+    {
       keys: ['Ctrl', 'Shift', 'R'],
       description: 'Reiniciar todas las terminales del Workspace actual',
       category: 'Terminal & Consola'
@@ -101,7 +111,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
   const categories = Array.from(new Set(shortcuts.map((s) => s.category)))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
+    <div role="dialog" aria-modal="true" aria-label="Atajos de teclado" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
       <div className="bg-void border border-zinc-700/80 rounded-button w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-5 py-3.5 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
@@ -109,7 +119,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
             <Keyboard size={16} className="text-zinc-100" />
             <span>KEYBOARD SHORTCUTS // GUÍA DE ATAJOS</span>
           </div>
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="p-1 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
           >
@@ -137,7 +147,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
                         {item.keys.map((k, kIdx) => (
                           <kbd
                             key={kIdx}
-                            className="px-2 py-0.5 rounded-control bg-zinc-800 border border-zinc-700/70 text-zinc-200 text-[10px] font-medium"
+                            className="px-2 py-0.5 rounded-control bg-zinc-800 border border-zinc-700/70 text-zinc-200 text-[11px] font-medium"
                           >
                             {k}
                           </kbd>

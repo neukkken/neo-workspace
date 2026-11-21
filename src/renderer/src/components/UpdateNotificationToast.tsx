@@ -63,7 +63,7 @@ export const UpdateNotificationToast: React.FC<UpdateNotificationToastProps> = (
           </p>
         ) : status.state === 'downloading' ? (
           <div>
-            <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
+            <div className="flex justify-between text-[11px] text-zinc-400 mb-1">
               <span>{status.progress ? `${status.progress.transferredMb}MB / ${status.progress.totalMb}MB` : 'Descargando...'}</span>
               <span className="text-zinc-300 font-medium">{status.progress?.percent || 0}%</span>
             </div>
@@ -85,7 +85,7 @@ export const UpdateNotificationToast: React.FC<UpdateNotificationToastProps> = (
       <div className="mt-3.5 pt-2.5 border-t border-zinc-800/80 flex items-center justify-end space-x-2">
         <button
           onClick={onOpenSettings}
-          className="px-2.5 py-1 text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="px-2.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
         >
           Ver detalles
         </button>

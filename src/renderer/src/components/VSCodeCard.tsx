@@ -26,6 +26,8 @@ interface VSCodeCardProps {
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 const CHROME_USER_AGENT =
@@ -39,7 +41,9 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
   onUpdate,
   onDelete,
   onDragStart,
-  onResizeStart
+  onResizeStart,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const currentPath = card.vscodePath || workspacePath || ''
   const [mode, setMode] = useState<'local' | 'web' | 'custom'>(card.vscodeMode || 'local')
@@ -177,7 +181,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
             {card.title || 'VSCODE'}
           </span>
           {serverPort && mode === 'local' && (
-            <span className="text-[10px] text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.2 rounded-control">
+            <span className="text-[11px] text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.2 rounded-control">
               :{serverPort}
             </span>
           )}
@@ -185,7 +189,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
 
         {/* Center: Mode Selector Pills */}
         <div
-          className="flex items-center space-x-1 bg-zinc-900/90 border border-zinc-800/80 p-0.5 rounded-control text-[10px]"
+          className="flex items-center space-x-1 bg-zinc-900/90 border border-zinc-800/80 p-0.5 rounded-control text-[11px]"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
@@ -246,7 +250,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
             <button
               type="button"
               onClick={handleOpenDesktop}
-              className="hidden sm:flex items-center space-x-1 px-1.5 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[10px] transition-colors cursor-pointer"
+              className="hidden sm:flex items-center space-x-1 px-1.5 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] transition-colors cursor-pointer"
               title="Abrir en VS Code de escritorio (code .)"
             >
               <ExternalLink size={10} />
@@ -272,6 +276,21 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
             <Terminal size={11} />
           </button>
 
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveToNextDisplay()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title={card.x >= 1920 ? "Mover a Monitor 1" : "Mover a Monitor 2"}
+            >
+              <Monitor size={11} />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -292,7 +311,7 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
           className="h-8 px-2 bg-white/[0.04] border-b border-zinc-800 flex items-center space-x-2 shrink-0"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <span className="text-[10px] text-zinc-500 shrink-0">SERVER URL:</span>
+          <span className="text-[11px] text-zinc-500 shrink-0">SERVER URL:</span>
           <input
             type="text"
             value={customUrl}

@@ -18,10 +18,12 @@ import {
   ChevronRight,
   Search,
   X,
-  Table
+  Table,
+  Monitor
 } from 'lucide-react'
 import { CanvasCard, FileEntry } from '../types'
 import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
+import { notify } from './Dialogs'
 
 interface FileExplorerCardProps {
   card: CanvasCard
@@ -32,6 +34,8 @@ interface FileExplorerCardProps {
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
   onOpenInBrowser?: (url: string) => void
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 interface PreviewState {
@@ -52,7 +56,9 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
   onUpdate,
   onDelete,
   onDragStart,
-  onResizeStart
+  onResizeStart,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const [currentDir, setCurrentDir] = useState<string>(card.explorerPath || '')
   const [entries, setEntries] = useState<FileEntry[]>([])
@@ -140,7 +146,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
           size: res.size
         })
       } else {
-        alert(res.error || 'No se pudo leer el archivo')
+        notify(res.error || 'No se pudo leer el archivo', 'error')
       }
     } catch (e) {
       console.error('Failed to open file:', e)
@@ -242,7 +248,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
           <span className="text-[11px] stamp text-zinc-100 truncate">
             {card.title || 'EXPLORER'}
           </span>
-          <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">
+          <span className="text-[11px] text-zinc-500 truncate max-w-[180px]">
             {currentDir}
           </span>
         </div>
@@ -260,6 +266,21 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
           >
             <RefreshCw size={12} className={`pointer-events-none ${loading ? 'animate-spin' : ''}`} />
           </button>
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveToNextDisplay()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1.5 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title={card.x >= 1920 ? "Mover a Monitor 1" : "Mover a Monitor 2"}
+            >
+              <Monitor size={12} className="pointer-events-none" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={(e) => {
@@ -300,7 +321,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
               loadDirectory(selected)
             }
           }}
-          className="px-2 py-0.5 rounded-control bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors shrink-0"
+          className="px-2 py-0.5 rounded-control bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors shrink-0"
         >
           Cambiar
         </button>
@@ -315,7 +336,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
             placeholder="Filtrar archivos (.xlsx, test, etc.)..."
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
-            className="bg-transparent border-none outline-none text-zinc-200 placeholder-zinc-600 text-[10.5px] flex-1 min-w-0"
+            className="bg-transparent border-none outline-none text-zinc-200 placeholder-zinc-600 text-[11px] flex-1 min-w-0"
           />
           {filterQuery && (
             <button
@@ -326,7 +347,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
               <X size={11} />
             </button>
           )}
-          <span className="text-[10px] text-zinc-600 shrink-0">
+          <span className="text-[11px] text-zinc-600 shrink-0">
             {filteredEntries.length} {filteredEntries.length === 1 ? 'item' : 'items'}
           </span>
         </div>
@@ -346,13 +367,13 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                 )}
                 <span className="font-medium text-zinc-200 truncate">{previewFile.name}</span>
                 {previewFile.size && (
-                  <span className="text-[10px] text-zinc-500 shrink-0">({formatSize(previewFile.size)})</span>
+                  <span className="text-[11px] text-zinc-500 shrink-0">({formatSize(previewFile.size)})</span>
                 )}
               </div>
               <div className="flex items-center space-x-1.5 shrink-0">
                 <button
                   onClick={() => handleOpenInSystem(previewFile.path)}
-                  className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-100 border border-white/15 text-[10px] transition-colors"
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-100 border border-white/15 text-[11px] transition-colors"
                   title="Abrir con la aplicación predeterminada del sistema (ej. Excel / Editor)"
                 >
                   <ExternalLink size={10} />
@@ -360,7 +381,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                 </button>
                 <button
                   onClick={() => handleShowInFolder(previewFile.path)}
-                  className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors"
                   title="Mostrar en explorador de archivos"
                 >
                   <Folder size={10} />
@@ -368,7 +389,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                 {previewFile.content && (
                   <button
                     onClick={handleCopyPreview}
-                    className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                    className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors"
                   >
                     {copied ? <Check size={11} className="text-zinc-100" /> : <Copy size={11} />}
                     <span>{copied ? 'Copiado' : 'Copiar'}</span>
@@ -376,7 +397,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                 )}
                 <button
                   onClick={() => setPreviewFile(null)}
-                  className="px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  className="px-2 py-0.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors"
                 >
                   Volver a lista
                 </button>
@@ -393,7 +414,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                       <button
                         key={sheet.name}
                         onClick={() => setPreviewFile((prev) => (prev ? { ...prev, activeSheetIndex: idx } : null))}
-                        className={`px-2.5 py-0.5 rounded-control text-[10.5px] transition-colors shrink-0 ${
+                        className={`px-2.5 py-0.5 rounded-control text-[11px] transition-colors shrink-0 ${
                           (previewFile.activeSheetIndex || 0) === idx
                             ? 'bg-white/10 text-zinc-100 border border-white/15 font-medium'
                             : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
@@ -402,7 +423,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                         <span className="flex items-center space-x-1">
                           <Table size={10} className="shrink-0" />
                           <span>{sheet.name}</span>
-                          <span className="text-[9px] text-zinc-500">({sheet.rows.length})</span>
+                          <span className="text-[11px] text-zinc-500">({sheet.rows.length})</span>
                         </span>
                       </button>
                     ))}
@@ -436,7 +457,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                                     : 'hover:bg-zinc-800/40'
                                 }`}
                               >
-                                <td className="px-2 py-1 bg-zinc-950/80 border-r border-zinc-800 text-[10px] text-zinc-600 text-right select-none w-8 shrink-0">
+                                <td className="px-2 py-1 bg-zinc-950/80 border-r border-zinc-800 text-[11px] text-zinc-600 text-right select-none w-8 shrink-0">
                                   {rIdx + 1}
                                 </td>
                                 {Array.from({ length: maxCols }).map((_, cIdx) => (
@@ -508,7 +529,7 @@ export const FileExplorerCard: React.FC<FileExplorerCardProps> = ({
                   {getFileIcon(entry)}
                   <span className="truncate text-[11px]">{entry.name}</span>
                 </div>
-                <div className="flex items-center space-x-1.5 text-[10px] text-zinc-500 shrink-0">
+                <div className="flex items-center space-x-1.5 text-[11px] text-zinc-500 shrink-0">
                   <span>{formatSize(entry.size)}</span>
                   {entry.isDirectory ? (
                     <ChevronRight size={12} className="text-zinc-600 group-hover:text-zinc-400" />

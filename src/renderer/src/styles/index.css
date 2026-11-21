@@ -83,6 +83,26 @@ body {
   word-spacing: 0 !important;
 }
 
+/* Keyboard focus ring in the signal colour. Text fields are left out: they mark focus with their border */
+@layer base {
+  :where(button, a, select, summary, [role='button'], input[type='checkbox'], input[type='radio'], input[type='range']):focus-visible {
+    outline: 2px solid rgb(var(--signal-rgb) / 0.85);
+    outline-offset: 2px;
+  }
+}
+
+/* Respect the system "reduce motion" setting: pulses, pings, spinners and slides stop */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Custom modern scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

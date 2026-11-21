@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Save, Check, GitBranch } from 'lucide-react'
-import { SystemMetrics } from '../types'
+import { Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Save, Check, GitBranch, Monitor, ArrowLeftRight } from 'lucide-react'
+import { SystemMetrics, DisplayInfo } from '../types'
 import { Tooltip } from './Tooltip'
 import logo from '../assets/logo.svg'
 
@@ -39,6 +39,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [branches, setBranches] = useState<RepoBranch[]>([])
+  const [displays, setDisplays] = useState<DisplayInfo[]>([])
+  const [isSecondaryOpen, setIsSecondaryOpen] = useState(false)
 
   const foldersKey = workspaceFolders.join('|')
 
@@ -48,6 +50,24 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       window.neoAPI.getAppVersion().then((ver) => {
         if (ver) setAppVersion(ver)
       }).catch(() => {})
+    }
+
+    if (window.neoAPI.getMultiMonitorStatus) {
+      window.neoAPI.getMultiMonitorStatus().then((status) => {
+        if (status) {
+          setDisplays(status.displays || [])
+          setIsSecondaryOpen(status.isSecondaryOpen || false)
+        }
+      }).catch(() => {})
+    }
+
+    const unsubStatus = window.neoAPI.onMultiMonitorStatus?.((status) => {
+      setDisplays(status.displays || [])
+      setIsSecondaryOpen(status.isSecondaryOpen || false)
+    })
+
+    return () => {
+      unsubStatus?.()
     }
   }, [])
 
@@ -82,6 +102,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     setIsMaximized(max)
   }
 
+  const handleToggleSecondary = async (): Promise<void> => {
+    if (isSecondaryOpen) {
+      await window.neoAPI.closeSecondaryWindow()
+      setIsSecondaryOpen(false)
+    } else {
+      const opened = await window.neoAPI.openSecondaryWindow()
+      if (opened) setIsSecondaryOpen(true)
+    }
+  }
+
   return (
     <div
       style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
@@ -91,7 +121,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-2.5 pl-2.5 pr-3 text-xs text-zinc-300 drag-region min-w-0">
         <img src={logo} alt="" className="w-5 h-5 shrink-0" draggable={false} />
         <span className="text-[11px] stamp text-zinc-100 shrink-0">NWS</span>
-        <span className="text-[10px] text-zinc-400 shrink-0">
+        <span className="text-[11px] text-zinc-400 shrink-0">
           v{appVersion}
         </span>
 
@@ -102,7 +132,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <span
               key={repo.name}
               title={`${repo.name} · ${repo.branch}`}
-              className="flex items-center space-x-1 text-[10px] shrink-0 max-w-[180px]"
+              className="flex items-center space-x-1 text-[11px] shrink-0 max-w-[180px]"
             >
               <GitBranch size={10} className="text-zinc-400 shrink-0" />
               <span className="text-zinc-400 truncate">{repo.name}</span>
@@ -169,6 +199,29 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <SlidersHorizontal size={13} />
           </button>
         </Tooltip>
+
+        {displays.length > 1 && (
+          <>
+            <Tooltip label={isSecondaryOpen ? 'Cerrar ventana del Monitor 2' : `Abrir ventana en ${displays[1]?.label || 'Monitor 2'}`}>
+              <button
+                onClick={handleToggleSecondary}
+                className={`p-1.5 rounded-control transition-colors ${
+                  isSecondaryOpen ? 'text-emerald-300 bg-emerald-500/15' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
+                }`}
+              >
+                <Monitor size={13} />
+              </button>
+            </Tooltip>
+            <Tooltip label="Mover esta ventana al Monitor 2">
+              <button
+                onClick={() => window.neoAPI.moveWindowToDisplay(1)}
+                className="p-1.5 rounded-control text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition-colors"
+              >
+                <ArrowLeftRight size={13} />
+              </button>
+            </Tooltip>
+          </>
+        )}
 
         <div className="flex items-center space-x-0.5 border-l border-zinc-800 pl-1.5 ml-0.5">
           <Tooltip label="Minimizar">

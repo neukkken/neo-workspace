@@ -105,7 +105,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in">
+    <div role="dialog" aria-modal="true" aria-label="Conexión móvil" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in">
       <div className="bg-void border border-zinc-800 rounded-card w-full max-w-lg flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 bg-white/[0.04] border-b border-zinc-800 flex items-center justify-between">
@@ -117,7 +117,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
               <h2 className="text-sm font-medium text-zinc-100 flex items-center gap-2">
                 <span>NeoWork Mobile Gateway</span>
                 {status?.enabled && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/5 text-zinc-100 border border-white/15">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/5 text-zinc-100 border border-white/15">
                     ONLINE
                   </span>
                 )}
@@ -127,7 +127,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="p-1 rounded-button text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
           >
@@ -147,7 +147,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
               />
               <div>
                 <p className="text-zinc-200 font-medium">Servidor Remoto Embebido</p>
-                <p className="text-[10px] text-zinc-500">
+                <p className="text-[11px] text-zinc-500">
                   {status?.enabled
                     ? `Puerto ${status.port} • ${status.clientCount} móvil(es) conectado(s)`
                     : 'Servidor detenido'}
@@ -220,7 +220,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
 
               {/* URL & Copy Row */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-400 stamp">
+                <label className="text-[11px] text-zinc-400 stamp">
                   URL de Acceso Directo:
                 </label>
                 <div className="flex items-center space-x-2 bg-zinc-950 p-2 rounded-button border border-zinc-800">
@@ -254,7 +254,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
                 <button
                   onClick={handleRegenerateToken}
                   disabled={loading}
-                  className="flex items-center space-x-1 px-2 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                  className="flex items-center space-x-1 px-2 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] transition-colors"
                   title="Regenerar token para desconectar sesiones anteriores"
                 >
                   <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
@@ -267,7 +267,7 @@ export const MobileConnectModal: React.FC<MobileConnectModalProps> = ({ isOpen, 
                 <p className="font-medium text-zinc-100 flex items-center gap-1.5">
                   <span>💡 Consejos de uso:</span>
                 </p>
-                <ul className="list-disc list-inside space-y-1 text-zinc-400 text-[10.5px]">
+                <ul className="list-disc list-inside space-y-1 text-zinc-400 text-[11px]">
                   <li>
                     Tu móvil debe estar conectado a tu <strong>misma red WiFi</strong> (o tener <strong>Tailscale</strong> activo si estás fuera de casa con datos 4G/5G).
                   </li>

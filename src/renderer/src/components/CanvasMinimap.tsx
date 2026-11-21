@@ -123,13 +123,13 @@ export const CanvasMinimap: React.FC<CanvasMinimapProps> = ({
       onWheel={(e) => e.stopPropagation()}
       className="minimap-container island absolute bottom-4 right-4 z-40 w-56 p-2.5 select-none"
     >
-      <div className="flex items-center justify-between text-[10px] text-zinc-400 border-b border-zinc-800/80 pb-1 mb-1.5">
+      <div className="flex items-center justify-between text-[11px] text-zinc-400 border-b border-zinc-800/80 pb-1 mb-1.5">
         <span className="font-medium text-zinc-100 flex items-center space-x-1">
           <MapPin size={11} />
-          <span className="stamp text-[10px]">MINIMAP</span>
+          <span className="stamp text-[11px]">MINIMAP</span>
         </span>
         <div className="flex items-center space-x-2">
-          <span className="text-[9px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
+          <span className="text-[11px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
             {Math.round(zoom * 100)}%
           </span>
           <span className="text-zinc-500">{cards.length} nodos</span>

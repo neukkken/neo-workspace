@@ -82,6 +82,24 @@ export interface SmartClipboardResult {
     height?: number;
     sizeBytes?: number;
 }
+export interface DisplayBounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+export interface DisplayInfo {
+    id: number;
+    label: string;
+    bounds: DisplayBounds;
+    workArea: DisplayBounds;
+    scaleFactor: number;
+    isPrimary: boolean;
+}
+export interface MultiMonitorStatus {
+    displays: DisplayInfo[];
+    isSecondaryOpen: boolean;
+}
 export type NeoAPI = typeof neoAPI;
 export declare const neoAPI: {
     getStore: () => Promise<AppState>;
@@ -111,6 +129,13 @@ export declare const neoAPI: {
     closeWindow: () => void;
     isWindowMaximized: () => Promise<boolean>;
     getAppVersion: () => Promise<string>;
+    getDisplays: () => Promise<DisplayInfo[]>;
+    getMultiMonitorStatus: () => Promise<MultiMonitorStatus>;
+    openSecondaryWindow: (displayIndex?: number) => Promise<boolean>;
+    closeSecondaryWindow: () => Promise<boolean>;
+    moveWindowToDisplay: (displayIndex: number) => Promise<boolean>;
+    onMultiMonitorStatus: (callback: (status: MultiMonitorStatus) => void) => (() => void);
+    onStoreSynced: (callback: (state: AppState) => void) => (() => void);
     vscodeCheckInstalled: () => Promise<boolean>;
     vscodeStartServer: (folderPath?: string) => Promise<{ success: boolean; url?: string; port?: number; error?: string }>;
     vscodeStopServer: (port?: number) => Promise<boolean>;

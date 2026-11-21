@@ -7,7 +7,8 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
-  ExternalLink
+  ExternalLink,
+  Monitor
 } from 'lucide-react'
 import { CanvasCard } from '../types'
 import { CardResizeHandles, ResizeStart } from './CardResizeHandles'
@@ -22,6 +23,8 @@ interface PortMonitorCardProps {
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
   onOpenInBrowser?: (url: string) => void
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
@@ -32,7 +35,9 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
   onDelete,
   onDragStart,
   onResizeStart,
-  onOpenInBrowser
+  onOpenInBrowser,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const [ports, setPorts] = useState<number[]>(
     card.monitoredPorts && card.monitoredPorts.length > 0
@@ -118,7 +123,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           <span className="text-[11px] stamp text-zinc-100 truncate">
             {card.title || 'PORT MONITOR'}
           </span>
-          <span className="text-[10px] text-zinc-500">({ports.length} puertos)</span>
+          <span className="text-[11px] text-zinc-500">({ports.length} puertos)</span>
         </div>
 
         <div className="flex items-center space-x-1" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -134,6 +139,21 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
           >
             <RefreshCw size={12} className={`pointer-events-none ${checking ? 'animate-spin' : ''}`} />
           </button>
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveToNextDisplay()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title={card.x >= 1920 ? "Mover a Monitor 1" : "Mover a Monitor 2"}
+            >
+              <Monitor size={11} className="pointer-events-none" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={(e) => {
@@ -198,7 +218,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
                 />
                 <span className="font-medium text-zinc-200 text-xs">:{port}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-control font-medium ${
+                  className={`text-[11px] px-1.5 py-0.2 rounded-control font-medium ${
                     isOpen
                       ? 'text-zinc-100 bg-white/5 border border-white/15'
                       : 'text-zinc-500 bg-zinc-900 border border-zinc-800'
@@ -219,7 +239,7 @@ export const PortMonitorCard: React.FC<PortMonitorCardProps> = ({
                         openExternalUrl(target)
                       }
                     }}
-                    className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/15 text-[10px] transition-colors cursor-pointer"
+                    className="flex items-center space-x-1 px-2 py-0.5 rounded-control bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/15 text-[11px] transition-colors cursor-pointer"
                     title={`Abrir ${cleanUrl(url)}`}
                   >
                     <Globe size={10} />

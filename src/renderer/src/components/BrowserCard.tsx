@@ -27,6 +27,8 @@ interface BrowserCardProps {
   onDelete: (id: string) => void
   onDragStart: (e: React.MouseEvent, id: string) => void
   onResizeStart: ResizeStart
+  displaysCount?: number
+  onMoveToNextDisplay?: () => void
 }
 
 type ViewportMode = 'full' | 'tablet' | 'mobile'
@@ -50,7 +52,9 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
   onUpdate,
   onDelete,
   onDragStart,
-  onResizeStart
+  onResizeStart,
+  displaysCount,
+  onMoveToNextDisplay
 }) => {
   const initialUrl = card.url || 'https://www.google.com'
   const initialTabIdRef = useRef(`tab-${Date.now()}`)
@@ -385,7 +389,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           <span className="text-[11px] stamp text-zinc-200 truncate">
             {activeTab.title || 'WEB-BROWSER'}
           </span>
-          <span className="hidden sm:inline-block text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded-control">
+          <span className="hidden sm:inline-block text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded-control">
             {tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}
           </span>
         </div>
@@ -466,6 +470,20 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
           >
             <ExternalLink size={12} className="pointer-events-none" />
           </button>
+          {displaysCount && displaysCount > 1 && onMoveToNextDisplay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveToNextDisplay()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1 rounded text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+              title={card.x >= 1920 ? "Mover a Monitor 1" : "Mover a Monitor 2"}
+            >
+              <Monitor size={11} className="pointer-events-none" />
+            </button>
+          )}
           <button
             type="button"
             onClick={(e) => {
@@ -591,7 +609,7 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
               key={port}
               type="button"
               onClick={() => handleQuickBookmark(`http://localhost:${port}`)}
-              className="text-[10px] px-1.5 py-0.5 rounded-control bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
+              className="text-[11px] px-1.5 py-0.5 rounded-control bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
             >
               :{port}
             </button>

@@ -40,7 +40,7 @@ export const ActivityCenter: React.FC<ActivityCenterProps> = ({ events, onOpen }
         >
           <Bell size={13} />
           {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-signal text-zinc-950 text-[9px] font-semibold leading-[14px] text-center">
+            <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-signal text-zinc-950 text-[10px] font-semibold leading-[14px] text-center">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -67,7 +67,7 @@ export const ActivityCenter: React.FC<ActivityCenterProps> = ({ events, onOpen }
                   </span>
                   <span className="block text-[11px] text-zinc-400">{describe(status)}</span>
                 </span>
-                <span className="shrink-0 text-[10px] text-zinc-500 tabular-nums">
+                <span className="shrink-0 text-[11px] text-zinc-500 tabular-nums">
                   {new Date(status.at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </button>
