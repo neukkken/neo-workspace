@@ -43,11 +43,13 @@ interface SettingsModalProps {
   islandOpacity?: number
   islandBlur?: number
   railHeight?: number
+  autoDimHud?: boolean
   onAppearanceChange?: (patch: {
     islandScale?: number
     islandOpacity?: number
     islandBlur?: number
     railHeight?: number
+    autoDimHud?: boolean
   }) => void
   onClose: () => void
   onPositionChange: (pos: SidebarPosition) => void
@@ -76,6 +78,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   islandOpacity = 0.7,
   islandBlur = 10,
   railHeight = 200,
+  autoDimHud = false,
   onAppearanceChange,
   onClose,
   onPositionChange,
@@ -378,6 +381,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </label>
               ))}
+              <label className="flex items-center justify-between text-[11px] text-zinc-400 cursor-pointer">
+                <span>Atenuar las islas mientras escribes en una terminal</span>
+                <input
+                  type="checkbox"
+                  checked={autoDimHud}
+                  onChange={(e) => onAppearanceChange?.({ autoDimHud: e.target.checked })}
+                  className="accent-zinc-100 cursor-pointer"
+                />
+              </label>
             </div>
 
             {/* Wallpaper gallery: built-ins plus whatever the user imported */}

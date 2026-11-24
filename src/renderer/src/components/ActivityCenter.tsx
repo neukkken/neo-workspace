@@ -48,7 +48,7 @@ export const ActivityCenter: React.FC<ActivityCenterProps> = ({ events, onOpen }
       </Tooltip>
 
       {isOpen && (
-        <div className="island absolute right-0 top-full mt-2.5 w-80 max-h-96 overflow-y-auto p-1.5 z-50 select-none">
+        <div className="island absolute right-0 top-full mt-2.5 w-80 max-h-96 overflow-y-auto p-1.5 z-50 select-none animate-in fade-in slide-in-from-top-1 duration-150">
           {events.length === 0 ? (
             <p className="px-2 py-3 text-xs text-zinc-400 text-center">Aún no hay actividad en esta sesión.</p>
           ) : (

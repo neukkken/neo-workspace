@@ -178,6 +178,18 @@ export const App: React.FC = () => {
     }
   }, [isLoaded, selectedWallpaper])
 
+  // True while typing in a terminal; the HUD islands dim then (autoDimHud)
+  const [terminalFocused, setTerminalFocused] = useState(false)
+  useEffect(() => {
+    const sync = (): void => setTerminalFocused(!!document.activeElement?.closest('.xterm'))
+    document.addEventListener('focusin', sync)
+    document.addEventListener('focusout', sync)
+    return () => {
+      document.removeEventListener('focusin', sync)
+      document.removeEventListener('focusout', sync)
+    }
+  }, [])
+
   useEffect(() => {
     if (isLoaded) window.neoAPI.setRunningWorkspaces(runningWorkspaceIds)
   }, [isLoaded, runningWorkspaceIds])
@@ -672,6 +684,7 @@ export const App: React.FC = () => {
     islandOpacity?: number
     islandBlur?: number
     railHeight?: number
+    autoDimHud?: boolean
   }): void => {
     // Glass is remembered per wallpaper; size applies everywhere
     const { islandOpacity, islandBlur, ...shared } = patch
@@ -752,6 +765,7 @@ export const App: React.FC = () => {
 
   return (
     <div
+      data-hud-dim={appState.settings?.autoDimHud && terminalFocused ? '' : undefined}
       className="flex flex-col h-screen w-screen overflow-clip bg-void bg-cover bg-center text-zinc-200 gap-1.5 p-1.5"
       style={
         {
@@ -774,6 +788,8 @@ export const App: React.FC = () => {
         }
         workspaceFolders={(activeWorkspace?.panels || []).map((p) => p.cwd).filter((cwd): cwd is string => !!cwd)}
         updateAvailable={updateStatus?.state === 'available' || updateStatus?.state === 'downloaded'}
+        attention={activityLog.find((e) => attentionWorkspaceIds.includes(e.workspaceId))}
+        onOpenAttention={(status) => handleOpenPanel(status.workspaceId, status.panelId)}
         onSave={handleSaveAll}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
@@ -828,6 +844,7 @@ export const App: React.FC = () => {
         islandOpacity={islandOpacity}
         islandBlur={islandBlur}
         railHeight={appState.settings?.railHeight ?? 200}
+        autoDimHud={appState.settings?.autoDimHud ?? false}
         onAppearanceChange={handleAppearanceChange}
         onExportWorkspaces={handleExportWorkspaces}
         onImportWorkspaces={handleImportWorkspaces}

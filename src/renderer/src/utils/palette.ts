@@ -11,6 +11,7 @@ type Rgb = [number, number, number]
 const BUCKETS = 24
 // Share of the way each ANSI hue leans towards the wallpaper; more and red stops reading as an error
 const ANSI_LEAN = 0.12
+const GREEN_HUE = 140
 const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
 
 const rgbToHsl = (r: number, g: number, b: number): [number, number, number] => {
@@ -73,13 +74,15 @@ export const derivePalette = (rgba: ArrayLike<number>): DerivedPalette | null =>
   if (total === 0) return null
 
   const baseHue = peak(base).hue
-  const tint = clamp((satSum / total) * 0.5, 0.04, 0.16)
+  const tint = clamp((satSum / total) * 0.5, 0.03, 0.08)
   const vividShare = vivid.reduce((a, b) => a + b, 0) / total
-  // Near-monochrome image: keep the house ochre instead of inventing an accent
-  const signalHue = vividShare < 0.015 ? 36 : peak(vivid).hue
+  // Near-monochrome image: keep the house green instead of inventing an accent.
+  // Yellow/orange accents (the canyon) are swapped for green too.
+  const vividHue = peak(vivid).hue
+  const signalHue = vividShare < 0.015 || (vividHue >= 20 && vividHue <= 70) ? GREEN_HUE : vividHue
 
-  const voidRgb = hslToRgb(baseHue, tint, 0.095)
-  const islandRgb = hslToRgb(baseHue, tint, 0.17)
+  const voidRgb = hslToRgb(baseHue, tint, 0.06)
+  const islandRgb = hslToRgb(baseHue, tint, 0.1)
 
   let lightness = 0.6
   let signal = hslToRgb(signalHue, 0.72, lightness)
