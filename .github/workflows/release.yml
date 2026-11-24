@@ -19,16 +19,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            build_cmd: npm run dist:linux
+            bundles: appimage,deb
             artifact_name: linux-packages
-            artifact_path: dist/*.AppImage\ndist/*.deb
           - os: windows-latest
-            build_cmd: npm run dist:win
+            bundles: nsis
             artifact_name: windows-packages
-            artifact_path: dist/*.exe
 
     steps:
       - name: Checkout Code
@@ -41,11 +38,19 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Install Linux Build Essentials
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux Build Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential python3 libarchive-tools
+          sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf
 
       - name: Install Dependencies
         run: npm ci
@@ -53,26 +58,23 @@ jobs:
       - name: Check TypeScript Types
         run: npm run typecheck
 
-      # shortcut: Windows only, the one system they have run on, drop the condition once they pass on Linux
       - name: Run Tests
-        if: runner.os == 'Windows'
         run: npm test
 
+      - name: Run Rust Tests
+        run: npm run test:rust
+
       - name: Build and Package Executables
-        run: ${{ matrix.build_cmd }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/*.exe
-            dist/*.AppImage
-            dist/*.deb
-            dist/latest*.yml
-            dist/*.blockmap
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: warn
 
   release:
@@ -92,12 +94,9 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            dist-release/windows-packages/*.exe
-            dist-release/windows-packages/*.blockmap
-            dist-release/windows-packages/latest.yml
-            dist-release/linux-packages/*.AppImage
-            dist-release/linux-packages/*.deb
-            dist-release/linux-packages/latest-linux.yml
+            dist-release/windows-packages/**/*.exe
+            dist-release/linux-packages/**/*.AppImage
+            dist-release/linux-packages/**/*.deb
           draft: false
           prerelease: false
           generate_release_notes: true

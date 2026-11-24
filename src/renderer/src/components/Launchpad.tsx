@@ -15,7 +15,7 @@ import {
   MoreHorizontal
 } from 'lucide-react'
 import { Workspace, SidebarPosition } from '../types'
-import { workspaceIcon } from '../utils/workspaceIcons'
+import { WorkspacePreview } from './WorkspacePreview'
 
 interface LaunchpadProps {
   workspaces: Workspace[]
@@ -212,7 +212,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
         <div className="shrink-0 z-10 w-full">
           <nav
             style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
-            className="island rounded-full h-9 w-full flex items-center justify-between px-3 select-none"
+            className="island hud rounded-full h-9 w-full flex items-center justify-between px-3 select-none"
           >
             {/* Left: Branding & Counts */}
             <div className="flex items-center space-x-2.5 shrink-0 mr-2 border-r border-zinc-800/80 pr-3">
@@ -220,7 +220,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                 <Layers size={13} className="text-zinc-400" />
                 <span className="hidden sm:inline">LAUNCHPAD</span>
               </div>
-              <span className="text-[11px] whitespace-nowrap text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded-control">
+              <span className="text-[11px] font-mono tabular-nums whitespace-nowrap text-zinc-100 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded-control">
                 {runningWorkspaceIds.length} activos
               </span>
             </div>
@@ -253,7 +253,6 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                   const codeFormatted = ws.code
                     ? ws.code.padStart(2, '0')
                     : (idx + 1).toString().padStart(2, '0')
-                  const Icon = workspaceIcon(ws.icon)
 
                   return (
                     <div
@@ -307,7 +306,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                         <Loader2 size={11} className="text-zinc-300 shrink-0 animate-spin" />
                       )}
 
-                      {ws.icon && <Icon size={12} className="shrink-0" />}
+                      <WorkspacePreview cards={ws.canvasCards} width={22} height={22} />
 
                       <span
                         className={`truncate max-w-[120px] font-medium ${
@@ -327,7 +326,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                       )}
 
                       <span
-                        className={`text-[11px] ${
+                        className={`text-[11px] font-mono tabular-nums ${
                           isActive
                             ? 'text-zinc-100 font-medium'
                             : isRunning
@@ -380,32 +379,20 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
     )
   }
 
-  // VERTICAL RAIL (Left or Right): a 40px island of icons that widens on hover to show the names
-  const railButton = (
-    isActive: boolean,
-    isRunning: boolean
-  ): string =>
-    `w-full h-7 shrink-0 overflow-hidden rounded-full flex items-center transition-colors duration-150 ${
-      isActive
-        ? 'bg-white/10 text-zinc-100 border border-white/15'
-        : isRunning
-        ? 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/70 border border-transparent'
-        : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/70 border border-transparent'
-    }`
-
+  // VERTICAL RAIL (Left or Right): a column of small canvas previews that widens on hover to show the names
   return (
     <>
-      {/* Fixed 40px slot: the rail widens over the workspace instead of pushing it, so terminals never reflow */}
+      {/* Fixed slot: the rail widens over the workspace instead of pushing it, so terminals never reflow */}
       {/* z-[45]: above the canvas toolbars and minimap (z-40), below modals (z-50) */}
       <div
         style={{ height: `${railHeight}px`, zoom: 'var(--island-scale)' } as React.CSSProperties}
-        className="relative w-10 shrink-0 self-center z-[45]"
+        className="relative w-11 shrink-0 self-center z-[45]"
       >
         <aside
           aria-label="Workspaces"
-          className={`island absolute inset-y-0 ${
+          className={`island hud absolute inset-y-0 ${
             position === 'right' ? 'right-0' : 'left-0'
-          } w-10 hover:w-48 has-[:focus-visible]:w-48 transition-[width] duration-150 overflow-hidden py-2 px-[5px] flex flex-col gap-1.5 select-none`}
+          } w-11 hover:w-48 has-[:focus-visible]:w-48 transition-[width] duration-150 overflow-hidden py-2 px-1.5 flex flex-col gap-1.5 select-none`}
         >
           <div className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden no-scrollbar">
             {workspaces.map((ws, idx) => {
@@ -414,7 +401,6 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
               const codeFormatted = ws.code
                 ? ws.code.padStart(2, '0')
                 : (idx + 1).toString().padStart(2, '0')
-              const Icon = workspaceIcon(ws.icon)
 
               return (
                 <div
@@ -422,34 +408,41 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
                   {...dragProps(ws.id)}
                   onContextMenu={(e) => handleTabContextMenu(e, ws)}
                   title={`${ws.name} [${codeFormatted}]${agentLabel(ws.id)}`}
-                  className={`group ${railButton(isActive, isRunning)}${dropMark(ws.id)}`}
+                  className={`group shrink-0 rounded-control border flex items-center transition-colors duration-150 ${
+                    isActive
+                      ? 'bg-white/10 border-white/25 text-zinc-100'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/70'
+                  }${dropMark(ws.id)}`}
                 >
-                  {/* min-w 26px = the 28px row minus its border: the icon stays whole and centred while collapsed */}
                   <button
                     type="button"
                     onClick={() => onSelectWorkspace(ws.id)}
                     aria-current={isActive ? 'true' : undefined}
-                    className="flex-1 min-w-[26px] h-full flex items-center cursor-pointer"
+                    className="flex-1 min-w-0 flex items-center p-0.5 cursor-pointer"
                   >
-                    <span className="relative w-[26px] h-full shrink-0 flex items-center justify-center">
+                    <span className="relative shrink-0">
+                      <WorkspacePreview
+                        cards={ws.canvasCards}
+                        width={30}
+                        height={30}
+                        className={workingWorkspaceIds.includes(ws.id) ? 'ring-1 ring-signal/70 animate-pulse' : ''}
+                      />
                       {attentionWorkspaceIds.includes(ws.id) ? (
-                        <BellRing size={14} className="text-signal" />
+                        <BellRing size={11} className="absolute top-0.5 left-0.5 text-signal" />
                       ) : workingWorkspaceIds.includes(ws.id) ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Icon size={14} />
-                      )}
+                        <Loader2 size={11} className="absolute top-0.5 left-0.5 animate-spin" />
+                      ) : null}
                       {isRunning && (
-                        <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-signal shadow-[0_0_6px_rgb(var(--signal-rgb)/0.9)]" />
+                        <span className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-signal shadow-[0_0_6px_rgb(var(--signal-rgb)/0.9)]" />
                       )}
                       {pendingChangesWorkspaceIds?.includes(ws.id) && (
-                        <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-signal-soft" />
+                        <span className="absolute bottom-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-signal-soft" />
                       )}
                     </span>
-                    <span className="flex-1 min-w-0 truncate text-left text-xs pl-1">{ws.name}</span>
+                    <span className="flex-1 min-w-0 truncate text-left text-xs pl-2">{ws.name}</span>
                   </button>
                   {shortcut(idx) && (
-                    <span className="shrink-0 px-2 text-[11px] text-zinc-500 group-hover:hidden group-has-[:focus-visible]:hidden">
+                    <span className="shrink-0 px-1 text-[11px] font-mono tabular-nums text-zinc-500 group-hover:hidden group-has-[:focus-visible]:hidden">
                       {shortcut(idx)}
                     </span>
                   )}
@@ -473,7 +466,7 @@ export const Launchpad: React.FC<LaunchpadProps> = ({
             title="Nuevo workspace"
             className="w-full h-7 shrink-0 overflow-hidden rounded-full flex items-center text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer"
           >
-            <span className="w-7 h-full shrink-0 flex items-center justify-center">
+            <span className="w-8 h-full shrink-0 flex items-center justify-center">
               <Plus size={13} />
             </span>
             <span className="flex-1 min-w-0 truncate text-left text-xs pl-1">Nuevo workspace</span>

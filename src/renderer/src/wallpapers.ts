@@ -35,7 +35,12 @@ export const BUILTIN_WALLPAPERS = [
 ]
 
 export const userWallpaperId = (file: string): string => `user:${file}`
-const userUrl = (id: string): string => `nws-wallpaper://local/${id.slice('user:'.length)}`
+// WebView2 serves a custom scheme as http://<scheme>.<host>; everywhere else it is the scheme itself
+const wallpaperOrigin = (): string =>
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && navigator.userAgent.includes('Windows')
+    ? 'http://nws-wallpaper.local'
+    : 'nws-wallpaper://local'
+const userUrl = (id: string): string => `${wallpaperOrigin()}/${id.slice('user:'.length)}`
 
 const builtin = (id: string): (typeof BUILTIN_WALLPAPERS)[number] =>
   BUILTIN_WALLPAPERS.find((w) => w.id === id) ?? BUILTIN_WALLPAPERS[0]

@@ -4,9 +4,9 @@
   "version": "1.10.0",
   "identifier": "com.neowork.app",
   "build": {
-    "beforeDevCommand": "npm run dev:web",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build:web",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../out-tauri"
   },
   "app": {
@@ -14,10 +14,11 @@
       {
         "label": "main",
         "title": "NeoWork",
-        "width": 1400,
-        "height": 900,
-        "minWidth": 900,
+        "width": 1320,
+        "height": 840,
+        "minWidth": 960,
         "minHeight": 600,
+        "backgroundColor": "#171614",
         "decorations": false
       }
     ],

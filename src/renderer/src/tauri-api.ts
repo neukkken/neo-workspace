@@ -1,10 +1,10 @@
-// Tauri implementation of window.neoAPI. Same shape as src/preload/index.ts, so the
+// Tauri implementation of window.neoAPI. Same shape as neo-api.ts, so the
 // components don't change. Rust commands are the channel names in snake_case
 // (`pty:get-process` -> `pty_get_process`); events keep the channel name.
-// Commands not yet ported to Rust (see the migration plan) reject until their module lands.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { NeoAPI } from '../../preload'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { NeoAPI } from './neo-api'
 
 // camelCase -> snake_case too: `window:isMaximized` -> `window_is_maximized`.
 const call = <T>(channel: string, args?: Record<string, unknown>): Promise<T> =>
@@ -84,7 +84,6 @@ const tauriAPI: NeoAPI = {
   onRemoteStatus: (cb) => on('remote:status-update', cb),
   onRemoteWorkspaceSelect: (cb) => on('remote:workspace-selected', cb),
 
-  // Out of the v1 Tauri scope (plan phase 2): the cards fall back to "open externally".
   vscodeCheckInstalled: () => call('vscode:check-installed'),
   vscodeStartServer: (folderPath) => call('vscode:start-server', { folderPath }),
   vscodeStopServer: (port) => call('vscode:stop-server', { port }),
@@ -106,5 +105,14 @@ const tauriAPI: NeoAPI = {
   adblockToggle: () => Promise.resolve(false)
 }
 
-// Electron's preload already defines window.neoAPI; only install ours inside Tauri.
-if (!window.neoAPI && '__TAURI_INTERNALS__' in window) window.neoAPI = tauriAPI
+if ('__TAURI_INTERNALS__' in window) {
+  window.neoAPI = tauriAPI
+  // Tauri's webviews ignore -webkit-app-region: drag the window from the same elements by hand.
+  document.addEventListener('mousedown', (e) => {
+    const target = e.target as HTMLElement
+    if (e.button !== 0 || !target.closest('.drag-region')) return
+    if (target.closest('.no-drag, button, input, select, textarea, a')) return
+    if (e.detail === 2) tauriAPI.maximizeWindow()
+    else getCurrentWindow().startDragging().catch(() => {})
+  })
+}

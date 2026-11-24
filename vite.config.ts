@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// Renderer-only build used by Tauri (electron-vite keeps serving the Electron build).
+// Renderer build: Tauri serves out-tauri/ (and this dev server) inside its webview.
 export default defineConfig({
   root: resolve('src/renderer'),
   resolve: { alias: { '@renderer': resolve('src/renderer/src') } },

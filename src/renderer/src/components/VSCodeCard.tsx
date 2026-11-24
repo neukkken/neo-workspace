@@ -30,9 +30,6 @@ interface VSCodeCardProps {
   onMoveToNextDisplay?: () => void
 }
 
-const CHROME_USER_AGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
-
 export const VSCodeCard: React.FC<VSCodeCardProps> = ({
   card,
   isFocused,
@@ -418,13 +415,12 @@ export const VSCodeCard: React.FC<VSCodeCardProps> = ({
         ) : (
           // Active Webview / Iframe Area
           <div className="w-full h-full relative flex-1 min-h-0 bg-white/[0.04]">
-            <webview
-              ref={webviewRef}
+            <iframe
+              ref={iframeRef}
               key={`${key}-${activeUrl}`}
               src={activeUrl}
-              allowpopups={true}
-              partition="persist:neowork-vscode"
-              useragent={CHROME_USER_AGENT}
+              title="VS Code"
+              allow="clipboard-read; clipboard-write"
               className="w-full h-full border-0 select-auto"
               style={{ width: '100%', height: '100%' }}
             />

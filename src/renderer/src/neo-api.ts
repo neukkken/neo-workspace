@@ -1,0 +1,261 @@
+// The window.neoAPI contract: what the Rust side (src-tauri/src/commands.rs) offers the renderer.
+export interface SpawnOptions {
+  panelId: string
+  cwd: string
+  shell?: string
+  command?: string
+  commands?: string[]
+  env?: Record<string, string>
+  cols?: number
+  rows?: number
+}
+
+export interface PanelConfig {
+  id: string
+  title: string
+  cwd: string
+  command: string
+  commands?: string[]
+  autoStart: boolean
+  env?: Record<string, string>
+}
+
+export type TerminalThemeName = 'midnight' | 'matrix' | 'dracula' | 'tokyo' | 'monokai' | 'nord'
+
+export type WorkspaceLayoutMode = 'grid' | 'canvas'
+
+export interface Workspace {
+  id: string
+  name: string
+  code: string
+  panels: PanelConfig[]
+  layoutMode?: WorkspaceLayoutMode
+  canvasCards?: any[]
+}
+
+export type SidebarPosition = 'left' | 'right' | 'top' | 'bottom'
+
+export interface AppSettings {
+  sidebarPosition: SidebarPosition
+  terminalTheme?: TerminalThemeName
+  terminalFontSize?: number
+  wallpaper?: string
+  wallpaperAppearance?: Record<string, { islandOpacity?: number; islandBlur?: number }>
+  islandScale?: number
+  islandOpacity?: number
+  islandBlur?: number
+  railHeight?: number
+  autoDimHud?: boolean
+  defaultShell?: string
+}
+
+export interface AppState {
+  activeWorkspaceId: string
+  workspaces: Workspace[]
+  settings?: AppSettings
+}
+
+export interface ProcessMetrics {
+  cpu: number
+  memoryMb: number
+}
+
+export interface SystemMetrics {
+  cpuPercent: number
+  usedMemMb: number
+  totalMemMb: number
+}
+
+export interface TelemetryPayload {
+  system: SystemMetrics
+  panels: Record<string, ProcessMetrics>
+}
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface UpdateInfo {
+  version: string
+  releaseDate?: string
+  releaseNotes?: string
+}
+
+export interface UpdateProgress {
+  percent: number
+  transferredMb: number
+  totalMb: number
+  bytesPerSecond: number
+}
+
+export interface UpdateStatusPayload {
+  state: UpdateState
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  error?: string
+}
+
+export interface SmartClipboardResult {
+  type: 'image' | 'file' | 'text' | 'empty'
+  path?: string
+  text: string
+  width?: number
+  height?: number
+  sizeBytes?: number
+}
+
+export interface SessionChanges {
+  repo: string
+  name: string
+  branch: string
+  hasBaseline: boolean
+  commits: { hash: string; subject: string }[]
+  files: { path: string; status: string; added: number | null; removed: number | null }[]
+  truncated: boolean
+}
+
+export interface WorkspaceTime {
+  elapsedMs: number
+  totalMs: number
+  weekMs: number
+  paused: boolean
+}
+
+export interface AgentStatus {
+  panelId: string
+  state: 'working' | 'done' | 'exited' | 'stopped'
+  startedAt: number | null
+  exitCode?: number
+  workspaceId: string
+  workspaceName: string
+  title: string
+  at: number
+  notify: boolean
+  log: boolean
+}
+
+export interface DisplayBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface DisplayInfo {
+  id: number
+  label: string
+  bounds: DisplayBounds
+  workArea: DisplayBounds
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+export interface MultiMonitorStatus {
+  displays: DisplayInfo[]
+  isSecondaryOpen: boolean
+}
+
+export interface NeoAPI {
+  getStore(): Promise<AppState>
+  saveStore(state: AppState): Promise<boolean>
+  selectDirectory(defaultPath?: string): Promise<string | null>
+  writeClipboard(text: string): Promise<boolean>
+  readClipboard(): Promise<string>
+  readSmartClipboard(): Promise<SmartClipboardResult>
+  getShells(): Promise<{ id: string; label: string }[]>
+  spawnTerminal(options: SpawnOptions): Promise<boolean>
+  writeTerminal(panelId: string, data: string): void
+  resizeTerminal(panelId: string, cols: number, rows: number): void
+  killTerminal(panelId: string): Promise<boolean>
+  killAllTerminals(): Promise<boolean>
+  getPtyProcess(panelId: string): Promise<string>
+  onTerminalData(panelId: string, callback: (data: string) => void): (() => void)
+  onTerminalExit(
+    panelId: string,
+    callback: (exitInfo: { code: number; signal?: number }) => void
+  ): (() => void)
+  onAgentStatus(callback: (status: AgentStatus) => void): (() => void)
+  onAgentOpen(callback: (target: { workspaceId: string; panelId: string }) => void): (() => void)
+  onTelemetry(callback: (data: TelemetryPayload) => void): (() => void)
+  checkForUpdates(): Promise<UpdateStatusPayload>
+  downloadUpdate(): Promise<boolean>
+  quitAndInstallUpdate(): void
+  onUpdaterStatus(callback: (status: UpdateStatusPayload) => void): (() => void)
+  minimizeWindow(): void
+  maximizeWindow(): void
+  closeWindow(): void
+  isWindowMaximized(): Promise<boolean>
+  getAppVersion(): Promise<string>
+  getDisplays(): Promise<DisplayInfo[]>
+  getMultiMonitorStatus(): Promise<MultiMonitorStatus>
+  openSecondaryWindow(displayIndex?: number): Promise<boolean>
+  closeSecondaryWindow(): Promise<boolean>
+  moveWindowToDisplay(displayIndex: number): Promise<boolean>
+  onMultiMonitorStatus(callback: (status: MultiMonitorStatus) => void): (() => void)
+  onStoreSynced(callback: (state: AppState) => void): (() => void)
+  listDirectory(dirPath?: string): Promise<{ dir: string; entries: any[]; error?: string }>
+  readFile(
+    filePath: string
+  ): Promise<{
+    type?: 'text' | 'spreadsheet' | 'binary'
+    content?: string
+    sheets?: Array<{ name: string; rows: any[][] }>
+    size?: number
+    path?: string
+    name?: string
+    error?: string
+    isBinary?: boolean
+  }>
+  openPath(targetPath: string): Promise<string>
+  showItemInFolder(targetPath: string): Promise<boolean>
+  openExternal(url: string): Promise<boolean>
+  inspectProject(
+    dirPath: string
+  ): Promise<{
+    name?: string
+    type: string
+    suggestedCommands: Array<{ label: string; command: string }>
+    hasNeoworkConfig: boolean
+  }>
+  readNeoworkConfig(folderPath: string): Promise<any>
+  writeNeoworkConfig(folderPath: string, workspace: any): Promise<boolean>
+  checkPort(port: number): Promise<{ port: number; isOpen: boolean }>
+  getRemoteStatus(): Promise<{
+    enabled: boolean
+    port: number
+    token: string
+    interfaces: Array<{ name: string; ip: string; type: 'lan' | 'tailscale' | 'other' }>
+    primaryUrl: string
+    tailscaleUrl?: string
+    qrCodeDataUrl: string
+    clientCount: number
+  }>
+  toggleRemote(): Promise<any>
+  regenerateRemoteToken(): Promise<any>
+  setRemotePort(port: number): Promise<boolean>
+  onRemoteStatus(callback: (status: any) => void): (() => void)
+  onRemoteWorkspaceSelect(callback: (workspaceId: string) => void): (() => void)
+  vscodeCheckInstalled(): Promise<boolean>
+  vscodeStartServer(
+    folderPath?: string
+  ): Promise<{ success: boolean; url?: string; port?: number; error?: string }>
+  vscodeStopServer(port?: number): Promise<boolean>
+  vscodeOpenDesktop(folderPath?: string): Promise<boolean>
+  wallpapersList(): Promise<string[]>
+  wallpapersImport(): Promise<{ imported: string[]; rejected: string[] }>
+  wallpapersRemove(id: string): Promise<boolean>
+  gitBranches(folders: string[]): Promise<{ name: string; branch: string }[]>
+  setRunningWorkspaces(ids: string[]): void
+  readWorkspaceClock(id: string): Promise<WorkspaceTime>
+  gitRepos(folders: string[]): Promise<string[]>
+  gitSessionChanges(repo: string): Promise<SessionChanges | null>
+  gitSessionDiff(repo: string, file: string): Promise<string | null>
+  gitSessionReset(repo: string): Promise<boolean>
+  adblockGetStatus(): Promise<boolean>
+  adblockToggle(enabled?: boolean): Promise<boolean>
+}

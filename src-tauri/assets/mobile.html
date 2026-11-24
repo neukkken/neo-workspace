@@ -1,523 +1,4 @@
-import http from 'http'
-import { WebSocketServer, WebSocket } from 'ws'
-import { networkInterfaces } from 'os'
-import crypto from 'crypto'
-import fs from 'fs'
-import path from 'path'
-import QRCode from 'qrcode'
-import { PtyManager } from './pty-manager'
-import { StoreManager } from './store'
-import { isPrivateAddress, isSameToken } from './remote-access'
-
-export interface NetworkInterfaceInfo {
-  name: string
-  ip: string
-  type: 'lan' | 'tailscale' | 'other'
-}
-
-export interface RemoteGatewayStatus {
-  enabled: boolean
-  port: number
-  token: string
-  interfaces: NetworkInterfaceInfo[]
-  primaryUrl: string
-  tailscaleUrl?: string
-  qrCodeDataUrl: string
-  clientCount: number
-}
-
-export class RemoteGateway {
-  private server: http.Server | null = null
-  private wss: WebSocketServer | null = null
-  private port = 4050
-  private token: string
-  private clients = new Set<WebSocket>()
-  private enabled = false
-  private ptyUnsubscribe: (() => void) | null = null
-  private activeWorkspaceId = ''
-  private onStatusChangeCallbacks = new Set<(status: RemoteGatewayStatus) => void>()
-  private onWorkspaceSelectCallback?: (workspaceId: string) => void
-
-  private cachedXtermJs: string | null = null
-  private cachedXtermCss: string | null = null
-  private cachedFitAddonJs: string | null = null
-
-  private getAssetContent(type: 'xterm.js' | 'xterm.css' | 'addon-fit.js'): string {
-    try {
-      if (type === 'xterm.js') {
-        if (!this.cachedXtermJs) {
-          const p = require.resolve('@xterm/xterm/lib/xterm.js')
-          this.cachedXtermJs = fs.readFileSync(p, 'utf8')
-        }
-        return this.cachedXtermJs
-      }
-      if (type === 'xterm.css') {
-        if (!this.cachedXtermCss) {
-          const p = require.resolve('@xterm/xterm/css/xterm.css')
-          this.cachedXtermCss = fs.readFileSync(p, 'utf8')
-        }
-        return this.cachedXtermCss
-      }
-      if (type === 'addon-fit.js') {
-        if (!this.cachedFitAddonJs) {
-          const p = require.resolve('@xterm/addon-fit/lib/addon-fit.js')
-          this.cachedFitAddonJs = fs.readFileSync(p, 'utf8')
-        }
-        return this.cachedFitAddonJs
-      }
-    } catch (err) {
-      console.error(`[RemoteGateway] Failed to load asset ${type}:`, err)
-    }
-    return ''
-  }
-
-  constructor(
-    private ptyManager: PtyManager,
-    private store: StoreManager
-  ) {
-    this.token = crypto.randomBytes(16).toString('hex')
-    this.activeWorkspaceId = this.store.getState().activeWorkspaceId || ''
-  }
-
-  public setActiveWorkspace(id: string): void {
-    this.activeWorkspaceId = id
-    this.broadcast({
-      type: 'workspace:active-changed',
-      activeWorkspaceId: id
-    })
-  }
-
-  public onWorkspaceSelect(cb: (workspaceId: string) => void): void {
-    this.onWorkspaceSelectCallback = cb
-  }
-
-  public onStatusChange(cb: (status: RemoteGatewayStatus) => void): () => void {
-    this.onStatusChangeCallbacks.add(cb)
-    return () => this.onStatusChangeCallbacks.delete(cb)
-  }
-
-  private notifyStatusChange(): void {
-    this.getStatus().then((status) => {
-      this.onStatusChangeCallbacks.forEach((cb) => {
-        try {
-          cb(status)
-        } catch {}
-      })
-    })
-  }
-
-  public getNetworkInterfaces(): NetworkInterfaceInfo[] {
-    const nets = networkInterfaces()
-    const results: NetworkInterfaceInfo[] = []
-
-    for (const name of Object.keys(nets)) {
-      const netList = nets[name]
-      if (!netList) continue
-      for (const net of netList) {
-        if (net.family === 'IPv4' && !net.internal) {
-          let type: 'lan' | 'tailscale' | 'other' = 'lan'
-          if (name.toLowerCase().includes('tailscale') || net.address.startsWith('100.')) {
-            type = 'tailscale'
-          } else if (
-            net.address.startsWith('192.168.') ||
-            net.address.startsWith('10.') ||
-            net.address.startsWith('172.')
-          ) {
-            type = 'lan'
-          } else {
-            type = 'other'
-          }
-          results.push({ name, ip: net.address, type })
-        }
-      }
-    }
-    return results
-  }
-
-  public async getStatus(): Promise<RemoteGatewayStatus> {
-    const ifaces = this.getNetworkInterfaces()
-    const lanIface = ifaces.find((i) => i.type === 'lan') || ifaces[0]
-    const tailscaleIface = ifaces.find((i) => i.type === 'tailscale')
-
-    const primaryIp = lanIface ? lanIface.ip : '127.0.0.1'
-    const primaryUrl = `http://${primaryIp}:${this.port}?token=${this.token}`
-    const tailscaleUrl = tailscaleIface
-      ? `http://${tailscaleIface.ip}:${this.port}?token=${this.token}`
-      : undefined
-
-    let qrCodeDataUrl = ''
-    try {
-      qrCodeDataUrl = await QRCode.toDataURL(primaryUrl, {
-        margin: 1,
-        width: 320,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        }
-      })
-    } catch (err) {
-      console.error('Failed to generate QR code:', err)
-    }
-
-    return {
-      enabled: this.enabled,
-      port: this.port,
-      token: this.token,
-      interfaces: ifaces,
-      primaryUrl,
-      tailscaleUrl,
-      qrCodeDataUrl,
-      clientCount: this.clients.size
-    }
-  }
-
-  public async regenerateToken(): Promise<RemoteGatewayStatus> {
-    this.token = crypto.randomBytes(16).toString('hex')
-    // Disconnect existing clients with old token
-    for (const client of this.clients) {
-      client.close(4001, 'Token Regenerated')
-    }
-    this.clients.clear()
-    this.notifyStatusChange()
-    return this.getStatus()
-  }
-
-  public async setPort(newPort: number): Promise<boolean> {
-    if (newPort === this.port) return true
-    this.port = newPort
-    if (this.enabled) {
-      await this.stop()
-      return this.start()
-    }
-    this.notifyStatusChange()
-    return true
-  }
-
-  public start(): Promise<boolean> {
-    if (this.enabled && this.server) return Promise.resolve(true)
-
-    return new Promise((resolve) => {
-      this.server = http.createServer((req, res) => {
-        this.handleHttpRequest(req, res)
-      })
-
-      this.wss = new WebSocketServer({ noServer: true })
-
-      this.server.on('upgrade', (request, socket, head) => {
-        const url = new URL(request.url || '', `http://${request.headers.host}`)
-        if (url.pathname === '/ws') {
-          const authorized =
-            isPrivateAddress(request.socket.remoteAddress) && isSameToken(url.searchParams.get('token'), this.token)
-          if (!authorized) {
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-            socket.destroy()
-            return
-          }
-          this.wss?.handleUpgrade(request, socket, head, (ws) => {
-            this.wss?.emit('connection', ws, request)
-          })
-        } else {
-          socket.destroy()
-        }
-      })
-
-      this.wss.on('connection', (ws) => {
-        this.handleWebSocketConnection(ws)
-      })
-
-      // Global PTY output subscription
-      this.ptyUnsubscribe = this.ptyManager.subscribeData((panelId, data) => {
-        this.broadcast({
-          type: 'terminal:data',
-          panelId,
-          data
-        })
-      })
-
-      this.server.listen(this.port, '0.0.0.0', () => {
-        this.enabled = true
-        console.log(`[RemoteGateway] Server running at http://0.0.0.0:${this.port}`)
-        this.notifyStatusChange()
-        resolve(true)
-      })
-
-      this.server.on('error', (err) => {
-        console.error('[RemoteGateway] Server error:', err)
-        this.enabled = false
-        this.notifyStatusChange()
-        resolve(false)
-      })
-    })
-  }
-
-  public stop(): Promise<void> {
-    return new Promise((resolve) => {
-      if (this.ptyUnsubscribe) {
-        this.ptyUnsubscribe()
-        this.ptyUnsubscribe = null
-      }
-
-      for (const client of this.clients) {
-        client.close(1000, 'Server Stopped')
-      }
-      this.clients.clear()
-
-      if (this.wss) {
-        this.wss.close()
-        this.wss = null
-      }
-
-      if (this.server) {
-        this.server.close(() => {
-          this.server = null
-          this.enabled = false
-          this.notifyStatusChange()
-          resolve()
-        })
-      } else {
-        this.enabled = false
-        this.notifyStatusChange()
-        resolve()
-      }
-    })
-  }
-
-  private broadcast(payload: any): void {
-    if (this.clients.size === 0) return
-    const msg = JSON.stringify(payload)
-    for (const client of this.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(msg)
-      }
-    }
-  }
-
-  private handleWebSocketConnection(ws: WebSocket): void {
-    this.clients.add(ws)
-    this.notifyStatusChange()
-
-    // Send initial snapshot
-    const state = this.store.getState()
-    const activeWs = state.workspaces.find((w) => w.id === this.activeWorkspaceId) || state.workspaces[0]
-    const panels = activeWs ? activeWs.panels : []
-
-    // Collect buffer snapshots for current panels
-    const buffers: Record<string, string> = {}
-    if (activeWs) {
-      activeWs.panels.forEach((p) => {
-        buffers[p.id] = this.ptyManager.getBuffer(p.id)
-      })
-      if (activeWs.canvasCards) {
-        activeWs.canvasCards
-          .filter((c) => c.kind === 'terminal')
-          .forEach((c) => {
-            buffers[c.id] = this.ptyManager.getBuffer(c.id)
-          })
-      }
-    }
-
-    ws.send(
-      JSON.stringify({
-        type: 'init',
-        workspaces: state.workspaces,
-        activeWorkspaceId: this.activeWorkspaceId || state.activeWorkspaceId,
-        buffers
-      })
-    )
-
-    ws.on('message', (raw) => {
-      try {
-        const msg = JSON.parse(raw.toString())
-        this.handleClientMessage(ws, msg)
-      } catch (e) {
-        console.error('[RemoteGateway] Bad message from client:', e)
-      }
-    })
-
-    ws.on('close', () => {
-      this.clients.delete(ws)
-      this.notifyStatusChange()
-    })
-
-    ws.on('error', () => {
-      this.clients.delete(ws)
-      this.notifyStatusChange()
-    })
-  }
-
-  private handleClientMessage(ws: WebSocket, msg: any): void {
-    switch (msg.type) {
-      case 'pty:write': {
-        if (msg.panelId && typeof msg.data === 'string') {
-          this.ptyManager.write(msg.panelId, msg.data)
-        }
-        break
-      }
-      case 'agent:prompt': {
-        if (msg.panelId && typeof msg.prompt === 'string') {
-          // Normalize prompt: strip trailing newlines and append \r (Carriage Return)
-          // Linux PTYs treat \r as Enter keypress (ICRNL), preventing staircase newline artifacts
-          const cleanPrompt = msg.prompt.replace(/[\r\n]+$/, '')
-          this.ptyManager.write(msg.panelId, cleanPrompt + '\r')
-        }
-        break
-      }
-      case 'pty:resize': {
-        if (msg.panelId && typeof msg.cols === 'number' && typeof msg.rows === 'number') {
-          if (msg.cols >= 15 && msg.rows >= 5) {
-            this.ptyManager.resize(msg.panelId, msg.cols, msg.rows)
-          }
-        }
-        break
-      }
-      case 'terminal:request-buffer': {
-        if (msg.panelId) {
-          const buffer = this.ptyManager.getBuffer(msg.panelId)
-          ws.send(
-            JSON.stringify({
-              type: 'terminal:buffer',
-              panelId: msg.panelId,
-              buffer
-            })
-          )
-        }
-        break
-      }
-      case 'workspace:select': {
-        if (msg.workspaceId) {
-          this.setActiveWorkspace(msg.workspaceId)
-          if (this.onWorkspaceSelectCallback) {
-            this.onWorkspaceSelectCallback(msg.workspaceId)
-          }
-        }
-        break
-      }
-    }
-  }
-
-  private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-    // Listening on every interface is what lets a phone in; a public one has no business here
-    if (!isPrivateAddress(req.socket.remoteAddress)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain' })
-      res.end('Forbidden')
-      return
-    }
-
-    const url = new URL(req.url || '/', `http://${req.headers.host}`)
-    const authorized = isSameToken(url.searchParams.get('token'), this.token)
-
-    // Its start_url carries the token, so this file is as secret as the token itself
-    if (url.pathname === '/manifest.json' && authorized) {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          name: 'NeoWork Mobile Remote',
-          short_name: 'NeoWork',
-          start_url: `/?token=${this.token}`,
-          display: 'standalone',
-          background_color: '#090a0d',
-          theme_color: '#090a0d',
-          icons: [
-            {
-              src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23090a0d"/><circle cx="50" cy="50" r="30" fill="%2310b981"/></svg>',
-              sizes: '192x192',
-              type: 'image/svg+xml'
-            }
-          ]
-        })
-      )
-      return
-    }
-
-    if (url.pathname === '/xterm.css') {
-      const content = this.getAssetContent('xterm.css')
-      if (content) {
-        res.writeHead(200, {
-          'Content-Type': 'text/css; charset=utf-8',
-          'Cache-Control': 'public, max-age=86400'
-        })
-        res.end(content)
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' })
-        res.end('Not found')
-      }
-      return
-    }
-
-    if (url.pathname === '/xterm.js') {
-      const content = this.getAssetContent('xterm.js')
-      if (content) {
-        res.writeHead(200, {
-          'Content-Type': 'application/javascript; charset=utf-8',
-          'Cache-Control': 'public, max-age=86400'
-        })
-        res.end(content)
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' })
-        res.end('Not found')
-      }
-      return
-    }
-
-    if (url.pathname === '/addon-fit.js') {
-      const content = this.getAssetContent('addon-fit.js')
-      if (content) {
-        res.writeHead(200, {
-          'Content-Type': 'application/javascript; charset=utf-8',
-          'Cache-Control': 'public, max-age=86400'
-        })
-        res.end(content)
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' })
-        res.end('Not found')
-      }
-      return
-    }
-
-    if (url.pathname === '/api/status' && authorized) {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          status: 'ok',
-          clients: this.clients.size,
-          activeWorkspaceId: this.activeWorkspaceId
-        })
-      )
-      return
-    }
-
-    // Main App HTML
-    if (!authorized) {
-      res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(`
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>NeoWork - No Autorizado</title>
-          <style>
-            body { background: #090a0d; color: #f43f5e; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-            .box { padding: 2rem; border: 1px solid #27272a; border-radius: 8px; background: #12141a; }
-          </style>
-        </head>
-        <body>
-          <div class="box">
-            <h2>⚠️ Acceso no autorizado</h2>
-            <p style="color:#a1a1aa">El token de acceso es inválido o ha expirado.<br>Escanea nuevamente el código QR desde tu pantalla de NeoWork en el PC.</p>
-          </div>
-        </body>
-        </html>
-      `)
-      return
-    }
-
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-    res.end(this.getMobileAppHtml())
-  }
-
-  private getMobileAppHtml(): string {
-    return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -526,15 +7,15 @@ export class RemoteGateway {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>NeoWork Mobile</title>
-  <link rel="manifest" href="/manifest.json?token=${this.token}">
+  <link rel="manifest" href="/manifest.json?token={{TOKEN}}">
   <link rel="stylesheet" href="/xterm.css">
   <script src="/xterm.js"></script>
   <script src="/addon-fit.js"></script>
   <script>
     if (typeof Terminal === 'undefined') {
       document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">');
-      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.min.js"><\\/script>');
-      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.min.js"><\\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.min.js"><\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.min.js"><\/script>');
     }
   </script>
   <style>
@@ -878,12 +359,12 @@ export class RemoteGateway {
     </button>
     <div class="quick-actions">
       <div class="quick-keys-scroll">
-        <button type="button" class="quick-btn danger" onclick="sendData('\x03')" title="Interrupt">Ctrl+C</button>
-        <button type="button" class="quick-btn" onclick="sendData('\x1b')" title="Escape">Esc</button>
-        <button type="button" class="quick-btn" onclick="sendData('\t')" title="Tab ⇥">Tab ⇥</button>
-        <button type="button" class="quick-btn" onclick="sendData('\x1b[A')" title="History Up">↑</button>
-        <button type="button" class="quick-btn" onclick="sendData('\x1b[B')" title="History Down">↓</button>
-        <button type="button" class="quick-btn" onclick="sendData('\r')" title="Enter">Enter ↵</button>
+        <button type="button" class="quick-btn danger" onclick="sendData('')" title="Interrupt">Ctrl+C</button>
+        <button type="button" class="quick-btn" onclick="sendData('')" title="Escape">Esc</button>
+        <button type="button" class="quick-btn" onclick="sendData('	')" title="Tab ⇥">Tab ⇥</button>
+        <button type="button" class="quick-btn" onclick="sendData('[A')" title="History Up">↑</button>
+        <button type="button" class="quick-btn" onclick="sendData('[B')" title="History Down">↓</button>
+        <button type="button" class="quick-btn" onclick="sendData('')" title="Enter">Enter ↵</button>
       </div>
       <div style="display:flex; gap:5px; flex-shrink:0;">
         <button type="button" class="quick-btn" onclick="adjustFontSize(-1)" title="Disminuir fuente">A-</button>
@@ -933,7 +414,7 @@ export class RemoteGateway {
 
     function connectWs() {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = \`\${proto}//\${window.location.host}/ws?token=\${token}\`;
+      const wsUrl = `${proto}//${window.location.host}/ws?token=${token}`;
 
       socket = new WebSocket(wsUrl);
 
@@ -1287,7 +768,7 @@ export class RemoteGateway {
       wsBar.innerHTML = '';
       workspaces.forEach((w) => {
         const btn = document.createElement('button');
-        btn.className = \`ws-pill \${w.id === activeWorkspaceId ? 'active' : ''}\`;
+        btn.className = `ws-pill ${w.id === activeWorkspaceId ? 'active' : ''}`;
         btn.textContent = w.name;
         btn.onclick = () => {
           activeWorkspaceId = w.id;
@@ -1330,8 +811,8 @@ export class RemoteGateway {
 
       panels.forEach((p) => {
         const btn = document.createElement('button');
-        btn.className = \`panel-tab \${p.id === activePanelId ? 'active' : ''}\`;
-        btn.innerHTML = \`<span style="color:#10b981">▶</span> <span>\${p.title || 'Terminal'}</span>\`;
+        btn.className = `panel-tab ${p.id === activePanelId ? 'active' : ''}`;
+        btn.innerHTML = `<span style="color:#10b981">▶</span> <span>${p.title || 'Terminal'}</span>`;
         btn.onclick = () => {
           activePanelId = p.id;
           renderPanels();
@@ -1405,6 +886,4 @@ export class RemoteGateway {
     connectWs();
   </script>
 </body>
-</html>`
-  }
-}
+</html>

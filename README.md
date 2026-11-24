@@ -11,7 +11,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.10.0-emerald?style=flat-square&logo=electron" alt="Version" /></a>
+    <a href="https://github.com/neukkken/neo-workspace/releases"><img src="https://img.shields.io/badge/Release-v1.10.0-emerald?style=flat-square&logo=tauri" alt="Version" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
     <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-zinc?style=flat-square&logo=linux" alt="Cross-Platform" /></a>
     <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
@@ -61,7 +61,7 @@ Precompiled binary packages are available directly from the **[Releases](https:/
 - Data is saved as JSON in the app data folder. Save manually with `Ctrl + S`.
 
 ### 2. Native Interactive Terminals
-- Powered by `node-pty` and `@xterm/xterm` (v6) with 24-bit TrueColor, search (`Ctrl + F`), and clickable URLs.
+- Powered by `portable-pty` (Rust) and `@xterm/xterm` (v6) with 24-bit TrueColor, search (`Ctrl + F`), and clickable URLs.
 - Choose the engine per card, or set a default in Settings: Command Prompt, Windows PowerShell, PowerShell 7, Git Bash, and WSL (WSL only when a distribution is installed). On Linux and macOS, the shells listed in `/etc/shells`.
 - Bundled JetBrains Mono with box-drawing and block characters, so full-screen interfaces such as Claude Code keep their layout.
 - Fully interactive: handles `Ctrl + C`, confirmation prompts, Git interactive rebases, Docker, Vite, and development CLI tools.
@@ -117,7 +117,7 @@ Precompiled binary packages are available directly from the **[Releases](https:/
 - Aggregated workspace and system load in the title bar.
 
 ### 10. Built-in Silent Auto-Updater
-- Integrated with GitHub Releases via `electron-updater`.
+- Checks GitHub Releases, downloads the installer for your OS (SHA-256 verified when the release publishes one) and hands it to the system.
 - Checks for updates automatically and notifies you with a non-intrusive toast to download and apply the latest version when ready.
 
 ### 11. Wallpapers and Themes
@@ -159,10 +159,10 @@ To run or build the project from source:
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) version 24 recommended (the tests need 22.18 or newer)
-- `npm` or `pnpm`
-- C++ build tools for compiling `node-pty`:
-  - **Linux (Ubuntu/Debian/Fedora):** `sudo apt install build-essential python3` / `sudo dnf groupinstall "Development Tools"`
-  - **Windows:** Visual Studio C++ build tools
+- [Rust](https://rustup.rs/) (stable) and the [Tauri system dependencies](https://tauri.app/start/prerequisites/):
+  - **Linux (Debian/Ubuntu):** `sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf`
+  - **Linux (Fedora):** `sudo dnf install webkit2gtk4.1-devel gtk3-devel librsvg2-devel patchelf && sudo dnf groupinstall "Development Tools"`
+  - **Windows:** Visual Studio C++ build tools and WebView2
 
 ### Setup
 
@@ -179,7 +179,7 @@ To run or build the project from source:
 
 3. **Run in development mode (with HMR):**
    ```bash
-   npm run dev
+   npm run tauri:dev
    ```
 
 4. **Run TypeScript type verification:**
@@ -189,25 +189,13 @@ To run or build the project from source:
 
 5. **Run the tests:**
    ```bash
-   npm test
-   ```
-   CI runs them on Windows only.
-
-6. **Build bundle:**
-   ```bash
-   npm run build
+   npm test          # renderer and utility logic
+   npm run test:rust # backend: terminals, git, agents, gateway, clock...
    ```
 
-7. **Package executables locally:**
+6. **Package installers locally** (written to `src-tauri/target/release/bundle/`):
    ```bash
-   # Package for current host OS:
-   npm run dist
-
-   # Windows target (installer and portable, written to dist/):
-   npm run dist:win
-
-   # Linux target:
-   npm run dist:linux
+   npm run tauri:build
    ```
 
 ---
@@ -218,34 +206,16 @@ To run or build the project from source:
 neo-workspace/
 ├── .github/
 │   └── workflows/
-│       └── release.yml               # CI: typecheck, tests (Windows), installers and GitHub release on v* tags
+│       └── release.yml               # CI: typecheck, JS and Rust tests, installers and GitHub release on v* tags
 ├── build/                            # App packaging icons (.png, .ico)
 ├── resources/                        # Vector design assets (SVG)
 ├── src/
-│   ├── main/                         # Electron main process
-│   │   ├── index.ts                  # Window, IPC, and app lifecycle
-│   │   ├── pty-manager.ts            # Terminal processes (node-pty)
-│   │   ├── shells.ts                 # Detects the shells installed on this machine
-│   │   ├── agent-activity.ts         # Detects terminals that finished or wait for you
-│   │   ├── telemetry.ts              # CPU and RAM per terminal and for the system
-│   │   ├── process-tree.ts           # Process tree measurement (Windows)
-│   │   ├── terminal-history.ts       # Keeps each terminal's scrollback between runs
-│   │   ├── git-branches.ts           # Repository discovery and branch info
-│   │   ├── git-session.ts            # Changes since a terminal first opened (read-only)
-│   │   ├── workspace-clock.ts        # Time per workspace, paused when idle
-│   │   ├── remote-gateway.ts         # Mobile companion HTTP and WebSocket server
-│   │   ├── remote-access.ts          # Address and token checks for the gateway
-│   │   ├── vscode-manager.ts         # Local and web VS Code instances
-│   │   ├── wallpapers.ts             # User wallpaper store
-│   │   ├── store.ts                  # Workspace JSON persistence
-│   │   └── updater.ts                # In-app GitHub auto-updater service
-│   ├── preload/
-│   │   ├── index.ts                  # Secure ContextBridge IPC layer
-│   │   └── index.d.ts                # TypeScript definitions for window.neoAPI
 │   └── renderer/
 │       ├── index.html                # HTML root
 │       └── src/
 │           ├── main.tsx              # React entry point
+│           ├── neo-api.ts            # window.neoAPI contract (types)
+│           ├── tauri-api.ts          # window.neoAPI over Tauri commands and events
 │           ├── App.tsx               # Root component and state synchronization
 │           ├── types.ts              # Shared TypeScript schemas
 │           ├── components/           # UI components
@@ -279,9 +249,31 @@ neo-workspace/
 │           ├── utils/                # Canvas grid, card factory, note markup, palette, time, URLs
 │           └── styles/
 │               └── index.css         # Tailwind CSS definitions
-├── tests/                            # node:test suites for main-process and utility logic
-├── electron.vite.config.ts           # Bundling configuration (Electron + Vite)
-├── electron-builder.json             # Cross-platform installer specifications
+├── src-tauri/                        # Rust backend (Tauri)
+│   ├── src/
+│   │   ├── lib.rs                    # App setup, windows, background timers
+│   │   ├── commands.rs               # IPC surface: one command per neoAPI call
+│   │   ├── app.rs                    # Shared state, agent notifications, data folder
+│   │   ├── pty.rs                    # Terminal processes (portable-pty)
+│   │   ├── shells.rs                 # Detects the shells installed on this machine
+│   │   ├── agent.rs                  # Detects terminals that finished or wait for you
+│   │   ├── telemetry.rs              # CPU and RAM per terminal and for the system
+│   │   ├── history.rs                # Keeps each terminal's scrollback between runs
+│   │   ├── git.rs                    # Repository discovery, branches, session changes (read-only)
+│   │   ├── clock.rs                  # Time per workspace, paused when idle
+│   │   ├── idle.rs                   # Seconds since the last input
+│   │   ├── remote.rs                 # Mobile companion HTTP and WebSocket server
+│   │   ├── vscode.rs                 # Local VS Code web instances
+│   │   ├── wallpapers.rs             # User wallpaper store
+│   │   ├── fsx.rs                    # File explorer, project inspection, URLs, ports
+│   │   ├── clipboard.rs              # Text and image clipboard
+│   │   ├── screens.rs                # Multi-monitor and secondary window
+│   │   ├── store.rs                  # Workspace JSON persistence
+│   │   └── updater.rs                # GitHub release updater
+│   ├── assets/                       # Mobile companion page and xterm for the phone
+│   └── tauri.conf.json               # Window, bundle and build settings
+├── tests/                            # node:test suites for renderer utilities
+├── vite.config.ts                    # Renderer bundling
 ├── LICENSE                           # MIT Open Source License
 └── package.json
 ```

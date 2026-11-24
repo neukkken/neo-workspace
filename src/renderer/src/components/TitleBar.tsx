@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Save, Check, GitBranch, Monitor, ArrowLeftRight } from 'lucide-react'
-import { SystemMetrics, DisplayInfo } from '../types'
+import { Minus, Square, X, SlidersHorizontal, Activity, HelpCircle, Search, Save, Check, GitBranch, Monitor, ArrowLeftRight, BellRing } from 'lucide-react'
+import { SystemMetrics, DisplayInfo, AgentStatus } from '../types'
 import { Tooltip } from './Tooltip'
 import logo from '../assets/logo.svg'
 
@@ -10,6 +10,9 @@ interface TitleBarProps {
   activity?: React.ReactNode
   workspaceFolders: string[]
   updateAvailable?: boolean
+  // Newest agent event still waiting for the user; shown as a shortcut chip
+  attention?: AgentStatus
+  onOpenAttention?: (status: AgentStatus) => void
   onSave: () => Promise<void>
   onOpenSettings: () => void
   onOpenShortcuts: () => void
@@ -29,6 +32,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   activity,
   workspaceFolders,
   updateAvailable,
+  attention,
+  onOpenAttention,
   onSave,
   onOpenSettings,
   onOpenShortcuts,
@@ -118,10 +123,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       className="shrink-0 z-10 pointer-events-none flex items-center justify-between gap-1.5 select-none"
     >
       {/* Left island: logo, name, version and the active projects' branches */}
-      <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-2.5 pl-2.5 pr-3 text-xs text-zinc-300 drag-region min-w-0">
+      <div className="island hud pointer-events-auto rounded-full h-9 flex items-center space-x-2.5 pl-2.5 pr-3 text-xs text-zinc-300 drag-region min-w-0">
         <img src={logo} alt="" className="w-5 h-5 shrink-0" draggable={false} />
         <span className="text-[11px] stamp text-zinc-100 shrink-0">NWS</span>
-        <span className="text-[11px] text-zinc-400 shrink-0">
+        <span className="text-[11px] font-mono tabular-nums text-zinc-400 shrink-0">
           v{appVersion}
         </span>
 
@@ -141,10 +146,22 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </span>
           ))}
         </div>
+
+        {attention && (
+          <button
+            onClick={() => onOpenAttention?.(attention)}
+            title={`${attention.title} · ${attention.workspaceName}`}
+            className="no-drag shrink-0 max-w-[220px] flex items-center space-x-1.5 pl-1.5 pr-2 py-0.5 rounded-full bg-white/5 border border-white/15 text-[11px] text-zinc-100 hover:bg-white/10 transition-colors cursor-pointer animate-in fade-in slide-in-from-left-2 duration-150"
+          >
+            <BellRing size={11} className="text-signal shrink-0" />
+            <span className="truncate">{attention.title}</span>
+            <span className="text-zinc-400 shrink-0">Ir a la terminal</span>
+          </button>
+        )}
       </div>
 
       {/* Right island: icon-only actions with tooltips */}
-      <div className="island pointer-events-auto rounded-full h-9 flex items-center space-x-1 px-2.5 text-xs text-zinc-300 no-drag">
+      <div className="island hud pointer-events-auto rounded-full h-9 flex items-center space-x-1 px-2.5 text-xs text-zinc-300 no-drag">
         {workspaceActions}
 
         {activity}

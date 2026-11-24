@@ -121,7 +121,7 @@ export const CanvasMinimap: React.FC<CanvasMinimapProps> = ({
   return (
     <div
       onWheel={(e) => e.stopPropagation()}
-      className="minimap-container island absolute bottom-4 right-4 z-40 w-56 p-2.5 select-none"
+      className="minimap-container island hud absolute bottom-4 left-4 z-40 w-56 p-2.5 select-none"
     >
       <div className="flex items-center justify-between text-[11px] text-zinc-400 border-b border-zinc-800/80 pb-1 mb-1.5">
         <span className="font-medium text-zinc-100 flex items-center space-x-1">
@@ -129,10 +129,10 @@ export const CanvasMinimap: React.FC<CanvasMinimapProps> = ({
           <span className="stamp text-[11px]">MINIMAP</span>
         </span>
         <div className="flex items-center space-x-2">
-          <span className="text-[11px] text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
+          <span className="text-[11px] font-mono tabular-nums text-zinc-500 bg-zinc-900 px-1 py-0.5 rounded-control border border-zinc-800">
             {Math.round(zoom * 100)}%
           </span>
-          <span className="text-zinc-500">{cards.length} nodos</span>
+          <span className="font-mono tabular-nums text-zinc-500">{cards.length} nodos</span>
           <button
             onClick={onHide}
             className="p-0.5 text-zinc-500 hover:text-zinc-300 rounded-control hover:bg-zinc-800 transition-colors cursor-pointer"
@@ -201,7 +201,7 @@ export const CanvasMinimap: React.FC<CanvasMinimapProps> = ({
             width: `${data.viewportRect.w}px`,
             height: `${data.viewportRect.h}px`
           }}
-          className="absolute border border-white/15 bg-white/5 rounded-[2px] pointer-events-none shadow-[0_0_10px_rgb(var(--signal-rgb)/0.35)] transition-all duration-75"
+          className="absolute border border-white/15 bg-white/5 rounded-[2px] pointer-events-none transition-all duration-75"
         />
       </div>
     </div>

@@ -42,9 +42,6 @@ export interface BrowserTab {
   canGoForward?: boolean
 }
 
-const CHROME_USER_AGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
-
 export const BrowserCard: React.FC<BrowserCardProps> = ({
   card,
   isFocused,
@@ -212,10 +209,9 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
   }
 
   const handleReload = (): void => {
-    const webview = webviewRef.current
-    if (webview && typeof webview.reload === 'function') {
-      webview.reload()
-    }
+    const frame = webviewRef.current
+    // Assigning the same src reloads a frame without reaching into a cross-origin page
+    if (frame) frame.src = frame.src
   }
 
   const handleGoBack = (): void => {
@@ -632,13 +628,12 @@ export const BrowserCard: React.FC<BrowserCardProps> = ({
             viewport !== 'full' ? 'border-x border-zinc-800/60 ' : ''
           }`}
         >
-          <webview
+          <iframe
             ref={webviewRef}
             key={activeTab.id}
             src={activeTab.url}
-            allowpopups={true}
-            partition="persist:neowork-browser"
-            useragent={CHROME_USER_AGENT}
+            title={activeTab.title || 'Navegador'}
+            allow="clipboard-read; clipboard-write; fullscreen"
             className="w-full h-full border-0 select-auto"
             style={{ width: '100%', height: '100%' }}
           />

@@ -43,9 +43,9 @@ export const TERMINAL_THEMES: Record<TerminalThemeName, ITheme> = {
   midnight: {
     background: '#00000000',
     foreground: '#f3efe7',
-    cursor: '#e3a13b',
+    cursor: '#50e281',
     cursorAccent: '#171614',
-    selectionBackground: 'rgba(227, 161, 59, 0.26)',
+    selectionBackground: 'rgba(80, 226, 129, 0.26)',
     black: '#3a3733',
     red: '#e8836f',
     green: '#a9c08a',

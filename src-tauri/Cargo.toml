@@ -13,5 +13,42 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+chrono = "0.4"
+tokio = { version = "1", features = ["process", "time", "net", "sync", "io-util", "rt-multi-thread", "macros"] }
+portable-pty = "0.9"
+sysinfo = "0.37"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+axum = { version = "0.8", features = ["ws"] }
+futures-util = "0.3"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+base64 = "0.22"
+if-addrs = "0.13"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+semver = "1"
+calamine = "0.28"
+csv = "1"
+arboard = { version = "3", features = ["wayland-data-control"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+open = "5"
+dirs = "6"
+subtle = "2"
+sha2 = "0.10"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+notify-rust = "4"
+zbus = "5"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
