@@ -27,18 +27,18 @@
 }
 
 /* Palette lives here: --signal-rgb, --island-rgb and --color-void set the whole look.
-   Warm charcoal, bone text, one ochre signal. zinc is redefined so every utility
+   Warm charcoal, bone text, one green signal. zinc is redefined so every utility
    lands on the scale; 900-700 are translucent so hairlines read on glass and on the base. */
 :root {
   color-scheme: dark;
-  --signal-rgb: 227 161 59;
-  --island-rgb: 46 44 40;
+  --signal-rgb: 80 226 129;
+  --island-rgb: 24 23 21;
 }
 
 @theme {
-  --color-void: #171614;
+  --color-void: #0f0e0d;
   --color-signal: rgb(var(--signal-rgb));
-  --color-signal-soft: #f2d6a2;
+  --color-signal-soft: #b1f1c6;
 
   --color-zinc-50: #f3efe7;
   --color-zinc-100: #f3efe7;
@@ -50,15 +50,15 @@
   --color-zinc-700: rgb(243 239 231 / 0.22);
   --color-zinc-800: rgb(243 239 231 / 0.12);
   --color-zinc-900: rgb(243 239 231 / 0.06);
-  --color-zinc-950: #171614;
+  --color-zinc-950: #0f0e0d;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Liberation Mono', 'Noto Sans Mono', 'DejaVu Sans Mono', monospace;
   --font-display: 'Lora', Georgia, serif;
 
   --radius-control: 6px;
-  --radius-button: 8px;
-  --radius-card: 19.2px;
+  --radius-button: 10px;
+  --radius-card: 14px;
 }
 
 body {
@@ -137,6 +137,47 @@ body {
   padding: 8px 10px;
 }
 
+/* Neon that circles a card's edge while its agent works: a conic gradient whose start angle is animated.
+   ::before is the sharp ring, ::after the same ring blurred for the glow. Where @property is unsupported
+   the angle never moves and the ring stays still. */
+@property --neon-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes neon-spin {
+  to {
+    --neon-angle: 360deg;
+  }
+}
+
+.neon-orbit::before,
+.neon-orbit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  background: conic-gradient(
+    from var(--neon-angle),
+    transparent 0deg,
+    transparent 220deg,
+    rgb(var(--signal-rgb) / 0.2) 280deg,
+    rgb(var(--signal-rgb)) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: neon-spin 2.4s linear infinite;
+}
+
+.neon-orbit::after {
+  filter: blur(5px);
+}
+
 /* Floating island surface: every bar, rail and card shares this frosted panel.
    Elevation is a hairline, never a shadow. Opacity, blur and scale come from the
    appearance settings. Inside @layer so Tailwind utilities can still override it. */
@@ -144,8 +185,19 @@ body {
   .island {
     background-color: rgb(var(--island-rgb) / var(--island-alpha, 0.7));
     backdrop-filter: blur(var(--island-blur, 10px));
-    border: 1px solid rgb(243 239 231 / 0.14);
+    /* Light catches the top edge: a brighter top border and a 1px inner highlight, no drop shadow */
+    border: 1px solid rgb(243 239 231 / 0.08);
+    border-top-color: rgb(243 239 231 / 0.22);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
     border-radius: var(--radius-card);
+  }
+
+  /* HUD islands (not cards) fade while typing in a terminal; hovering or focusing one brings it back */
+  .hud {
+    transition: opacity 0.2s ease;
+  }
+  [data-hud-dim] .hud:not(:hover, :focus-within) {
+    opacity: 0.45;
   }
 
   /* Stamped label: mechanical mono, the letterspacing is the design */

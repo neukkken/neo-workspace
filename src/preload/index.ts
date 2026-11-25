@@ -46,6 +46,7 @@ export interface AppSettings {
   islandOpacity?: number
   islandBlur?: number
   railHeight?: number
+  autoDimHud?: boolean
   defaultShell?: string
 }
 

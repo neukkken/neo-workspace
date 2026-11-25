@@ -193,6 +193,8 @@ export const TerminalCanvasCard: React.FC<TerminalCanvasCardProps> = ({
         }
       }}
       className={`canvas-card pointer-events-auto flex flex-col island overflow-hidden select-none transition-shadow ${
+        isWorking ? 'neon-orbit' : ''
+      } ${
         isFocused
           ? 'border-white/40 shadow-[0_0_32px_-6px_rgb(var(--signal-rgb)/0.55)]'
           : 'border-zinc-800/90 hover:border-zinc-700/80'

@@ -61,7 +61,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   <div
     onWheel={(e) => e.stopPropagation()}
     style={{ zoom: 'var(--island-scale)' } as React.CSSProperties}
-    className="canvas-toolbar absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center space-x-1 island rounded-full px-2 py-1.5 text-xs whitespace-nowrap"
+    className="canvas-toolbar absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center space-x-1 island hud rounded-full px-2 py-1.5 text-xs whitespace-nowrap"
   >
     <Tooltip label="Nueva consola" side="top">
       <button onClick={() => onAddCard('terminal')} className="p-1.5 rounded-full bg-signal hover:bg-signal/85 text-zinc-950 transition-colors cursor-pointer">

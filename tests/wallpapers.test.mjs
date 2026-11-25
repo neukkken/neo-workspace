@@ -95,9 +95,11 @@ test('terminal colours follow the image and stay legible', () => {
   assert.notEqual(blue.green, red.green)
 })
 
-test('monochrome image keeps the house ochre', () => {
-  const [r, g, b] = channels(derivePalette(solid(128, 128, 128)).vars['--signal-rgb'])
-  assert.ok(r > g && g > b)
+test('monochrome and yellow/orange images get the house green signal', () => {
+  for (const img of [[128, 128, 128], [227, 161, 59]]) {
+    const [r, g, b] = channels(derivePalette(solid(...img)).vars['--signal-rgb'])
+    assert.ok(g > r && g > b, `green signal for ${img}`)
+  }
 })
 
 test('empty or transparent image yields no palette', () => {
